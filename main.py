@@ -19,6 +19,22 @@ DATA_DIR = Path("data")
 def ensure_dirs():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+def run_step(step_num: int, total: int, name: str, fn, skip_ok: bool = False):
+    """执行单个管道步骤，失败时记错但不阻断后续流程"""
+    print(f"[{step_num}/{total}] 正在{name}...")
+    try:
+        fn()
+        print()
+        return True
+    except Exception as e:
+        print(f"  [ERROR] {name}失败: {e}")
+        if skip_ok:
+            print(f"  [WARN] 跳过该步骤，继续后续流程")
+            print()
+            return False
+        raise
+
+
 def run_pipeline(skip_fetch: bool = False):
     """执行完整管道"""
     ensure_dirs()
@@ -27,42 +43,40 @@ def run_pipeline(skip_fetch: bool = False):
     print(f"开始时间: {start.isoformat()}")
     print()
 
+    steps_total = 5
+
     # Step 1: 抓取
     if skip_fetch:
-        print("[SKIP] 跳过抓取阶段，使用已有数据")
+        print(f"[SKIP] 跳过抓取阶段，使用已有数据\n")
     else:
-        print("[1/5] 正在抓取 RSS 信源...")
         from fetcher import fetch_all
-        asyncio.run(fetch_all())
-        print()
+        run_step(1, steps_total, "抓取 RSS 信源", lambda: asyncio.run(fetch_all()))
 
     # Step 2: 解析
-    print("[2/5] 正在解析 RSS 数据...")
     from parser import parse_all
-    parse_all()
-    print()
+    run_step(2, steps_total, "解析 RSS 数据", parse_all, skip_ok=True)
 
     # Step 3: 去重
-    print("[3/5] 正在去重...")
     from deduplicator import run as run_dedup
-    run_dedup()
-    print()
+    run_step(3, steps_total, "去重", run_dedup, skip_ok=True)
 
     # Step 4: 分类
-    print("[4/5] 正在分类与打标...")
     from classifier import classify_all
-    classify_all()
-    print()
+    run_step(4, steps_total, "分类与打标", classify_all, skip_ok=True)
 
     # Step 5: 生成报告
-    print("[5/5] 正在生成 HTML 周报...")
     from report_generator import generate_report
-    report_path = generate_report()
-    print()
+    report_path = None
+    try:
+        run_step(5, steps_total, "生成 HTML 周报", generate_report)
+        report_path = "reports/Security_Reports.html"
+    except Exception as e:
+        print(f"  [ERROR] 生成报告失败: {e}")
 
     elapsed = (datetime.now() - start).total_seconds()
     print(f"=== 完成! 耗时 {elapsed:.1f} 秒 ===")
-    print(f"报告: {report_path}")
+    if report_path:
+        print(f"报告: {report_path}")
 
 
 def main():

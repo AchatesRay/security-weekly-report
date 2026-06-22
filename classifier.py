@@ -1,5 +1,4 @@
 import json
-import re
 import yaml
 from pathlib import Path
 
@@ -83,7 +82,7 @@ def classify_item(item: dict, rules: list[dict]) -> dict:
         "攻击活动报告": ["APT", "攻击活动", "threat actor", "threat group",
                         "入侵", "intrusion", "campaign", "攻击链"],
         "工具发布": ["工具", "tool", "发布", "release", "开源项目"],
-        "行业分析": ["市场", "market", "报告", "analysis", "趋势", "趋势",
+        "行业分析": ["市场", "market", "报告", "analysis", "趋势",
                      "Gartner", "Forrester", "行业"],
         "法规/标准发布": ["法规", "regulation", "标准", "standard", "法律",
                          "法案", "合规", "compliance", "NIST", "ISO"],
