@@ -42,7 +42,7 @@ sources:
   region: global
   enabled: false
 - name: SC Media
-  url: https://www.scmagazine.com/feed
+  url: https://www.scmagazine.com/rss
   type: rss
   language: en
   source_level: B
@@ -54,7 +54,7 @@ sources:
   language: zh
   source_level: B
   region: cn
-  enabled: true
+  enabled: false
 - name: 安全内参
   url: https://www.secrss.com/articles
   type: rss
@@ -355,7 +355,7 @@ sources:
   language: en
   source_level: A
   region: global
-  enabled: true
+  enabled: false
 - name: Socket.dev Blog
   url: https://socket.dev/blog/feed
   type: rss
