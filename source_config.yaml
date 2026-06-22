@@ -188,8 +188,29 @@ sources:
   source_level: A
   region: cn
   enabled: false
+- name: 绿盟科技博客
+  url: https://blog.nsfocus.net/feed/
+  type: rss
+  language: zh
+  source_level: B
+  region: cn
+  enabled: true
 - name: 360 Netlab
   url: https://blog.netlab.360.com/feed/
+  type: rss
+  language: zh
+  source_level: A
+  region: cn
+  enabled: true
+- name: 安全客
+  url: https://api.anquanke.com/feed
+  type: rss
+  language: zh
+  source_level: B
+  region: cn
+  enabled: true
+- name: Seebug (知道创宇404实验室)
+  url: https://paper.seebug.org/rss/
   type: rss
   language: zh
   source_level: A
@@ -234,9 +255,9 @@ sources:
   url: https://xz.aliyun.com/feed
   type: rss
   language: zh
-  source_level: C
+  source_level: B
   region: cn
-  enabled: false
+  enabled: true
 - name: NVD
   url: https://services.nvd.nist.gov/rest/json/cves/2.0
   type: api
@@ -252,12 +273,12 @@ sources:
   region: global
   enabled: false
 - name: MSRC
-  url: https://msrc.microsoft.com/update-rss/
+  url: https://msrc.microsoft.com/feed
   type: rss
   language: en
   source_level: S
   region: global
-  enabled: false
+  enabled: true
 - name: CISA Alerts
   url: https://www.cisa.gov/cybersecurity-advisories/alerts.xml
   type: rss

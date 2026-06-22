@@ -26,57 +26,57 @@ USER_AGENTS = [
 ]
 
 
+# RSS-reader UAs for retry (less likely to be blocked than browser UAs)
+RSS_READER_UAS = [
+    "Feedbin/1.0 (+https://feedbin.com)",
+    "Feedly/1.0 (+https://feedly.com)",
+]
+
+
 async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
     """抓取单个 RSS 信源，返回 {source_name, url, xml_text, error}"""
     name = source["name"]
     feed_url = source["url"]
     print(f"  [FETCH] {name} <- {feed_url}")
 
+    first_ua = client.headers.get("User-Agent", "")
+
     try:
         resp = await client.get(feed_url, timeout=30.0, follow_redirects=True)
         resp.raise_for_status()
+        # 检查空响应 (某些信源对特定UA返回200但空body)
+        if resp.text.strip():
+            return {
+                "source_name": name,
+                "source_level": source["source_level"],
+                "region": source["region"],
+                "language": source["language"],
+                "url": feed_url,
+                "xml_text": resp.text,
+                "fetch_time": datetime.now().isoformat(),
+                "error": None,
+            }
+    except (httpx.HTTPStatusError, httpx.RequestError):
+        pass
+
+    # 重试：换用RSS reader UA + Accept头
+    try:
+        retry_ua = RSS_READER_UAS[0] if first_ua != RSS_READER_UAS[0] else RSS_READER_UAS[1]
+        alt_headers = {
+            "User-Agent": retry_ua,
+            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
+        }
+        resp2 = await client.get(feed_url, timeout=30.0, follow_redirects=True, headers=alt_headers)
+        resp2.raise_for_status()
         return {
             "source_name": name,
             "source_level": source["source_level"],
             "region": source["region"],
             "language": source["language"],
             "url": feed_url,
-            "xml_text": resp.text,
+            "xml_text": resp2.text,
             "fetch_time": datetime.now().isoformat(),
             "error": None,
-        }
-    except httpx.HTTPStatusError as e:
-        # If 403/406, retry with Accept: application/rss+xml header
-        if e.response.status_code in (403, 406):
-            try:
-                alt_headers = {
-                    "User-Agent": random.choice(USER_AGENTS),
-                    "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
-                }
-                resp2 = await client.get(feed_url, timeout=30.0, follow_redirects=True, headers=alt_headers)
-                resp2.raise_for_status()
-                return {
-                    "source_name": name,
-                    "source_level": source["source_level"],
-                    "region": source["region"],
-                    "language": source["language"],
-                    "url": feed_url,
-                    "xml_text": resp2.text,
-                    "fetch_time": datetime.now().isoformat(),
-                    "error": None,
-                }
-            except Exception:
-                pass
-        print(f"  [FETCH ERROR] {name}: {e}")
-        return {
-            "source_name": name,
-            "source_level": source["source_level"],
-            "region": source["region"],
-            "language": source["language"],
-            "url": feed_url,
-            "xml_text": "",
-            "fetch_time": datetime.now().isoformat(),
-            "error": str(e),
         }
     except Exception as e:
         print(f"  [FETCH ERROR] {name}: {e}")
