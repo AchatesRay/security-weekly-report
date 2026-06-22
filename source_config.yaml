@@ -1,0 +1,208 @@
+sources:
+  - name: BleepingComputer
+    url: https://www.bleepingcomputer.com/feed/
+    type: rss
+    language: en
+    source_level: B
+    region: global
+    enabled: true
+
+  - name: The Hacker News
+    url: https://thehackernews.com/feed/
+    type: rss
+    language: en
+    source_level: B
+    region: global
+    enabled: true
+
+  - name: Krebs on Security
+    url: https://krebsonsecurity.com/feed/
+    type: rss
+    language: en
+    source_level: A
+    region: global
+    enabled: true
+
+  - name: Dark Reading
+    url: https://www.darkreading.com/rss.xml
+    type: rss
+    language: en
+    source_level: B
+    region: global
+    enabled: true
+
+  - name: SecurityWeek
+    url: https://www.securityweek.com/feed/
+    type: rss
+    language: en
+    source_level: B
+    region: global
+    enabled: true
+
+  - name: The Record / Recorded Future
+    url: https://therecord.media/feed/
+    type: rss
+    language: en
+    source_level: A
+    region: global
+    enabled: true
+
+  - name: SC Media
+    url: https://www.scmagazine.com/feed
+    type: rss
+    language: en
+    source_level: B
+    region: global
+    enabled: true
+
+  - name: FreeBuf
+    url: https://www.freebuf.com/feed
+    type: rss
+    language: zh
+    source_level: B
+    region: cn
+    enabled: true
+
+  - name: 安全内参
+    url: https://www.secrss.com/feed
+    type: rss
+    language: zh
+    source_level: B
+    region: cn
+    enabled: true
+
+  - name: 嘶吼 RoarTalk
+    url: https://www.4hou.com/feed
+    type: rss
+    language: zh
+    source_level: B
+    region: cn
+    enabled: true
+
+  - name: OpenAI Blog
+    url: https://openai.com/blog/feed.xml
+    type: rss
+    language: en
+    source_level: S
+    region: global
+    enabled: true
+
+  - name: Anthropic Research
+    url: https://www.anthropic.com/research/feed.xml
+    type: rss
+    language: en
+    source_level: S
+    region: global
+    enabled: true
+
+  - name: Google AI Blog
+    url: https://ai.googleblog.com/feeds/posts/default
+    type: rss
+    language: en
+    source_level: S
+    region: global
+    enabled: true
+
+  - name: Microsoft AI Blog
+    url: https://blogs.microsoft.com/ai/feed/
+    type: rss
+    language: en
+    source_level: S
+    region: global
+    enabled: true
+
+  - name: Palo Alto Networks Blog
+    url: https://www.paloaltonetworks.com/blog/feed/
+    type: rss
+    language: en
+    source_level: S
+    region: global
+    enabled: true
+
+  - name: Unit 42
+    url: https://unit42.paloaltonetworks.com/feed/
+    type: rss
+    language: en
+    source_level: A
+    region: global
+    enabled: true
+
+  - name: CrowdStrike Blog
+    url: https://www.crowdstrike.com/blog/feed/
+    type: rss
+    language: en
+    source_level: A
+    region: global
+    enabled: true
+
+  - name: Cisco Talos Blog
+    url: https://blog.talosintelligence.com/feed/
+    type: rss
+    language: en
+    source_level: A
+    region: global
+    enabled: true
+
+  - name: Mandiant Blog
+    url: https://www.mandiant.com/resources/blog/feed
+    type: rss
+    language: en
+    source_level: A
+    region: global
+    enabled: true
+
+  - name: NVD / CVE
+    url: https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml
+    type: rss
+    language: en
+    source_level: S
+    region: global
+    enabled: true
+
+  - name: MSRC
+    url: https://msrc.microsoft.com/update/feed
+    type: rss
+    language: en
+    source_level: S
+    region: global
+    enabled: true
+
+  - name: CISA
+    url: https://www.cisa.gov/feeds/cybersecurity-advisories.xml
+    type: rss
+    language: en
+    source_level: S
+    region: us
+    enabled: true
+
+  - name: Exploit-DB
+    url: https://www.exploit-db.com/rss.xml
+    type: rss
+    language: en
+    source_level: B
+    region: global
+    enabled: true
+
+  - name: Reddit r/netsec
+    url: https://www.reddit.com/r/netsec/.rss
+    type: rss
+    language: en
+    source_level: C
+    region: global
+    enabled: true
+
+  - name: Hacker News
+    url: https://hnrss.org/frontpage
+    type: rss
+    language: en
+    source_level: C
+    region: global
+    enabled: true
+
+  - name: GitHub Security Advisories
+    url: https://github.com/advisories.rss
+    type: rss
+    language: en
+    source_level: A
+    region: global
+    enabled: true
