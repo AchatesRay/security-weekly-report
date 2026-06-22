@@ -510,3 +510,73 @@ sources:
   source_level: S
   region: eu
   enabled: true
+- name: 启明星辰
+  url: https://www.topsec.com/rss
+  type: rss
+  language: zh
+  source_level: B
+  region: cn
+  enabled: true
+- name: Elastic Security Blog
+  url: https://www.elastic.co/blog/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: DFIR Report
+  url: https://thedfirreport.com/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Acunetix Blog
+  url: https://www.acunetix.com/blog/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Qualys Blog
+  url: https://blog.qualys.com/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: WithSecure
+  url: https://www.withsecure.com/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Sekoia Blog
+  url: https://blog.sekoia.io/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Sophos News
+  url: https://news.sophos.com/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Microsoft Security Blog
+  url: https://www.microsoft.com/security/blog/feed
+  type: rss
+  language: en
+  source_level: S
+  region: global
+  enabled: true
+- name: HP Threat Research
+  url: https://threatresearch.ext.hp.com/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
