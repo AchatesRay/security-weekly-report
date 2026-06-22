@@ -35,8 +35,44 @@ def parse_entry(source_info: dict, entry) -> dict:
     }
 
 
+def parse_api_secrss(source_info: dict, raw_text: str) -> list[dict]:
+    """解析 安全内参 API JSON 为统一格式"""
+    items = []
+    try:
+        data = json.loads(raw_text)
+        if data.get("code") != "10000":
+            return items
+        for article in data.get("data", []):
+            title = article.get("title", "").strip()
+            if not title:
+                continue
+            link = f"https://www.secrss.com/articles/{article.get('id', '')}"
+            summary = article.get("summary", "").strip()
+            published = article.get("published_at", "")
+            items.append({
+                "title": title,
+                "url": link,
+                "summary": summary,
+                "published_date": published,
+                "source_name": source_info["source_name"],
+                "source_level": source_info["source_level"],
+                "region": source_info["region"],
+                "language": source_info["language"],
+                "parse_time": datetime.now().isoformat(),
+            })
+    except Exception:
+        pass
+    return items
+
+
+# API 解析器注册表: source_name -> parse function
+API_PARSERS = {
+    "安全内参": parse_api_secrss,
+}
+
+
 def parse_all() -> list[dict]:
-    """解析所有已抓取的原始 RSS 数据"""
+    """解析所有已抓取的原始数据 (RSS + API)"""
     with open(RAW_ITEMS_PATH, "r", encoding="utf-8") as f:
         raw_sources = json.load(f)
 
@@ -45,6 +81,19 @@ def parse_all() -> list[dict]:
         if source["error"] or not source["xml_text"]:
             continue
 
+        source_type = source.get("type", "rss")
+
+        # API 类型信源
+        if source_type == "api" and source["source_name"] in API_PARSERS:
+            parser_fn = API_PARSERS[source["source_name"]]
+            try:
+                items = parser_fn(source, source["xml_text"])
+                all_items.extend(items)
+            except Exception as e:
+                print(f"  [PARSE ERROR] {source['source_name']} API: {e}")
+            continue
+
+        # RSS/Atom 类型
         try:
             feed = feedparser.parse(source["xml_text"])
             for entry in feed.entries:

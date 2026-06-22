@@ -56,12 +56,12 @@ sources:
   region: cn
   enabled: false
 - name: 安全内参
-  url: https://www.secrss.com/articles
-  type: rss
+  url: https://www.secrss.com/api/articles
+  type: api
   language: zh
-  source_level: B
+  source_level: A
   region: cn
-  enabled: false
+  enabled: true
 - name: 嘶吼 RoarTalk
   url: https://www.4hou.com/feed
   type: rss
