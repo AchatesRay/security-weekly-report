@@ -4,10 +4,27 @@ import json
 from pathlib import Path
 from datetime import datetime
 import asyncio
+import random
 
 CONFIG_PATH = Path("source_config.yaml")
 DATA_DIR = Path("data")
 RAW_ITEMS_PATH = DATA_DIR / "raw_items.json"
+
+# User-Agents to rotate between for bypassing RSS blocks
+USER_AGENTS = [
+    # Chrome browser (most compatible)
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    # Feedbin RSS reader
+    "Feedbin/1.0 (+https://feedbin.com)",
+    # Feedly RSS reader
+    "Feedly/1.0 (+https://feedly.com)",
+    # Apple RSS reader
+    "Apple-PubSub/1.0 (+https://apple.com/rss)",
+    # Inoreader RSS reader
+    "Inoreader/1.0 (+https://inoreader.com)",
+]
+
 
 async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
     """抓取单个 RSS 信源，返回 {source_name, url, xml_text, error}"""
@@ -27,6 +44,39 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
             "xml_text": resp.text,
             "fetch_time": datetime.now().isoformat(),
             "error": None,
+        }
+    except httpx.HTTPStatusError as e:
+        # If 403/406, retry with Accept: application/rss+xml header
+        if e.response.status_code in (403, 406):
+            try:
+                alt_headers = {
+                    "User-Agent": random.choice(USER_AGENTS),
+                    "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
+                }
+                resp2 = await client.get(feed_url, timeout=30.0, follow_redirects=True, headers=alt_headers)
+                resp2.raise_for_status()
+                return {
+                    "source_name": name,
+                    "source_level": source["source_level"],
+                    "region": source["region"],
+                    "language": source["language"],
+                    "url": feed_url,
+                    "xml_text": resp2.text,
+                    "fetch_time": datetime.now().isoformat(),
+                    "error": None,
+                }
+            except Exception:
+                pass
+        print(f"  [FETCH ERROR] {name}: {e}")
+        return {
+            "source_name": name,
+            "source_level": source["source_level"],
+            "region": source["region"],
+            "language": source["language"],
+            "url": feed_url,
+            "xml_text": "",
+            "fetch_time": datetime.now().isoformat(),
+            "error": str(e),
         }
     except Exception as e:
         print(f"  [FETCH ERROR] {name}: {e}")
@@ -51,8 +101,8 @@ async def fetch_all() -> list[dict]:
     print(f"[FETCHER] 开始抓取 {len(sources)} 个信源...")
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
     }
     async with httpx.AsyncClient(headers=headers) as client:
         tasks = [fetch_feed(client, src) for src in sources]
