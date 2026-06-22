@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网络安全周报 {{ week_str }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: #f5f6fa; color: #2c3e50; line-height: 1.6;
+            padding: 0;
+        }
+        .container { max-width: 960px; margin: 0 auto; padding: 20px; }
+
+        /* 页头 */
+        .header {
+            background: linear-gradient(135deg, #1a237e, #283593);
+            color: white; padding: 32px 40px; border-radius: 12px; margin-bottom: 24px;
+        }
+        .header h1 { font-size: 24px; margin-bottom: 8px; }
+        .header .meta { font-size: 14px; opacity: 0.85; }
+        .header .stats { margin-top: 12px; font-size: 14px; }
+        .header .stats span { display: inline-block; margin-right: 16px; }
+        .badge-urgent { background: #dc3545; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .badge-watch { background: #ffc107; color: #333; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+
+        /* 架构师摘要 */
+        .executive-summary {
+            background: white; border-radius: 12px; padding: 24px; margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .executive-summary h2 { font-size: 18px; margin-bottom: 16px; color: #1a237e; }
+        .es-item {
+            padding: 10px 16px; margin-bottom: 8px; border-radius: 8px;
+            border-left: 4px solid #ddd; font-size: 14px;
+        }
+        .es-item.urgent { border-left-color: #dc3545; background: #fff5f5; }
+        .es-item.watch { border-left-color: #ffc107; background: #fffef5; }
+        .es-item .es-title { font-weight: 600; }
+        .es-item .es-meta { font-size: 12px; color: #666; margin-top: 4px; }
+
+        /* 板块 */
+        .section {
+            background: white; border-radius: 12px; margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden;
+        }
+        .section-header {
+            padding: 16px 24px; cursor: pointer; user-select: none;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #eee;
+        }
+        .section-header:hover { background: #f8f9fa; }
+        .section-header h3 { font-size: 16px; }
+        .section-header .count { font-size: 13px; color: #666; }
+        .section-content { padding: 16px 24px; }
+
+        /* 内容卡片 */
+        .item-card {
+            padding: 14px 16px; margin-bottom: 12px; border-radius: 8px;
+            border-left: 4px solid #ddd; background: #fafafa;
+            transition: background 0.2s;
+        }
+        .item-card:hover { background: #f0f0f0; }
+        .item-card.urgency-urgent { border-left-color: #dc3545; }
+        .item-card.urgency-watch { border-left-color: #ffc107; }
+        .item-card.urgency-later { border-left-color: #0d6efd; }
+        .item-card.urgency-learn { border-left-color: #6c757d; }
+
+        .item-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+        .item-title a { color: #1a237e; text-decoration: none; }
+        .item-title a:hover { text-decoration: underline; }
+
+        .item-summary { font-size: 14px; color: #444; margin-bottom: 8px; }
+        .item-summary .more-link { font-size: 13px; color: #0d6efd; }
+
+        .item-meta { font-size: 12px; color: #666; margin-bottom: 6px; }
+        .item-meta .sep { margin: 0 6px; color: #ccc; }
+
+        .item-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+        .tag {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            font-size: 11px; background: #e9ecef; color: #495057;
+        }
+        .tag-source-s { background: #d4edda; color: #155724; }
+        .tag-source-a { background: #cce5ff; color: #004085; }
+        .tag-source-b { background: #fff3cd; color: #856404; }
+        .tag-source-c { background: #f8d7da; color: #721c24; }
+        .tag-content-type { background: #d1ecf1; color: #0c5460; }
+        .tag-impact { background: #e8daef; color: #6c3483; }
+
+        /* 页脚 */
+        .footer {
+            text-align: center; font-size: 12px; color: #999;
+            padding: 24px; margin-top: 24px;
+        }
+
+        /* 折叠动画 */
+        .section-content.collapsed { display: none; }
+        .collapse-icon { font-size: 12px; transition: transform 0.2s; }
+        .collapse-icon.collapsed { transform: rotate(-90deg); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 页头 -->
+        <div class="header">
+            <h1>网络安全周报 — {{ week_str }}</h1>
+            <div class="meta">{{ date_range }} | 生成时间: {{ generate_time }}</div>
+            <div class="stats">
+                <span>共 <strong>{{ total_count }}</strong> 条</span>
+                <span><span class="badge-urgent">🚨 {{ urgent_count }}</span></span>
+                <span><span class="badge-watch">⏰ {{ watch_count }}</span></span>
+            </div>
+        </div>
+
+        <!-- 架构师摘要 -->
+        {% if urgent_items or watch_items %}
+        <div class="executive-summary">
+            <h2>📋 架构师摘要</h2>
+
+            {% if urgent_items %}
+            <h4 style="margin-bottom: 10px; color: #dc3545;">🚨 需立即响应</h4>
+            {% for item in urgent_items %}
+            <div class="es-item urgent">
+                <div class="es-title">{{ item.title }}</div>
+                <div class="es-meta">
+                    {{ item.source_name }}
+                    {% if item.merged_sources %} (联合报道: {{ item.merged_sources | join(", ") }}){% endif %}
+                    {% if item.region %} | 地域: {{ item.region }}{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {% if watch_items %}
+            <h4 style="margin-bottom: 10px; margin-top: 16px; color: #856404;">⏰ 近期需关注</h4>
+            {% for item in watch_items %}
+            <div class="es-item watch">
+                <div class="es-title">{{ item.title }}</div>
+                <div class="es-meta">
+                    {{ item.source_name }}
+                    {% if item.merged_sources %} (联合报道: {{ item.merged_sources | join(", ") }}){% endif %}
+                    {% if item.region %} | 地域: {{ item.region }}{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- 六大板块 -->
+        {% for category, items in groups.items() %}
+        <div class="section">
+            <div class="section-header" onclick="toggleSection(this)">
+                <h3>{{ category }}</h3>
+                <span class="count">{{ items | length }} 条 <span class="collapse-icon">&#9660;</span></span>
+            </div>
+            <div class="section-content">
+                {% for item in items %}
+                <div class="item-card urgency-{{ {'需立即响应': 'urgent', '近期需关注': 'watch', '持续关注': 'later', '知识积累': 'learn'}.get(item.urgency, 'learn') }}">
+                    <div class="item-title">
+                        <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.title }}</a>
+                    </div>
+                    <div class="item-summary">
+                        {{ item.summary | striptags | truncate(300) }}
+                    </div>
+                    <div class="item-meta">
+                        <strong>{{ item.source_name }}</strong>
+                        {% if item.merged_sources %}(联合报道: {{ item.merged_sources | join(", ") }}){% endif %}
+                        <span class="sep">|</span>
+                        <span class="tag tag-source-{{ item.source_level | lower }}">{{ item.source_level }}</span>
+                        {% if item.region %}<span class="sep">|</span> 🌏 {{ item.region }}{% endif %}
+                        {% if item.published_date %}<span class="sep">|</span> {{ item.published_date[:10] }}{% endif %}
+                    </div>
+                    <div class="item-tags">
+                        {% if item.urgency %}<span class="tag">{{ item.urgency }}</span>{% endif %}
+                        {% if item.content_type %}<span class="tag tag-content-type">{{ item.content_type }}</span>{% endif %}
+                        {% for tag in item.tags %}<span class="tag tag-impact">{{ tag }}</span>{% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <p>本报告由网络安全周报系统自动生成 | 信息仅供参考，请以原文为准</p>
+        </div>
+    </div>
+
+    <script>
+        function toggleSection(header) {
+            const content = header.nextElementSibling;
+            const icon = header.querySelector('.collapse-icon');
+            content.classList.toggle('collapsed');
+            icon.classList.toggle('collapsed');
+        }
+    </script>
+</body>
+</html>
