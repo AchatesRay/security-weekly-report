@@ -398,3 +398,115 @@ sources:
   source_level: A
   region: global
   enabled: false
+- name: Anthropic News
+  url: https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/anthropic-news.xml
+  type: rss
+  language: en
+  source_level: S
+  region: global
+  enabled: true
+- name: Anthropic Research
+  url: https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/anthropic-research.xml
+  type: rss
+  language: en
+  source_level: S
+  region: global
+  enabled: true
+- name: Anthropic Engineering
+  url: https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_engineering.xml
+  type: rss
+  language: en
+  source_level: S
+  region: global
+  enabled: true
+- name: Anthropic Red Team
+  url: https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_red.xml
+  type: rss
+  language: en
+  source_level: S
+  region: global
+  enabled: true
+- name: Mistral AI
+  url: https://raw.githubusercontent.com/0xSMW/rss-feeds/main/feeds/feed_mistral_news.xml
+  type: rss
+  language: en
+  source_level: S
+  region: global
+  enabled: true
+- name: xAI News
+  url: https://raw.githubusercontent.com/0xSMW/rss-feeds/main/feeds/feed_xai_news.xml
+  type: rss
+  language: en
+  source_level: S
+  region: global
+  enabled: true
+- name: Threatpost
+  url: https://threatpost.com/feed/
+  type: rss
+  language: en
+  source_level: B
+  region: global
+  enabled: true
+- name: Infosecurity Magazine
+  url: https://www.infosecurity-magazine.com/rss/news/
+  type: rss
+  language: en
+  source_level: B
+  region: global
+  enabled: true
+- name: LWN.net
+  url: https://lwn.net/headlines/newrss
+  type: rss
+  language: en
+  source_level: B
+  region: global
+  enabled: true
+- name: CSO Online
+  url: https://www.csoonline.com/feed
+  type: rss
+  language: en
+  source_level: B
+  region: global
+  enabled: true
+- name: CyberScoop
+  url: https://cyberscoop.com/feed/
+  type: rss
+  language: en
+  source_level: B
+  region: global
+  enabled: true
+- name: The Cyber Express
+  url: https://thecyberexpress.com/feed
+  type: rss
+  language: en
+  source_level: B
+  region: global
+  enabled: true
+- name: Malwarebytes Blog
+  url: https://blog.malwarebytes.com/feed/
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: ESET WeLiveSecurity
+  url: https://www.welivesecurity.com/feed/
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Intezer Blog
+  url: https://intezer.com/blog/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: CERT Poland
+  url: https://cert.pl/feed
+  type: rss
+  language: en
+  source_level: S
+  region: eu
+  enabled: true
