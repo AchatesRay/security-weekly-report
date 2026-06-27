@@ -201,6 +201,7 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
       <div class="nav-item" data-tab="translate"><span class="nav-icon">🌐</span> 翻译配置</div>
       <div class="nav-item" data-tab="pipeline"><span class="nav-icon">⚡</span> 管道控制</div>
       <div class="nav-item" data-tab="keywords"><span class="nav-icon">🔑</span> 关键字过滤</div>
+      <div class="nav-item" data-tab="scoring"><span class="nav-icon">📊</span> 评分配置</div>
     </nav>
   </aside>
 
@@ -386,6 +387,26 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
           <p>🔹 匹配范围：标题、摘要、正文（如有）。</p>
           <p>🔹 不区分大小写。</p>
         </div>
+      </div>
+    </div>
+
+    <!-- Tab: 评分配置 -->
+    <div class="tab-content" id="tab-scoring">
+      <div class="page-title">📊 评分配置</div>
+      <div class="page-desc">配置评分引擎的权重、阈值、特征词库、歧义消解规则</div>
+      <div class="card">
+        <div class="flex gap mb" style="align-items:center;justify-content:space-between">
+          <div>
+            <span class="card-title" style="margin-bottom:0">评分关键词配置</span>
+            <span class="text-muted" id="scoringInfo" style="font-size:12px;margin-left:8px"></span>
+          </div>
+          <div class="flex gap" style="gap:6px">
+            <button class="btn btn-outline btn-sm" id="scoringLoadBtn" onclick="loadScoringConfig()">重新加载</button>
+            <button class="btn btn-primary btn-sm" onclick="saveScoringConfig()">保存配置</button>
+          </div>
+        </div>
+        <div class="card-desc">直接编辑 JSON，修改后点击"保存配置"生效。慎改结构，错误的配置可能导致评分引擎异常。</div>
+        <textarea id="scoringEditor" style="width:100%;min-height:500px;font-family:monospace;font-size:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);resize:vertical;white-space:pre;overflow-wrap:normal;overflow-x:auto" spellcheck="false"></textarea>
       </div>
     </div>
 
@@ -853,6 +874,54 @@ function escHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// -- Scoring Config --
+
+function loadScoringConfig() {
+  document.getElementById('scoringLoadBtn').disabled = true;
+  document.getElementById('scoringLoadBtn').textContent = '加载中...';
+  api('GET', '/api/config/scoring_keywords').then(function(r) {
+    if (r.ok) {
+      _scoringConfig = r.config;
+      var editor = document.getElementById('scoringEditor');
+      editor.value = JSON.stringify(r.config, null, 2);
+      var counts = {strong: 0, medium: 0, weak: 0};
+      ['strong','medium','weak'].forEach(function(tier) {
+        counts[tier] = (r.config[tier] && r.config[tier].keywords) ? r.config[tier].keywords.length : 0;
+      });
+      document.getElementById('scoringInfo').textContent =
+        '强特征 ' + counts.strong + ' | 中特征 ' + counts.medium + ' | 弱特征 ' + counts.weak;
+      toast('评分配置已加载', 'success');
+    } else {
+      toast('加载失败: ' + (r.error || '未知错误'), 'error');
+    }
+  }).finally(function() {
+    document.getElementById('scoringLoadBtn').disabled = false;
+    document.getElementById('scoringLoadBtn').textContent = '重新加载';
+  });
+}
+
+function saveScoringConfig() {
+  var editor = document.getElementById('scoringEditor');
+  var raw = editor.value.trim();
+  if (!raw) { toast('配置不能为空', 'error'); return; }
+  try {
+    JSON.parse(raw);
+  } catch(e) {
+    toast('JSON 格式错误: ' + e.message, 'error');
+    return;
+  }
+  api('PUT', '/api/config/scoring_keywords', { config: JSON.parse(raw) }).then(function(r) {
+    if (r.ok) {
+      toast('评分配置已保存', 'success');
+      loadScoringConfig();
+    } else {
+      toast('保存失败', 'error');
+    }
+  });
+}
+
+var _scoringConfig = null;
+
 // -- Pipeline --
 
 function runPipeline() {
@@ -909,6 +978,7 @@ function loadAll() {
     api('GET', '/api/config/llm').then(function(r) { if (r.yaml) _llm = parseLlm(r.yaml); renderLlm(); }),
     api('GET', '/api/config/source_status').then(function(r) { if (r.ok) _sourceStatus = r.status || {}; renderSources(); }),
     api('GET', '/api/config/security_keywords').then(function(r) { if (r.ok) { _keywords = r.keywords || []; renderKeywords(); } }),
+    api('GET', '/api/config/scoring_keywords').then(function(r) { if (r.ok) { _scoringConfig = r.config; var editor = document.getElementById('scoringEditor'); if (editor) editor.value = JSON.stringify(r.config, null, 2); } }),
   ]).catch(function(e) {
     toast('无法加载配置，请确认 config_server.py 已启动', 'error');
     console.error(e);

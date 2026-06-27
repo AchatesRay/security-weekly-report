@@ -70,17 +70,17 @@ def run_pipeline(skip_fetch: bool = False):
     from .parser import parse_all
     run_step(2, steps_total, "解析 RSS 数据", parse_all, skip_ok=True)
 
-    # Step 3: 关键字过滤阶段1（标题+摘要匹配，不丢弃）
+    # Step 3: 评分过滤阶段1（快速预筛，<30 分提前丢弃）
     from .keyword_filter import run_stage1 as kw_stage1
-    run_step(3, steps_total, "关键字过滤（阶段1：标题+摘要）", kw_stage1, skip_ok=True)
+    run_step(3, steps_total, "评分过滤（阶段1：快速预筛）", kw_stage1, skip_ok=True)
 
     # Step 4: 全文提取
     from .fulltext_extractor import run as run_fulltext
     run_step(4, steps_total, "提取全文（摘要过短的文章）", run_fulltext, skip_ok=True)
 
-    # Step 5: 关键字过滤阶段2（全文匹配，丢弃不匹配条目）
+    # Step 5: 评分过滤阶段2（完整评分 + 分类 + 阈值判定）
     from .keyword_filter import run_stage2 as kw_stage2
-    run_step(5, steps_total, "关键字过滤（阶段2：全文匹配）", kw_stage2, skip_ok=True)
+    run_step(5, steps_total, "评分过滤（阶段2：完整评分与分类）", kw_stage2, skip_ok=True)
 
     # Step 6: 去重
     from .deduplicator import run as run_dedup

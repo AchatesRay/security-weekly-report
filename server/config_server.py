@@ -41,7 +41,7 @@ _pipeline_proc: subprocess.Popen | None = None
 def _init_paths(project_dir: str | None = None):
     global _PROJECT_DIR, _CONFIG_DIR, _DATA_DIR, _REPORT_DIR
     global _SETTINGS_PATH, _SOURCES_PATH, _CLASSIFIER_PATH, _LLM_PATH, _KEYWORDS_PATH
-    global _PIPELINE_LOG_PATH
+    global _PIPELINE_LOG_PATH, _SCORING_KEYWORDS_PATH
 
     _PROJECT_DIR = Path(project_dir).resolve() if project_dir else SERVER_DIR.parent
     # 确保 pipeline 模块可导入
@@ -55,6 +55,7 @@ def _init_paths(project_dir: str | None = None):
     _CLASSIFIER_PATH = _CONFIG_DIR / "classifier_rules.yaml"
     _LLM_PATH = _CONFIG_DIR / "llm_config.yaml"
     _KEYWORDS_PATH = _CONFIG_DIR / "keywords.json"
+    _SCORING_KEYWORDS_PATH = _CONFIG_DIR / "scoring_keywords.json"
     _PIPELINE_LOG_PATH = _DATA_DIR / "pipeline_run.log"
 
 
@@ -190,6 +191,10 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
             return self._get_source_status()
         elif path == "/api/config/security_keywords":
             return self._get_security_keywords()
+        elif path == "/api/config/scoring_keywords":
+            return self._get_scoring_keywords()
+        elif path == "/api/config/scoring_keywords/save":
+            return self._put_scoring_keywords()
 
         # ── Static files ──
         return super().do_GET()
@@ -210,6 +215,8 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
             return self._put_category_order()
         elif path == "/api/config/security_keywords":
             return self._put_security_keywords()
+        elif path == "/api/config/scoring_keywords":
+            return self._put_scoring_keywords()
 
         send_json(self, {"error": "Not found"}, 404)
 
@@ -301,6 +308,22 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         else:
             ok = save_keywords(kws)
         send_json(self, {"ok": ok, "keywords": load_keywords()})
+
+    def _get_scoring_keywords(self):
+        """读取评分关键词完整配置"""
+        cfg = read_json(_SCORING_KEYWORDS_PATH)
+        if not cfg:
+            send_json(self, {"ok": False, "error": "评分配置文件不存在"})
+            return
+        send_json(self, {"ok": True, "config": cfg})
+
+    def _put_scoring_keywords(self):
+        """保存评分关键词完整配置"""
+        body = read_body(self)
+        data = json.loads(body)
+        cfg = data.get("config", {})
+        ok = write_json(_SCORING_KEYWORDS_PATH, cfg)
+        send_json(self, {"ok": ok})
 
     def _pipeline_status(self):
         global _pipeline_proc
