@@ -729,8 +729,8 @@ sources:
   enabled: true
 - name: 奇安信威胁情报中心
   group: 国内信源
-  url: https://ti.qianxin.com/blog/feed
-  type: rss
+  url: https://ti.qianxin.com/blog/
+  type: scraper
   language: zh
   source_level: A
   region: cn

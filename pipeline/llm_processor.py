@@ -156,11 +156,16 @@ def _count_chinese(text: str) -> int:
 
 
 def process(items: list[dict], config: dict) -> list[dict]:
-    """对每条有原文的条目生成中文摘要"""
+    """为每条内容生成中文摘要
+
+    策略:
+      - RSS 已有摘要 → 直接使用（英文则翻译为中文）
+      - RSS 摘要过短，已替换为全文 → 从全文抽取关键句（英文则翻译）
+      - 无内容 → 不生成摘要
+    """
     enabled = config.get("enabled", False)
     provider = config.get("provider", "extractive")
 
-    # 如果启用了 LLM 但没配置 API key，回退到抽取式
     if enabled and provider != "extractive":
         api_key = config.get("api_key", "")
         if not api_key:
@@ -175,38 +180,37 @@ def process(items: list[dict], config: dict) -> list[dict]:
     for idx, item in enumerate(items):
         summary = item.get("summary", "")
         language = item.get("language", "")
-
-        # 仅在获取到原文时才生成摘要，纯 RSS 摘要无需再提取
         has_fulltext = item.get("fulltext_fetched", False)
+        # original_summary 存在说明摘要曾被全文替换过
+        original_summary = item.get("original_summary", "")
 
-        if not has_fulltext:
+        # 无内容 → 跳过
+        if not summary or len(summary.strip()) < 50:
             item["ai_summary"] = ""
             continue
 
         ai_summary = ""
 
-        if enabled and provider != "extractive":
-            try:
-                ai_summary = _call_llm(summary, config)
-            except Exception as e:
-                print(f"  [LLM] LLM 调用失败 ({item.get('title','')[:40]}): {e}")
-                ai_summary = ""
-
-        # 回退到抽取式
-        if not ai_summary:
-            # 如果原文是英文，先用抽取式提取，再翻译
+        # 情况 A: 摘要曾被全文替换 → 从全文中抽取关键句
+        if original_summary:
             if language == "en":
-                raw_summary = generate_extractive_summary(summary)
-                if raw_summary:
-                    ai_summary = translate_text(raw_summary)
+                raw = generate_extractive_summary(summary)
+                ai_summary = translate_text(raw) if raw else ""
             else:
                 ai_summary = generate_extractive_summary(summary)
+
+        # 情况 B: RSS 摘要性内容可直接使用
+        else:
+            if language == "en":
+                ai_summary = translate_text(summary[:800])
+            else:
+                ai_summary = summary[:500]
 
         item["ai_summary"] = ai_summary
 
         if ai_summary:
             summary_count += 1
-            ch_count = _count_chinese(ai_summary)
+            ch_count = _count_chinese(ai_summary[:100])
             print(f"  [LLM] ✓ {item.get('source_name','?')}: {item.get('title','')[:40]}... "
                   f"→ {ch_count} 字摘要")
 
@@ -251,7 +255,7 @@ def _call_llm(text: str, config: dict) -> str:
 
 
 def run():
-    """给 main.py 调用的入口"""
+    """管道调用入口"""
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
