@@ -14,6 +14,7 @@ from pathlib import Path
 DATA_DIR = Path("data")
 PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
 SETTINGS_PATH = Path("config/settings.json")
+KEYWORDS_PATH = Path("config/keywords.json")
 
 # 默认网络安全关键字列表（中英文）
 DEFAULT_KEYWORDS = sorted([
@@ -82,7 +83,13 @@ DEFAULT_KEYWORDS = sorted([
 
 
 def load_keywords() -> list[str]:
-    """从 settings.json 加载关键字列表"""
+    """从 keywords.json 加载关键字列表（回退 settings.json 兼容旧数据）"""
+    try:
+        with open(KEYWORDS_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("security_keywords", [])
+    except Exception:
+        pass
     try:
         with open(SETTINGS_PATH, encoding="utf-8") as f:
             cfg = json.load(f)
@@ -92,16 +99,11 @@ def load_keywords() -> list[str]:
 
 
 def save_keywords(keywords: list[str]) -> bool:
-    """保存关键字列表到 settings.json"""
+    """保存关键字列表到 keywords.json"""
+    cleaned = sorted(set(kw.strip() for kw in keywords if kw.strip()))
     try:
-        with open(SETTINGS_PATH, encoding="utf-8") as f:
-            cfg = json.load(f)
-    except Exception:
-        cfg = {}
-    cfg["security_keywords"] = sorted(set(kw.strip() for kw in keywords if kw.strip()))
-    try:
-        with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        with open(KEYWORDS_PATH, "w", encoding="utf-8") as f:
+            json.dump({"security_keywords": cleaned}, f, ensure_ascii=False, indent=2)
         return True
     except Exception:
         return False

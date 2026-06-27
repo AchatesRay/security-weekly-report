@@ -1,0 +1,67 @@
+网络安全周报 — 信源全景清单
+一、英文安全媒体
+信源	说明
+BleepingComputer	漏洞/事件快讯，更新最及时
+The Hacker News	综合安全新闻
+Dark Reading	深度安全分析
+SecurityWeek	厂商动态、行业趋势
+Krebs on Security	Brian Krebs的深度调查报道
+The Record / Recorded Future	安全情报、APT报告、政策法规
+SC Media	产品安全、合规
+二、中文安全媒体
+信源	说明
+FreeBuf	国内最大安全社区
+安全内参	政策法规、行业分析
+嘶吼 RoarTalk	安全行业新闻
+看雪学院	技术深度、漏洞分析
+三、大模型公司官网
+公司	监控频道
+OpenAI	openai.com/blog、openai.com/safety
+Anthropic	anthropic.com/research、anthropic.com/safety
+Google AI	ai.googleblog.com
+微软AI	blogs.microsoft.com/ai
+Meta AI	ai.meta.com/blog
+xAI	x.ai
+DeepSeek	deepseek.com
+智谱AI	zhipuai.cn
+月之暗面	moonshot.ai
+四、安全厂商官网
+厂商	监控频道
+Palo Alto Networks	blog、Unit 42研究、PSIRT
+CrowdStrike	blog、威胁情报
+Fortinet	blog、PSIRT公告
+Check Point	research blog、CPR研究
+Cisco Talos	blog、威胁情报
+Mandiant	blog、APT报告
+SentinelOne	blog
+Trend Micro	research blog
+Kaspersky	ICS CERT、安全研究
+奇安信	威胁情报中心
+360	安全公告、Netlab
+深信服	安全研究
+绿盟科技	安全公告
+天融信	安全研究
+五、 安全论坛 / 社区
+论坛	说明
+Reddit - r/netsec	全球最大安全社区
+Reddit - r/blueteamsec	防守方社区
+Reddit - r/Malware	恶意软件分析
+Hacker News (news.ycombinator.com)	科技+安全讨论
+Exploit-DB	漏洞利用代码库
+Packet Storm Security	安全公告+PoC
+先知安全社区 (aliyun.com)	中文安全技术社区
+看雪论坛 (bbs.pediy.com)	中文逆向/漏洞分析
+六、漏洞平台 / CERT
+平台	说明
+NVD / CVE	官方漏洞库
+GitHub Security Advisories	开源项目漏洞
+Microsoft Security Response Center	微软安全公告
+Zero Day Initiative	ZDI漏洞披露
+CISA	美国网络安全和基础设施安全局
+CNNVD / CNCERT	中国国家漏洞库/应急中心
+七、政策法规
+来源	说明
+中国网信办	网络安全法律法规
+工信部	行业监管政策
+欧盟ENISA	欧洲网络安全政策
+美国NIST	安全标准框架

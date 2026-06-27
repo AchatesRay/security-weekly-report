@@ -3,8 +3,9 @@
 网络安全周报系统 — 主入口
 
 用法:
-    python main.py --run          # 执行完整管道: 抓取->解析->去重->分类->生成周报
-    python main.py --run --skip-fetch  # 跳过抓取，使用已有数据重新生成
+    python app.py --run          # 执行完整管道
+    python app.py --run --skip-fetch  # 跳过抓取，使用已有数据重新生成
+    python app.py server [port]  # 启动管理后台
 """
 
 import argparse

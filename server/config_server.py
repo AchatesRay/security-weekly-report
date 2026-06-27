@@ -32,6 +32,7 @@ _SETTINGS_PATH = None
 _SOURCES_PATH = None
 _CLASSIFIER_PATH = None
 _LLM_PATH = None
+_KEYWORDS_PATH = None
 _PIPELINE_LOG_PATH = None
 
 _pipeline_proc: subprocess.Popen | None = None
@@ -39,7 +40,7 @@ _pipeline_proc: subprocess.Popen | None = None
 
 def _init_paths(project_dir: str | None = None):
     global _PROJECT_DIR, _CONFIG_DIR, _DATA_DIR, _REPORT_DIR
-    global _SETTINGS_PATH, _SOURCES_PATH, _CLASSIFIER_PATH, _LLM_PATH
+    global _SETTINGS_PATH, _SOURCES_PATH, _CLASSIFIER_PATH, _LLM_PATH, _KEYWORDS_PATH
     global _PIPELINE_LOG_PATH
 
     _PROJECT_DIR = Path(project_dir).resolve() if project_dir else SERVER_DIR.parent
@@ -53,6 +54,7 @@ def _init_paths(project_dir: str | None = None):
     _SOURCES_PATH = _CONFIG_DIR / "source_config.yaml"
     _CLASSIFIER_PATH = _CONFIG_DIR / "classifier_rules.yaml"
     _LLM_PATH = _CONFIG_DIR / "llm_config.yaml"
+    _KEYWORDS_PATH = _CONFIG_DIR / "keywords.json"
     _PIPELINE_LOG_PATH = _DATA_DIR / "pipeline_run.log"
 
 
@@ -162,10 +164,12 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        # 根路径重定向到周报
+        # 根路径：有周报则跳转，否则跳到配置页
         if path == "" or path == "/":
+            report_path = _PROJECT_DIR / "reports" / "Security_Reports.html"
+            target = "/reports/Security_Reports.html" if report_path.exists() else "/templates/config.html"
             self.send_response(302)
-            self.send_header("Location", "/reports/Security_Reports.html")
+            self.send_header("Location", target)
             self.end_headers()
             return
 
