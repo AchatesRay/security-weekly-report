@@ -1,202 +1,628 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>网络安全周报 {{ week_str }}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-            background: #f5f6fa; color: #2c3e50; line-height: 1.6;
-            padding: 0;
-        }
-        .container { max-width: 960px; margin: 0 auto; padding: 20px; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>网络安全周报 · {{ week_str }}</title>
+<!-- 字体使用 微软雅黑 -->
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f1f3f6; --surface: #fff; --surface-hover: #f8f9fc;
+  --sidebar-bg: #f8f9fc; --sidebar-hover: #eef0f4; --sidebar-active: #e2e5ed;
+  --border: #e2e5ed; --border-light: #eef0f4;
+  --text: #1a1d29; --text-secondary: #333750; --text-muted: #9ca3b4; --text-dim: #bcc1cf;
+  --text-sidebar: #475569; --text-sidebar-active: #0f172a;
+  --accent: #2563eb; --accent-soft: rgba(37,99,235,0.1);
+  --accent-active: rgba(37,99,235,0.07); --accent-hover: rgba(37,99,235,0.05);
+  --accent-sidebar: #2563eb;
+  --cat-red: #ef4444; --cat-amber: #f59e0b; --cat-blue: #2563eb;
+  --cat-green: #10b981; --cat-purple: #8b5cf6; --cat-slate: #64748b;
+  --radius-sm: 6px; --radius-md: 8px; --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+}
+body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(--bg); color:var(--text); line-height:1.6; min-height:100vh; }
+.app { display:flex; height:100vh; position:relative; overflow:hidden; }
 
-        /* 页头 */
-        .header {
-            background: linear-gradient(135deg, #1a237e, #283593);
-            color: white; padding: 32px 40px; border-radius: 12px; margin-bottom: 24px;
-        }
-        .header h1 { font-size: 24px; margin-bottom: 8px; }
-        .header .meta { font-size: 14px; opacity: 0.85; }
-        .header .stats { margin-top: 12px; font-size: 14px; }
-        .header .stats span { display: inline-block; margin-right: 16px; }
-        .badge-urgent { background: #dc3545; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
-        .badge-watch { background: #ffc107; color: #333; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+/* Sidebar */
+.sidebar { width:200px; flex-shrink:0; background:var(--sidebar-bg); border-right:1px solid var(--border); display:flex; flex-direction:column; height:100vh; position:relative; }
+.sidebar-header { padding:20px 16px 16px; }
+.sidebar-badge { font-size:10px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent-sidebar); margin-bottom:6px; opacity:0.9; }
+.sidebar-header h2 { font-family:"Microsoft YaHei","微软雅黑",sans-serif; font-size:15px; font-weight:600; letter-spacing:-0.2px; color:var(--text-sidebar-active); }
+.sidebar-header h2 span { color:var(--accent-sidebar); }
 
-        /* 架构师摘要 */
-        .executive-summary {
-            background: white; border-radius: 12px; padding: 24px; margin-bottom: 24px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        }
-        .executive-summary h2 { font-size: 18px; margin-bottom: 16px; color: #1a237e; }
-        .es-item {
-            padding: 10px 16px; margin-bottom: 8px; border-radius: 8px;
-            border-left: 4px solid #ddd; font-size: 14px;
-        }
-        .es-item.urgent { border-left-color: #dc3545; background: #fff5f5; }
-        .es-item.watch { border-left-color: #ffc107; background: #fffef5; }
-        .es-item .es-title { font-weight: 600; }
-        .es-item .es-meta { font-size: 12px; color: #666; margin-top: 4px; }
+/* Week selector */
+.week-selector { padding:4px 12px 8px; }
+.week-selector select {
+  width:100%; padding:7px 10px; border-radius:var(--radius-sm);
+  border:1px solid var(--border); background:var(--surface);
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif; font-size:12px; color:var(--text);
+  cursor:pointer; outline:none; transition:border-color .15s,background .15s;
+  -webkit-appearance:none; appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239ca3b4' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 8px center; padding-right:28px;
+}
+.week-selector option { background:var(--surface); color:var(--text); }
+.week-selector select:hover { border-color:var(--accent-sidebar); background:var(--surface-hover); }
 
-        /* 板块 */
-        .section {
-            background: white; border-radius: 12px; margin-bottom: 16px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden;
-        }
-        .section-header {
-            padding: 16px 24px; cursor: pointer; user-select: none;
-            display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 1px solid #eee;
-        }
-        .section-header:hover { background: #f8f9fa; }
-        .section-header h3 { font-size: 16px; }
-        .section-header .count { font-size: 13px; color: #666; }
-        .section-content { padding: 16px 24px; }
+.nav { flex:1; padding:4px 8px 0; overflow-y:auto; }
+.nav-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--radius-sm); cursor:pointer; transition:background .15s; margin-bottom:2px; }
+.nav-item:hover { background:var(--sidebar-hover); }
+.nav-item.active { background:var(--sidebar-active); }
+.nav-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.nav-dot.red { background:var(--cat-red); } .nav-dot.amber { background:var(--cat-amber); }
+.nav-dot.blue { background:var(--cat-blue); } .nav-dot.green { background:var(--cat-green); }
+.nav-dot.purple { background:var(--cat-purple); } .nav-dot.slate { background:var(--cat-slate); }
+.nav-label { flex:1; font-size:13px; font-weight:500; color:var(--text-sidebar); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.nav-item.active .nav-label { color:var(--text-sidebar-active); font-weight:600; }
+.nav-count { font-size:12px; color:var(--text-sidebar); opacity:0.6; font-variant-numeric:tabular-nums; }
+.nav-item.active .nav-count { opacity:0.9; }
+.sidebar-footer { padding:12px 16px; border-top:1px solid var(--border-light); font-size:10px; color:var(--text-muted); }
+.sidebar-admin-link { display:flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:4px; color:var(--text-muted); text-decoration:none; font-size:14px; position:absolute; bottom:12px; right:12px; transition:opacity .15s,background .15s; }
+.sidebar-admin-link:hover { opacity:0.8; background:var(--sidebar-hover); }
+.sidebar { position:relative; }
 
-        /* 内容卡片 */
-        .item-card {
-            padding: 14px 16px; margin-bottom: 12px; border-radius: 8px;
-            border-left: 4px solid #ddd; background: #fafafa;
-            transition: background 0.2s;
-        }
-        .item-card:hover { background: #f0f0f0; }
-        .item-card.urgency-urgent { border-left-color: #dc3545; }
-        .item-card.urgency-watch { border-left-color: #ffc107; }
-        .item-card.urgency-later { border-left-color: #0d6efd; }
-        .item-card.urgency-learn { border-left-color: #6c757d; }
+/* Source alerts */
+.source-alerts-bar {
+  display:flex; align-items:center; gap:8px;
+  padding:8px 16px; margin:0 8px 4px; border-radius:var(--radius-sm);
+  font-size:12px; cursor:pointer; transition:background .15s;
+  background:rgba(245,158,11,0.1); color:#b45309;
+}
+.source-alerts-bar:hover { background:rgba(245,158,11,0.16); }
+.source-alerts-bar.has-high { background:rgba(239,68,68,0.1); color:#dc2626; }
+.source-alerts-bar.has-high:hover { background:rgba(239,68,68,0.16); }
+.source-alerts-bar-icon { font-size:14px; flex-shrink:0; }
+.source-alerts-bar-text { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.source-alerts-bar-arrow { font-size:10px; opacity:0.6; transition:transform .2s; }
+.source-alerts-bar.open .source-alerts-bar-arrow { transform:rotate(180deg); }
+.source-alerts-detail { display:none; padding:0 8px 8px; max-height:200px; overflow-y:auto; }
+.source-alerts-detail.open { display:block; }
+.source-alert-item {
+  display:flex; align-items:center; gap:8px;
+  padding:6px 10px; border-radius:4px; font-size:11px; margin-bottom:2px;
+}
+.source-alert-item:hover { background:var(--sidebar-hover); }
+.source-alert-severity {
+  width:6px; height:6px; border-radius:50%; flex-shrink:0;
+}
+.source-alert-severity.high { background:#dc2626; }
+.source-alert-severity.medium { background:#f59e0b; }
+.source-alert-severity.low { background:#9ca3b4; }
+.source-alert-name { flex:1; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.source-alert-reason { font-size:10px; color:var(--text-muted); flex-shrink:0; }
+.source-alerts-clear { display:block; width:100%; text-align:center; padding:4px; font-size:10px; color:var(--text-muted); cursor:pointer; border-radius:4px; }
+.source-alerts-clear:hover { background:var(--sidebar-hover); }
 
-        .item-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
-        .item-title a { color: #1a237e; text-decoration: none; }
-        .item-title a:hover { text-decoration: underline; }
+/* List */
+.list-panel { width:340px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; height:100vh; }
+.list-header { padding:18px 20px 14px; border-bottom:1px solid var(--border-light); flex-shrink:0; }
+.list-header h3 { font-family:"Microsoft YaHei","微软雅黑",sans-serif; font-size:15px; font-weight:600; letter-spacing:-0.2px; color:var(--text); }
+.list-header p { font-size:12px; color:var(--text-muted); margin-top:2px; }
+.list-items { flex:1; overflow-y:auto; padding:4px 0; }
+.list-card { padding:14px 20px 14px 18px; cursor:pointer; border-left:3px solid transparent; transition:background .12s,border-color .15s; }
+.list-card:hover { background:var(--accent-hover); }
+.list-card.active { background:var(--accent-active); border-left-color:var(--accent); }
+.list-card+.list-card { border-top:1px solid var(--border-light); }
+.list-card-source { font-size:11px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px; }
+.list-card-source.S { color:#2563eb; }
+.list-card-source.A { color:#059669; }
+.list-card-source.B { color:#b45309; }
+.list-card-source.C { color:#dc2626; }
+.list-card-title { font-size:14px; font-weight:600; line-height:1.45; margin-bottom:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--text); }
+.list-card.active .list-card-title { color:var(--accent); }
+.list-card-meta { font-size:12px; color:#059669; display:flex; align-items:center; gap:8px; }
+.list-card-ai { font-size:10px; font-weight:600; color:var(--accent); background:var(--accent-soft); padding:1px 6px; border-radius:3px; letter-spacing:.3px; }
 
-        .item-summary { font-size: 14px; color: #444; margin-bottom: 8px; }
-        .item-summary .more-link { font-size: 13px; color: #0d6efd; }
+/* Detail */
+.detail-panel { flex:1; background:var(--surface); display:flex; flex-direction:column; height:100vh; overflow-y:auto; }
+.detail-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--text-dim); gap:12px; }
+.detail-empty-icon { font-size:32px; opacity:0.2; letter-spacing:6px; }
+.detail-empty p { font-size:14px; }
+.detail-content { padding:40px 56px 60px; max-width:1200px; }
+.detail-meta { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px; font-size:12px; }
+.detail-meta > span:not(.detail-source-tag) { color:#059669; }
+.detail-source-tag { padding:3px 10px; border-radius:4px; font-size:11px; font-weight:600; letter-spacing:.3px; }
+.detail-source-tag.S { background:rgba(37,99,235,0.08); color:#2563eb; }
+.detail-source-tag.A { background:rgba(16,185,129,0.08); color:#059669; }
+.detail-source-tag.B { background:rgba(245,158,11,0.08); color:#b45309; }
+.detail-source-tag.C { background:rgba(239,68,68,0.08); color:#dc2626; }
+.detail-title { font-family:"Microsoft YaHei","微软雅黑",sans-serif; font-size:26px; font-weight:800; letter-spacing:-0.3px; line-height:1.35; margin-bottom:16px; }
+.detail-title a { color:var(--text); text-decoration:none; }
+.detail-title a:hover { color:var(--accent); }
+.detail-divider { height:2px; background:linear-gradient(90deg,var(--accent),var(--accent-soft),transparent); margin:0 0 28px; border:0; border-radius:1px; }
+.detail-summary { font-size:16px; color:var(--text-secondary); line-height:1.9; }
+.detail-summary p { margin-bottom:1em; text-align:justify; text-indent:2em; }
+.detail-summary p:last-child { margin-bottom:0; }
+.detail-summary br { display:block; content:''; margin:0; }
+.detail-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:32px; padding-top:20px; border-top:1px solid var(--border-light); }
+.detail-tag { padding:4px 12px; border-radius:4px; font-size:12px; background:var(--bg); color:#059669; }
+.detail-original-link { display:inline-flex; align-items:center; gap:8px; margin-top:28px; padding:10px 22px; border-radius:var(--radius-md); font-size:14px; font-weight:600; color:#fff; background:var(--accent); text-decoration:none; transition:background .15s,transform .12s,box-shadow .15s; box-shadow:var(--shadow-sm); }
+.detail-original-link:hover { background:#1d4ed8; transform:translateY(-1px); box-shadow:var(--shadow-md); }
+.detail-original-link::after { content:"→"; font-size:15px; }
 
-        .item-meta { font-size: 12px; color: #666; margin-bottom: 6px; }
-        .item-meta .sep { margin: 0 6px; color: #ccc; }
+/* AI 摘要 */
+.detail-ai-summary {
+  background:linear-gradient(135deg,#f0f7ff,#e8f4f8);
+  border-left:3px solid var(--accent);
+  border-radius:var(--radius-md);
+  padding:18px 22px;
+  margin-bottom:24px;
+  font-size:15px;
+  line-height:1.8;
+  color:var(--text);
+}
+.detail-ai-summary-header {
+  display:flex; align-items:center; gap:8px;
+  font-size:12px; font-weight:600; color:var(--accent);
+  letter-spacing:1px; text-transform:uppercase;
+  margin-bottom:10px;
+}
+.detail-ai-summary-header::before {
+  content:""; display:inline-block; width:16px; height:16px;
+  background:var(--accent); mask:url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z' fill='currentColor'/%3E%3C/svg%3E") no-repeat center;
+  mask-size:contain; -webkit-mask:url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z' fill='currentColor'/%3E%3C/svg%3E") no-repeat center;
+  -webkit-mask-size:contain; flex-shrink:0;
+}
+.detail-ai-summary-text { color:var(--text-secondary); }
+.detail-ai-summary-na { background:var(--bg); border-left-color:var(--text-dim); }
+.detail-ai-summary-na .detail-ai-summary-text { color:var(--text-muted); font-size:13px; }
+.detail-ai-summary-empty { display:none; }
+.detail-footer { text-align:center; font-size:11px; color:var(--text-dim); padding:32px 48px; border-top:1px solid var(--border-light); margin-top:48px; }
 
-        .item-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-        .tag {
-            display: inline-block; padding: 2px 8px; border-radius: 4px;
-            font-size: 11px; background: #e9ecef; color: #495057;
-        }
-        .tag-source-s { background: #d4edda; color: #155724; }
-        .tag-source-a { background: #cce5ff; color: #004085; }
-        .tag-source-b { background: #fff3cd; color: #856404; }
-        .tag-source-c { background: #f8d7da; color: #721c24; }
-        .tag-content-type { background: #d1ecf1; color: #0c5460; }
-        .tag-impact { background: #e8daef; color: #6c3483; }
+/* Loading state */
+.loading-overlay { display:none; position:fixed; inset:0; background:rgba(241,243,246,0.85); z-index:100; align-items:center; justify-content:center; flex-direction:column; gap:12px; }
+.loading-overlay.show { display:flex; }
+.loading-spinner { width:26px; height:26px; border:2.5px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .65s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg)} }
+.loading-overlay p { font-size:13px; color:var(--text-muted); }
 
-        /* 页脚 */
-        .footer {
-            text-align: center; font-size: 12px; color: #999;
-            padding: 24px; margin-top: 24px;
-        }
+/* Animations */
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.detail-content { animation:fadeIn .3s ease; }
 
-        /* 折叠动画 */
-        .section-content.collapsed { display: none; }
-        .collapse-icon { font-size: 12px; transition: transform 0.2s; }
-        .collapse-icon.collapsed { transform: rotate(-90deg); }
-    </style>
+/* Scrollbar */
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+.sidebar ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); }
+
+/* Draggable dividers */
+.divider {
+  width:4px; flex-shrink:0; cursor:col-resize;
+  background:transparent; position:relative; z-index:10;
+  transition:background .2s;
+}
+.divider:hover,
+.divider.active { background:var(--accent); opacity:0.3; }
+.divider::after {
+  content:""; position:absolute; left:-3px; right:-3px; top:0; bottom:0;
+}
+</style>
 </head>
 <body>
-    <div class="container">
-        <!-- 页头 -->
-        <div class="header">
-            <h1>网络安全周报 — {{ week_str }}</h1>
-            <div class="meta">{{ date_range }} | 生成时间: {{ generate_time }}</div>
-            <div class="stats">
-                <span>共 <strong>{{ total_count }}</strong> 条</span>
-                <span><span class="badge-urgent">🚨 {{ urgent_count }}</span></span>
-                <span><span class="badge-watch">⏰ {{ watch_count }}</span></span>
-            </div>
-        </div>
 
-        <!-- 架构师摘要 -->
-        {% if urgent_items or watch_items %}
-        <div class="executive-summary">
-            <h2>📋 架构师摘要</h2>
+<div class="loading-overlay" id="loading">
+  <div class="loading-spinner"></div>
+  <p>加载中...</p>
+</div>
 
-            {% if urgent_items %}
-            <h4 style="margin-bottom: 10px; color: #dc3545;">🚨 需立即响应</h4>
-            {% for item in urgent_items %}
-            <div class="es-item urgent">
-                <div class="es-title">{{ item.title }}</div>
-                <div class="es-meta">
-                    {{ item.source_name }}
-                    {% if item.merged_sources %} (联合报道: {{ item.merged_sources | join(", ") }}){% endif %}
-                    {% if item.region %} | 地域: {{ item.region }}{% endif %}
-                </div>
-            </div>
-            {% endfor %}
-            {% endif %}
+<div class="app">
 
-            {% if watch_items %}
-            <h4 style="margin-bottom: 10px; margin-top: 16px; color: #856404;">⏰ 近期需关注</h4>
-            {% for item in watch_items %}
-            <div class="es-item watch">
-                <div class="es-title">{{ item.title }}</div>
-                <div class="es-meta">
-                    {{ item.source_name }}
-                    {% if item.merged_sources %} (联合报道: {{ item.merged_sources | join(", ") }}){% endif %}
-                    {% if item.region %} | 地域: {{ item.region }}{% endif %}
-                </div>
-            </div>
-            {% endfor %}
-            {% endif %}
-        </div>
-        {% endif %}
-
-        <!-- 六大板块 -->
-        {% for category, items in groups.items() %}
-        <div class="section">
-            <div class="section-header" onclick="toggleSection(this)">
-                <h3>{{ category }}</h3>
-                <span class="count">{{ items | length }} 条 <span class="collapse-icon">&#9660;</span></span>
-            </div>
-            <div class="section-content">
-                {% for item in items %}
-                <div class="item-card urgency-{{ {'需立即响应': 'urgent', '近期需关注': 'watch', '持续关注': 'later', '知识积累': 'learn'}.get(item.urgency, 'learn') }}">
-                    <div class="item-title">
-                        <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.title }}</a>
-                    </div>
-                    <div class="item-summary">
-                        {{ item.summary | striptags | truncate(300) }}
-                    </div>
-                    <div class="item-meta">
-                        <strong>{{ item.source_name }}</strong>
-                        {% if item.merged_sources %}(联合报道: {{ item.merged_sources | join(", ") }}){% endif %}
-                        <span class="sep">|</span>
-                        <span class="tag tag-source-{{ item.source_level | lower }}">{{ item.source_level }}</span>
-                        {% if item.region %}<span class="sep">|</span> 🌏 {{ item.region }}{% endif %}
-                        {% if item.published_date %}<span class="sep">|</span> {{ item.published_date[:10] }}{% endif %}
-                    </div>
-                    <div class="item-tags">
-                        {% if item.urgency %}<span class="tag">{{ item.urgency }}</span>{% endif %}
-                        {% if item.content_type %}<span class="tag tag-content-type">{{ item.content_type }}</span>{% endif %}
-                        {% for tag in item.tags %}<span class="tag tag-impact">{{ tag }}</span>{% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endfor %}
-
-        <!-- 页脚 -->
-        <div class="footer">
-            <p>本报告由网络安全周报系统自动生成 | 信息仅供参考，请以原文为准</p>
-        </div>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-badge">Weekly Briefing</div>
+      <h2>安全态势<span>周报</span></h2>
     </div>
 
-    <script>
-        function toggleSection(header) {
-            const content = header.nextElementSibling;
-            const icon = header.querySelector('.collapse-icon');
-            content.classList.toggle('collapsed');
-            icon.classList.toggle('collapsed');
-        }
-    </script>
+    <div class="week-selector">
+      <select id="weekSelect" onchange="switchWeek(this.value)">
+        {% for entry in manifest %}
+        <option value="{{ entry.week }}" data-range="{{ entry.date_range }}"{% if entry.week == week_str %} selected{% endif %}>
+          {{ entry.week }} · {{ entry.date_range }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <nav class="nav" id="nav">
+      <div class="nav-item active" data-idx="-1">
+        <span class="nav-dot slate"></span>
+        <span class="nav-label">全部分类</span>
+        <span class="nav-count" id="navAllCount">{{ total_count }}</span>
+      </div>
+      {% for cat in groups %}
+      {% set short = cat.split(" ", 1)[1] if " " in cat else cat %}
+      {% if cat.startswith("①") %}{% set dot = "red" %}
+      {% elif cat.startswith("②") %}{% set dot = "amber" %}
+      {% elif cat.startswith("③") %}{% set dot = "amber" %}
+      {% elif cat.startswith("④") %}{% set dot = "green" %}
+      {% elif cat.startswith("⑤") %}{% set dot = "purple" %}
+      {% elif cat.startswith("⑥") %}{% set dot = "blue" %}
+      {% else %}{% set dot = "slate" %}
+      {% endif %}
+      <div class="nav-item" data-idx="{{ loop.index0 }}">
+        <span class="nav-dot {{ dot }}"></span>
+        <span class="nav-label">{{ short }}</span>
+        <span class="nav-count" id="catCount{{ loop.index0 }}">{{ groups[cat] | length }}</span>
+      </div>
+      {% endfor %}
+    </nav>
+    {% if source_alerts %}
+    <div class="source-alerts-bar{% if source_alerts | selectattr('severity', 'equalto', 'high') | list %} has-high{% endif %}" id="sourceAlertsBar" onclick="toggleSourceAlerts()">
+      <span class="source-alerts-bar-icon">&#x26A0;</span>
+      <span class="source-alerts-bar-text">{{ source_alerts | length }} 个信源本周无数据</span>
+      <span class="source-alerts-bar-arrow">&#x25BC;</span>
+    </div>
+    <div class="source-alerts-detail" id="sourceAlertsDetail">
+      {% for alert in source_alerts %}
+      <div class="source-alert-item">
+        <span class="source-alert-severity {{ alert.severity }}"></span>
+        <span class="source-alert-name">{{ alert.source_name }}</span>
+        <span class="source-alert-reason">{{ alert.reason }}</span>
+      </div>
+      {% endfor %}
+      <div class="source-alerts-clear" onclick="document.getElementById('sourceAlertsBar').style.display='none';document.getElementById('sourceAlertsDetail').style.display='none';">忽略</div>
+    </div>
+    {% endif %}
+    <div class="sidebar-footer" id="sidebarFooter">{{ total_count }} 条 · {{ groups | length }} 个分类</div>
+    <a href="../templates/config.html" class="sidebar-admin-link" title="管理后台">⚙</a>
+  </aside>
+
+  <!-- Divider -->
+  <div class="divider" data-side="sidebar"></div>
+
+  <!-- List -->
+  <div class="list-panel">
+    <div class="list-header">
+      <h3 id="listTitle">全部分类</h3>
+      <p id="listSub">{{ total_count }} 条情报</p>
+    </div>
+    <div class="list-items" id="listItems"></div>
+  </div>
+
+  <!-- Divider -->
+  <div class="divider" data-side="list"></div>
+
+  <!-- Detail -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="detail-empty" id="detailEmpty">
+      <div class="detail-empty-icon">◈ ◈ ◈</div>
+      <p>选择一条情报查看详情</p>
+    </div>
+    <div class="detail-content" id="detailContent" style="display:none">
+      <div class="detail-meta" id="detailMeta"></div>
+      <h1 class="detail-title" id="detailTitle"></h1>
+      <div class="detail-divider"></div>
+      <div class="detail-ai-summary" id="detailAiSummary" style="display:none">
+        <div class="detail-ai-summary-header">摘要</div>
+        <div class="detail-ai-summary-text" id="detailAiSummaryText"></div>
+      </div>
+      <div class="detail-summary" id="detailSummary"></div>
+      <div class="detail-tags" id="detailTags"></div>
+      <a class="detail-original-link" id="detailLink" href="#" target="_blank">阅读原文</a>
+      <div class="detail-footer">
+        <p>本报告由安全态势感知系统自动生成 · 信息仅供参考</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Data ──
+var _allData = {};   // week_str => { items, catNames, catCounts }
+var _currentWeek = '{{ week_str }}';
+var _catNames = [{% for cat in groups %}{{ (cat.split(" ", 1)[1] if " " in cat else cat) | tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
+{% set prefix_chars = "①②③④⑤⑥" %}
+var _catPrefixes = [{% for cat in groups %}{% set first = cat.split(" ", 1)[0] %}{% if first|length == 1 and first in prefix_chars %}{{ first | tojson }}{% else %}{{ "" | tojson }}{% endif %}{% if not loop.last %},{% endif %}{% endfor %}];
+
+// Register current week's data
+_allData['{{ week_str }}'] = {
+  items: {{ json_items | tojson }},
+  catNames: _catNames,
+  catCounts: [{% for cat in groups %}{{ groups[cat] | length }}{% if not loop.last %},{% endif %}{% endfor %}],
+  totalCount: {{ total_count }}
+};
+
+// ── State ──
+var _currentData = _allData['{{ week_str }}'];
+var _currentCat = -1;
+var _currentItems = [];
+var _currentSel = -1;
+
+// ── DOM refs ──
+var listEl = document.getElementById('listItems');
+var listTitle = document.getElementById('listTitle');
+var listSub = document.getElementById('listSub');
+var dEmpty = document.getElementById('detailEmpty');
+var dContent = document.getElementById('detailContent');
+var dMeta = document.getElementById('detailMeta');
+var dTitle = document.getElementById('detailTitle');
+var dSummary = document.getElementById('detailSummary');
+var dAiSummary = document.getElementById('detailAiSummary');
+var dAiSummaryText = document.getElementById('detailAiSummaryText');
+var dTags = document.getElementById('detailTags');
+var dLink = document.getElementById('detailLink');
+var loading = document.getElementById('loading');
+var navAllCount = document.getElementById('navAllCount');
+var sidebarFooter = document.getElementById('sidebarFooter');
+
+function esc(s) { return (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s) { return (''+s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function formatSummary(text) {
+  if (!text) return '';
+  var html = esc(text)
+    .replace(/\n\n+/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+  return '<p>' + html + '</p>';
+}
+
+function rebuildCatIdx(data) {
+  data.items.forEach(function(item) {
+    item._catIdx = -1;
+    data.catNames.forEach(function(name, ci) {
+      var fullName = (_catPrefixes[ci] || '') + ' ' + name;
+      if (item.category === fullName || item.category === name) item._catIdx = ci;
+    });
+  });
+}
+
+function renderList() {
+  var catIdx = _currentCat;
+  var data = _currentData;
+  var items = catIdx === -1 ? data.items : data.items.filter(function(d) { return d._catIdx === catIdx; });
+  _currentItems = items;
+  _currentSel = -1;
+
+  listTitle.textContent = catIdx === -1 ? '全部分类' : data.catNames[catIdx];
+  listSub.textContent = items.length + ' 条情报';
+
+  if (!items.length) {
+    listEl.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text-dim);font-size:13px">暂无情报</div>';
+    dEmpty.style.display = 'flex'; dContent.style.display = 'none';
+    return;
+  }
+
+  var html = '';
+  items.forEach(function(item, i) {
+    html += '<div class="list-card" data-idx="' + i + '">';
+    var lvl = item.source_level || 'C'; html += '<div class="list-card-source ' + lvl + '">' + esc(item.source_name) + '</div>';
+    html += '<div class="list-card-title">' + esc(item.title) + '</div>';
+    html += '<div class="list-card-meta"><span>' + esc(item.published_date) + '</span>';
+    if (item.content_type) html += '<span>·</span><span>' + esc(item.content_type) + '</span>';
+    if (item.source_type) html += '<span>·</span><span>' + esc(item.source_type) + '</span>';
+    if (item.ai_summary || item.summary) html += '<span class="list-card-ai">摘要</span>';
+    html += '</div></div>';
+  });
+  listEl.innerHTML = html;
+
+  listEl.querySelectorAll('.list-card').forEach(function(el) {
+    el.addEventListener('click', function() { selectItem(parseInt(this.dataset.idx)); });
+  });
+  selectItem(0);
+}
+
+function selectItem(idx) {
+  _currentSel = idx;
+  listEl.querySelectorAll('.list-card').forEach(function(el) { el.classList.remove('active'); });
+  var card = listEl.querySelector('.list-card[data-idx="' + idx + '"]');
+  if (card) card.classList.add('active');
+
+  var item = _currentItems[idx];
+  if (!item) return;
+
+  dEmpty.style.display = 'none'; dContent.style.display = 'block';
+  dContent.style.animation = 'none'; void dContent.offsetHeight;
+  dContent.style.animation = 'fadeIn 0.3s ease';
+
+  var lvl = item.source_level || 'C';
+  dMeta.innerHTML = '<span class="detail-source-tag ' + lvl + '">' + esc(item.source_name) + '</span>' +
+    '<span>' + esc(item.published_date) + '</span>' +
+    (item.content_type ? '<span>·</span><span>' + esc(item.content_type) + '</span>' : '') +
+    (item.source_type ? '<span>·</span><span>' + esc(item.source_type) + '</span>' : '') +
+    (item.region ? '<span>·</span><span>' + esc(item.region) + '</span>' : '');
+
+  dTitle.innerHTML = '<a href="' + escAttr(item.url) + '" target="_blank">' + esc(item.title) + '</a>';
+  // AI 摘要：ai_summary 优先；原文获取失败则提示无摘要
+  var aiText = item.ai_summary && item.ai_summary.trim();
+  var noOriginal = item.fulltext_fetched === false;
+  var summaryFallback = !aiText && !noOriginal && item.summary && item.summary.trim();
+  if (aiText) {
+    dAiSummary.style.display = 'block';
+    dAiSummaryText.textContent = aiText;
+    dAiSummary.className = 'detail-ai-summary';
+  } else if (noOriginal) {
+    dAiSummary.style.display = 'block';
+    dAiSummaryText.textContent = '未获取到原文，无摘要';
+    dAiSummary.className = 'detail-ai-summary detail-ai-summary-na';
+  } else if (summaryFallback) {
+    var preview = summaryFallback.length > 300
+      ? summaryFallback.slice(0, 297) + '...'
+      : summaryFallback;
+    dAiSummary.style.display = 'block';
+    dAiSummaryText.textContent = preview;
+    dAiSummary.className = 'detail-ai-summary detail-ai-summary-na';
+  } else {
+    dAiSummary.style.display = 'block';
+    dAiSummaryText.textContent = '未获取到原文内容，暂无 AI 摘要';
+    dAiSummary.className = 'detail-ai-summary detail-ai-summary-na';
+  }
+  dSummary.innerHTML = formatSummary(item.summary);
+  dLink.href = item.url;
+
+  var tags = '';
+  if (item.content_type) tags += '<span class="detail-tag">' + esc(item.content_type) + '</span>';
+  if (item.source_type) tags += '<span class="detail-tag">' + esc(item.source_type) + '</span>';
+  (item.tags || []).forEach(function(t) { tags += '<span class="detail-tag">' + esc(t) + '</span>'; });
+  if (item.region) tags += '<span class="detail-tag">' + esc(item.region) + '</span>';
+  dTags.innerHTML = tags;
+}
+
+function loadNav(data) {
+  // Update nav item counts
+  navAllCount.textContent = data.totalCount;
+  var navItems = document.querySelectorAll('.nav-item');
+  navItems.forEach(function(el) {
+    var idx = parseInt(el.dataset.idx);
+    if (idx >= 0 && idx < data.catCounts.length) {
+      var countEl = el.querySelector('.nav-count');
+      if (countEl) countEl.textContent = data.catCounts[idx];
+    }
+  });
+  sidebarFooter.textContent = data.totalCount + ' 条 · ' + data.catNames.length + ' 个分类';
+}
+
+function applyWeekData(week) {
+  var data = _allData[week];
+  if (!data) return;
+  _currentData = data;
+  rebuildCatIdx(data);
+  loadNav(data);
+  // Reset to "all categories" view
+  _currentCat = -1;
+  document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+  document.querySelector('.nav-item[data-idx="-1"]').classList.add('active');
+  renderList();
+}
+
+function toggleSourceAlerts() {
+  var bar = document.getElementById('sourceAlertsBar');
+  var detail = document.getElementById('sourceAlertsDetail');
+  if (!bar || !detail) return;
+  bar.classList.toggle('open');
+  detail.classList.toggle('open');
+}
+
+function switchWeek(week) {
+  if (week === _currentWeek) {
+    document.getElementById('weekSelect').value = _currentWeek;
+    return;
+  }
+
+  if (_allData[week]) {
+    _currentWeek = week;
+    applyWeekData(week);
+    document.title = '网络安全周报 · ' + week;
+    return;
+  }
+
+  // Fetch from server
+  loading.classList.add('show');
+  fetch('data_' + week + '.json')
+    .then(function(r) {
+      if (!r.ok) throw new Error('Not found');
+      return r.json();
+    })
+    .then(function(items) {
+      _allData[week] = {
+        items: items,
+        catNames: _catNames,
+        catCounts: [],
+        totalCount: items.length
+      };
+      // Calculate catCounts from items
+      var counts = [];
+      _catNames.forEach(function() { counts.push(0); });
+      items.forEach(function(item) {
+        _catNames.forEach(function(name, ci) {
+          var fullName = (_catPrefixes[ci] || '') + ' ' + name;
+          if (item.category === fullName || item.category === name) counts[ci]++;
+        });
+      });
+      _allData[week].catCounts = counts;
+
+      _currentWeek = week;
+      applyWeekData(week);
+      document.title = '网络安全周报 · ' + week;
+      loading.classList.remove('show');
+    })
+    .catch(function() {
+      loading.classList.remove('show');
+      document.getElementById('weekSelect').value = _currentWeek;
+      alert('无法加载周报数据: ' + week);
+    });
+}
+
+// ── Draggable dividers ──
+(function() {
+  var _target = null, _side = '', _startX = 0, _startW = 0;
+
+  function getPanel(side) {
+    return side === 'sidebar'
+      ? document.querySelector('.sidebar')
+      : document.querySelector('.list-panel');
+  }
+
+  document.querySelectorAll('.divider').forEach(function(el) {
+    el.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      _side = this.dataset.side;
+      _target = this;
+      var panel = getPanel(_side);
+      _startX = e.clientX;
+      _startW = panel.offsetWidth;
+      this.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!_target) return;
+    var panel = getPanel(_side);
+    var dx = e.clientX - _startX;
+    var clamped = Math.max(120, Math.min(500, _startW + dx));
+    panel.style.width = clamped + 'px';
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (!_target) return;
+    _target.classList.remove('active');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    // Save
+    try {
+      var w1 = document.querySelector('.sidebar').offsetWidth;
+      var w2 = document.querySelector('.list-panel').offsetWidth;
+      localStorage.setItem('reports_sidebar_w', w1);
+      localStorage.setItem('reports_list_w', w2);
+    } catch(e) {}
+    _target = null;
+  });
+
+  // Restore saved widths
+  try {
+    var sw = localStorage.getItem('reports_sidebar_w');
+    var lw = localStorage.getItem('reports_list_w');
+    if (sw) document.querySelector('.sidebar').style.width = sw + 'px';
+    if (lw) document.querySelector('.list-panel').style.width = lw + 'px';
+  } catch(e) {}
+})();
+
+// Admin link fallback for file:// access
+document.querySelector('.sidebar-admin-link')?.addEventListener('click', function(e) {
+  if (window.location.protocol === 'file:') {
+    e.preventDefault();
+    alert('请先启动管理后台服务器：\n\n  终端执行: ./server.sh start\n\n然后访问: http://localhost:8081');
+  }
+});
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', function() {
+  rebuildCatIdx(_currentData);
+  // Nav click
+  document.querySelectorAll('.nav-item').forEach(function(el) {
+    el.addEventListener('click', function() {
+      document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+      el.classList.add('active');
+      _currentCat = parseInt(el.dataset.idx);
+      renderList();
+    });
+  });
+  renderList();
+});
+</script>
 </body>
 </html>
