@@ -3,9 +3,9 @@
 10 步流水线:
   1.  fetcher              RSS/API 信源并发抓取
   2.  parser               解析为统一数据结构
-  3.  keyword_filter (stg1)标题+摘要关键字匹配（标记未匹配项）
+  3.  scorer (stg1)       标题+前200字快速评分，<30 分提前丢弃
   4.  fulltext_extractor   短摘要文章全文抓取
-  5.  keyword_filter (stg2)全文关键字匹配（丢弃不匹配项）
+  5.  scorer (stg2)        完整评分+领域分类+阈值判定（≥80收录，50-79待复核）
   6.  deduplicator         URL 精确去重 + 标题模糊去重
   7.  classifier           分类打标 + 内容/地域类型推断
   8.  translator           英文→中文翻译（腾讯云 TMT）
