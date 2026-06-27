@@ -1,7 +1,6 @@
 # 网络安全周报系统
 
-从 80+ 信源（安全媒体、厂商、CERT、AI 厂商等）自动抓取网络安全资讯，
-经 10 步流水线处理后生成 HTML 周报。
+从 80+ 信源（安全媒体、厂商、CERT、AI 厂商等）自动抓取网络安全资讯，经 9 步流水线处理后生成 HTML 周报。
 
 ## 快速开始
 
@@ -23,16 +22,27 @@ python app.py server [port]
 
 ```
 app.py                    统一入口
-pipeline/                 10 步数据处理管道
-config/                   配置（信源、分类规则、关键词等）
+pipeline/                 9 步数据处理管道
+config/                   配置（信源、评分关键词等）
 server/                   Web 管理后台
 templates/                周报/管理界面模板
 reports/                  生成的 HTML 周报
 docs/                     文档
 ```
 
-## 管道步骤
+## 9 步管道
 
-1. 抓取 RSS → 2. 解析 → 3. 关键字过滤(标题) → 4. 全文提取 →
-5. 关键字过滤(全文) → 6. 去重 → 7. 分类 → 8. 翻译 →
-9. AI 摘要 → 10. 生成 HTML 报告
+1. 抓取 RSS → 2. 解析 → 3. 评分过滤(阶段1: 快速预筛) →
+4. 全文提取 → 5. 评分过滤(阶段2: 完整评分+分类) →
+6. 去重 → 7. 翻译 → 8. AI 摘要 → 9. 生成 HTML 报告
+
+## 配置目录
+
+```
+config/
+  source_config.yaml       信源配置（约 80 个信源）
+  scoring_keywords.json    评分关键词配置（强/中/弱三级权重）
+  keywords.json            关键词别名映射
+  llm_config.yaml          LLM 配置（预留）
+  settings.json            管理后台配置
+```

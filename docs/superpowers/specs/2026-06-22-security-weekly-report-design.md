@@ -136,58 +136,7 @@
 | ENISA | en | S | eu |
 | NIST | en | S | us |
 
-### 八、新增补充信源
-
-#### 云与基础设施安全
-
-| 信源 | 语言 | 等级 | 地域 |
-|------|------|------|------|
-| AWS Security Blog | en | S | global |
-| Azure Security Blog | en | S | global |
-| GCP Security Blog | en | S | global |
-| Wiz Blog | en | A | global |
-| Aqua Security Blog | en | A | global |
-| HashiCorp Security | en | A | global |
-
-#### 开源与软件供应链安全
-
-| 信源 | 语言 | 等级 | 地域 |
-|------|------|------|------|
-| OpenSSF | en | A | global |
-| GitHub Security Lab | en | A | global |
-| Snyk Blog | en | A | global |
-| Socket.dev Blog | en | A | global |
-
-#### 身份安全
-
-| 信源 | 语言 | 等级 | 地域 |
-|------|------|------|------|
-| Okta Security | en | S | global |
-| Microsoft Entra Blog | en | S | global |
-| Beyond Identity Blog | en | B | global |
-
-#### 中文安全厂商（补充）
-
-| 信源 | 语言 | 等级 | 地域 |
-|------|------|------|------|
-| 微步在线 ThreatBook | zh | A | cn |
-| 知道创宇 | zh | A | cn |
-| 安恒信息 | zh | A | cn |
-| 火绒安全 | zh | B | cn |
-| 长亭科技 | zh | A | cn |
-
-#### 威胁情报与标准（专项）
-
-| 信源 | 语言 | 等级 | 地域 |
-|------|------|------|------|
-| MITRE ATT&CK 更新 | en | A | global |
-| OWASP | en | A | global |
-| SANS ISC | en | B | global |
-| AlienVault OTX | en | B | global |
-| 中国信通院 CAICT | zh | S | cn |
-| 全国信安标委 TC260 | zh | S | cn |
-| 公安三所 | zh | S | cn |
-| IAPP | en | A | global |
+> 补充信源（云安全、身份安全、中文厂商等）已全部并入 `config/source_config.yaml`，不再单独列出。
 
 ---
 
@@ -196,23 +145,38 @@
 模块化管道架构，数据在各模块间通过 JSON 文件传递:
 
 ```
-source_config.yaml  +  classifier_rules.yaml
-         │                      │
-         ▼                      │
-    fetcher.py                  │
-    (RSS 抓取)                   │
-         │                      │
-         ▼                      │
-    parser.py                   │
-    (XML 解析 → 统一结构体)      │
-         │                      │
-         ▼                      │
-    deduplicator.py              │
-    (URL去重 + 标题相似度合并)    │
-         │                      │
-         ▼                      │
-    classifier.py ──────────────┘
-    (关键词规则分类 + 打标)
+source_config.yaml        scoring_keywords.json
+         │                        │
+         ▼                        │
+    fetcher.py                    │
+    (RSS/API 并发抓取)             │
+         │                        │
+         ▼                        │
+    parser.py                     │
+    (XML 解析 → 统一结构体)        │
+         │                        │
+         ▼                        │
+    keyword_filter.py (stage1) ───┤
+    (快速预筛: 标题+前200字评分,   │
+     <30 分提前丢弃)               │
+         │                        │
+         ▼                        │
+    fulltext_extractor.py         │
+    (短摘要文章全文抓取)           │
+         │                        │
+         ▼                        │
+    keyword_filter.py (stage2) ───┘
+      + scorer.py
+    (完整评分+分类+内容类型+地域)
+    ≥80收录, 50-79待复核
+         │
+         ▼
+    deduplicator.py
+    (URL去重 + 标题相似度合并)
+         │
+         ▼
+    translator.py
+    (英文→中文翻译, 腾讯云 TMT)
          │
          ▼
     [llm_processor.py]  ← 预留，默认关闭
@@ -227,19 +191,34 @@ source_config.yaml  +  classifier_rules.yaml
 
 | 模块 | 输入 | 输出 | 职责 |
 |------|------|------|------|
-| fetcher.py | source_config.yaml | raw_items.json | 遍历信源拉取 RSS XML |
+| fetcher.py | source_config.yaml | raw_items.json | 并发抓取 RSS/API/Scraper 信源 |
 | parser.py | raw_items.json | parsed_items.json | XML 解析，统一字段结构 |
-| deduplicator.py | parsed_items.json | deduped_items.json | URL 精确去重 + 标题相似度合并 |
-| classifier.py | deduped_items.json + classifier_rules.yaml | classified_items.json | 关键词规则分类 + 多维打标 |
-| llm_processor.py | classified_items.json | enhanced_items.json | (预留) LLM 摘要生成 |
-| report_generator.py | classified_items.json + templates/ | HTML 报告 | 渲染周报 |
+| keyword_filter.py (stage1) | parsed_items.json | stage1_results.json | 快速预筛，<30 分提前丢弃 |
+| fulltext_extractor.py | stage1_results.json | fulltext_items.json | 短摘要文章全文抓取 |
+| keyword_filter.py (stage2) + scorer.py | fulltext_items.json + scoring_keywords.json | scored_items.json | 完整评分+分类+多维打标 (≥80收录, 50-79待复核) |
+| deduplicator.py | scored_items.json | deduped_items.json | URL 精确去重 + 标题相似度合并 |
+| translator.py | deduped_items.json | translated_items.json | 英文→中文翻译（腾讯云 TMT API） |
+| llm_processor.py | translated_items.json | enhanced_items.json | (预留) LLM 摘要生成 |
+| report_generator.py | enhanced_items.json + templates/ | HTML 报告 | 渲染周报 |
+
+### 评分体系
+
+采用「词级加权 + 位置加成 + 组合校验」的累加评分机制:
+
+- **强特征词** (权重 30): 明确的安全领域术语，命中即显著加分
+- **中特征词** (权重 15): 安全相关内容词，通常需与强特征词组合
+- **弱特征词** (权重 5): 宽泛的安全话题词，辅助加分
+
+位置加成: title(2.0) > lead(1.0) > tail(0.8) > body(0.5)
+阈值: ≥80 直接收录, 50-79 待复核, <30 阶段1提前丢弃
 
 ### 原则
 
 - 任何步骤失败不阻断管道，跳过错误继续后续处理
 - 单个信源 RSS 拉取失败不影响其他信源
 - 解析异常条目标记 `parse_error: true` 保留原始数据
-- 分类无匹配归入"未分类"，周报底部展示
+- 评分 < 30 提前丢弃，≥80 直接收录，50-79 待复核
+- 翻译和 LLM 步骤失败不影响最终报告生成
 
 ---
 
@@ -279,23 +258,28 @@ source_config.yaml  +  classifier_rules.yaml
 
 ```
 SecurityInfo/
-├── main.py                     # 入口
-├── source_config.yaml          # 信源配置
-├── classifier_rules.yaml       # 分类关键词规则
-├── llm_config.yaml             # LLM 配置(预留)
-├── fetcher.py
-├── parser.py
-├── deduplicator.py
-├── classifier.py
-├── llm_processor.py            # 预留空壳
-├── report_generator.py
+├── app.py                     # 统一入口
+├── pipeline/                  # 9 步管道
+│   ├── main.py                # 管道串联
+│   ├── fetcher.py
+│   ├── parser.py
+│   ├── keyword_filter.py      # 两阶段评分过滤
+│   ├── scorer.py              # 评分引擎
+│   ├── fulltext_extractor.py
+│   ├── deduplicator.py
+│   ├── translator.py
+│   ├── llm_processor.py       # 预留空壳
+│   └── report_generator.py
+├── config/
+│   ├── source_config.yaml     # 信源配置
+│   ├── scoring_keywords.json  # 评分关键词
+│   ├── keywords.json          # 关键词别名
+│   ├── llm_config.yaml        # LLM 配置(预留)
+│   └── settings.json          # 管理后台配置
 ├── templates/
-│   └── weekly_report.html      # Jinja2 模板
-├── data/
-│   ├── raw_items.json
-│   ├── parsed_items.json
-│   ├── deduped_items.json
-│   └── classified_items.json
+│   ├── weekly_report.html     # Jinja2 模板
+│   └── config.html            # 管理后台模板
+├── data/                      # 中间数据(gitignored)
 └── reports/
     ├── Security_Reports.html             # 最新周报
     ├── Security_Reports_2026W25.html     # 历史归档
@@ -327,16 +311,17 @@ sources:
 
 信源配置仅含信源自身属性。分类和标签不由信源配置决定。
 
-### classifier_rules.yaml
+### scoring_keywords.json
 
-```yaml
-rules:
-  - keywords: [大模型, LLM, GPT, Claude, prompt injection]
-    category: ① AI/LLM 安全
-    tags: []
+```json
+{
+  "strong": {"weight": 30, "keywords": [{"text": "0-day", "categories": ["③ 漏洞态势与供应链安全"]}]},
+  "medium": {"weight": 15, "keywords": [...]},
+  "weak": {"weight": 5, "keywords": [...]}
+}
 ```
 
-关键词匹配采用"最多命中"策略处理多规则冲突。
+采用「词级加权 + 位置加成 + 组合校验」的累加评分机制。关键词同时携带分类和内容类型元数据，评分与分类共用同一套关键词。详见 `pipeline/scorer.py`。
 
 ### llm_config.yaml (预留)
 
@@ -361,4 +346,6 @@ prompt_template: |
 | HTML 模板 | Jinja2 |
 | 配置文件 | PyYAML |
 | 网络请求 | httpx / requests |
-| 相似度去重 | rapidfuzz (fuzzywuzzy 更轻量的替代) |
+| 相似度去重 | rapidfuzz |
+| 翻译 | 腾讯云 TMT API (机器翻译) |
+| 网页抓取 | httpx + BeautifulSoup (fulltext_extractor) |
