@@ -127,6 +127,7 @@ async def fetch_api(client: httpx.AsyncClient, source: dict) -> dict:
         "ietf": _fetch_ietf,
         "mitre_attack": _fetch_mitre_attack,
         "github": _fetch_github,
+        "secrss": _fetch_secrss,
     }
 
     handler = platform_handlers.get(platform)
@@ -195,6 +196,14 @@ async def _fetch_github(client: httpx.AsyncClient, source: dict) -> dict:
     resp = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
     resp.raise_for_status()
     return _make_api_result(source, url, resp.text, "github", None)
+
+
+async def _fetch_secrss(client: httpx.AsyncClient, source: dict) -> dict:
+    """安全内参 API: 获取安全资讯（简单 GET 请求）"""
+    url = source["url"]
+    resp = await client.get(url, timeout=30.0, follow_redirects=True)
+    resp.raise_for_status()
+    return _make_api_result(source, url, resp.text, "secrss", None)
 
 
 async def fetch_all() -> list[dict]:
