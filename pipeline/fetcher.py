@@ -97,6 +97,22 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
         }
 
 
+def _make_api_result(source: dict, url: str, text: str, platform: str, error: str | None) -> dict:
+    """构造统一的 API 采集结果字典，减少五个 _fetch_* 函数中的样板代码"""
+    return {
+        "source_name": source["name"],
+        "source_level": source["source_level"],
+        "region": source["region"],
+        "language": source["language"],
+        "url": url,
+        "type": "api",
+        "api_platform": platform,
+        "xml_text": text,
+        "fetch_time": datetime.now().isoformat(),
+        "error": error,
+    }
+
+
 async def fetch_api(client: httpx.AsyncClient, source: dict) -> dict:
     """抓取单个 API 信源，返回 {source_name, url, xml_text, error}"""
     name = source["name"]
@@ -115,34 +131,24 @@ async def fetch_api(client: httpx.AsyncClient, source: dict) -> dict:
 
     handler = platform_handlers.get(platform)
     if not handler:
-        return {
-            "source_name": name,
-            "source_level": source["source_level"],
-            "region": source["region"],
-            "language": source["language"],
-            "url": feed_url,
-            "type": "api",
-            "xml_text": "",
-            "fetch_time": datetime.now().isoformat(),
-            "error": f"未知 api_platform: {platform}",
-        }
+        # 无 api_platform 时回退：对部分旧 API 源（如 安全内参）尝试基本 GET
+        if platform == "" and "<" not in source.get("url", ""):
+            print(f"  [FETCH API] {name} 无 api_platform，回退至基本 GET")
+            try:
+                resp = await client.get(feed_url, timeout=30.0, follow_redirects=True)
+                resp.raise_for_status()
+                return _make_api_result(source, feed_url, resp.text, "", None)
+            except Exception as e2:
+                return _make_api_result(source, feed_url, "", "", str(e2))
+        return _make_api_result(source, feed_url, "", platform,
+                                f"未知 api_platform: {platform}")
 
     try:
         result = await handler(client, source)
         return result
     except Exception as e:
         print(f"  [FETCH API ERROR] {name}: {e}")
-        return {
-            "source_name": name,
-            "source_level": source["source_level"],
-            "region": source["region"],
-            "language": source["language"],
-            "url": feed_url,
-            "type": "api",
-            "xml_text": "",
-            "fetch_time": datetime.now().isoformat(),
-            "error": str(e),
-        }
+        return _make_api_result(source, feed_url, "", platform, str(e))
 
 
 async def _fetch_arxiv(client: httpx.AsyncClient, source: dict) -> dict:
@@ -150,18 +156,7 @@ async def _fetch_arxiv(client: httpx.AsyncClient, source: dict) -> dict:
     url = source["url"]
     resp = await client.get(url, timeout=30.0, follow_redirects=True)
     resp.raise_for_status()
-    return {
-        "source_name": source["name"],
-        "source_level": source["source_level"],
-        "region": source["region"],
-        "language": source["language"],
-        "url": url,
-        "type": "api",
-        "api_platform": "arxiv",
-        "xml_text": resp.text,
-        "fetch_time": datetime.now().isoformat(),
-        "error": None,
-    }
+    return _make_api_result(source, url, resp.text, "arxiv", None)
 
 
 async def _fetch_semantic_scholar(client: httpx.AsyncClient, source: dict) -> dict:
@@ -172,18 +167,7 @@ async def _fetch_semantic_scholar(client: httpx.AsyncClient, source: dict) -> di
         headers["x-api-key"] = SCHOLAR_API_KEY
     resp = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
     resp.raise_for_status()
-    return {
-        "source_name": source["name"],
-        "source_level": source["source_level"],
-        "region": source["region"],
-        "language": source["language"],
-        "url": url,
-        "type": "api",
-        "api_platform": "semantic_scholar",
-        "xml_text": resp.text,
-        "fetch_time": datetime.now().isoformat(),
-        "error": None,
-    }
+    return _make_api_result(source, url, resp.text, "semantic_scholar", None)
 
 
 async def _fetch_ietf(client: httpx.AsyncClient, source: dict) -> dict:
@@ -191,18 +175,7 @@ async def _fetch_ietf(client: httpx.AsyncClient, source: dict) -> dict:
     url = source["url"]
     resp = await client.get(url, timeout=30.0, follow_redirects=True)
     resp.raise_for_status()
-    return {
-        "source_name": source["name"],
-        "source_level": source["source_level"],
-        "region": source["region"],
-        "language": source["language"],
-        "url": url,
-        "type": "api",
-        "api_platform": "ietf",
-        "xml_text": resp.text,
-        "fetch_time": datetime.now().isoformat(),
-        "error": None,
-    }
+    return _make_api_result(source, url, resp.text, "ietf", None)
 
 
 async def _fetch_mitre_attack(client: httpx.AsyncClient, source: dict) -> dict:
@@ -210,18 +183,7 @@ async def _fetch_mitre_attack(client: httpx.AsyncClient, source: dict) -> dict:
     url = source["url"]
     resp = await client.get(url, timeout=60.0, follow_redirects=True)
     resp.raise_for_status()
-    return {
-        "source_name": source["name"],
-        "source_level": source["source_level"],
-        "region": source["region"],
-        "language": source["language"],
-        "url": url,
-        "type": "api",
-        "api_platform": "mitre_attack",
-        "xml_text": resp.text,
-        "fetch_time": datetime.now().isoformat(),
-        "error": None,
-    }
+    return _make_api_result(source, url, resp.text, "mitre_attack", None)
 
 
 async def _fetch_github(client: httpx.AsyncClient, source: dict) -> dict:
@@ -229,21 +191,10 @@ async def _fetch_github(client: httpx.AsyncClient, source: dict) -> dict:
     url = source["url"]
     headers = {"Accept": "application/vnd.github.v3+json"}
     if GITHUB_TOKEN:
-        headers["Authorization"] = f"token {GITHUB_TOKEN}"
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
     resp = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
     resp.raise_for_status()
-    return {
-        "source_name": source["name"],
-        "source_level": source["source_level"],
-        "region": source["region"],
-        "language": source["language"],
-        "url": url,
-        "type": "api",
-        "api_platform": "github",
-        "xml_text": resp.text,
-        "fetch_time": datetime.now().isoformat(),
-        "error": None,
-    }
+    return _make_api_result(source, url, resp.text, "github", None)
 
 
 async def fetch_all() -> list[dict]:
