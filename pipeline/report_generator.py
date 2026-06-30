@@ -88,15 +88,14 @@ def build_json_items(items: list[dict]) -> list[dict]:
             "summary": item.get("summary_zh") if (item.get("summary_zh") and
                        len(item.get("summary_zh", "")) >= len(item.get("summary", "")) * 0.5
                        ) else item.get("summary", ""),
-            # AI 生成的中文摘要（仅对有原文的条目生成）
-            "ai_summary": item.get("ai_summary") or "",
+            # AI 生成的中文摘要（优先使用翻译后的版本）
+            "ai_summary": item.get("ai_summary_zh") or item.get("ai_summary") or "",
             "url": item.get("url", ""),
             "source_name": item.get("source_name", ""),
             "source_level": item.get("source_level", ""),
             "published_date": (item.get("published_date") or "")[:10],
             "content_type": item.get("content_type") or "",
             "source_type": item.get("source_type") or "",
-            "tags": item.get("tags") or [],
             "region": item.get("region") or "",
             "category": item.get("category", "未分类"),
             "merged_sources": item.get("merged_sources") or [],
@@ -235,12 +234,12 @@ def generate_source_alerts() -> list[dict]:
 
 
 def generate_report():
-    # 优先使用增强数据（含 AI 摘要），否则回退到翻译数据，再回退到分类数据
-    if ENHANCED_ITEMS_PATH.exists():
-        with open(ENHANCED_ITEMS_PATH, "r", encoding="utf-8") as f:
-            items = json.load(f)
-    elif TRANSLATED_ITEMS_PATH.exists():
+    # 优先使用翻译后的最终数据（含 AI 摘要+翻译），否则回退到增强数据或分类数据
+    if TRANSLATED_ITEMS_PATH.exists():
         with open(TRANSLATED_ITEMS_PATH, "r", encoding="utf-8") as f:
+            items = json.load(f)
+    elif ENHANCED_ITEMS_PATH.exists():
+        with open(ENHANCED_ITEMS_PATH, "r", encoding="utf-8") as f:
             items = json.load(f)
     else:
         with open(CLASSIFIED_ITEMS_PATH, "r", encoding="utf-8") as f:

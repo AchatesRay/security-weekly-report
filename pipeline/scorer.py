@@ -1,7 +1,7 @@
-"""网络安全内容评分引擎
+"""网络安全内容评分引擎 — 评分 + 分类统一
 
 基于「词级加权 + 位置加成 + 组合校验」的累加评分机制。
-支持三级特征词、歧义消解、负向过滤、领域分类。
+关键词同时携带分类和内容类型元数据，评分与分类共用同一套关键词。
 
 用法:
     from pipeline.scorer import SecurityScorer
@@ -11,7 +11,9 @@
     #     "score": 85,
     #     "level": "high",
     #     "decision": "accepted",
-    #     "categories": ["主分类", "副分类"],
+    #     "category": "③ 漏洞态势与供应链安全",
+    #     "content_type": "漏洞披露",
+    #     "region": "cn",
     #     "matched": {...},
     #     "reason": "..."
     # }
@@ -38,9 +40,8 @@ class SecurityScorer:
 
     def _build_indices(self):
         c = self.config
-        self.strong_kw_list = c["strong"]["keywords"]
-        self.medium_kw_list = c["medium"]["keywords"]
-        self.weak_kw_list = c["weak"]["keywords"]
+
+        # 权重配置
         self.strong_weight = c["strong"]["weight"]
         self.medium_weight = c["medium"]["weight"]
         self.weak_weight = c["weak"]["weight"]
@@ -51,12 +52,66 @@ class SecurityScorer:
         self.tail_min = c.get("tail_min_total_chars", 400)
         self.neg = c.get("negative_filters", {})
         self.ambiguity = c.get("ambiguity_rules", {})
-        self.categories = c.get("categories", {})
 
-        # 构建歧义规则的快速查找：keyword -> rule
+        # 关键词索引：text.lower() -> {text, categories: [], content_types: []}
+        # 保持与旧版兼容：同时保留纯文本列表用于简单匹配
+        self.strong_kw_list = []
+        self.strong_index = {}
+        for entry in c["strong"]["keywords"]:
+            text = entry["text"]
+            self.strong_kw_list.append(text)
+            self.strong_index[text.lower()] = {
+                "text": text,
+                "categories": entry.get("categories", []),
+                "content_types": entry.get("content_types", []),
+            }
+
+        self.medium_kw_list = []
+        self.medium_index = {}
+        for entry in c["medium"]["keywords"]:
+            text = entry["text"]
+            self.medium_kw_list.append(text)
+            self.medium_index[text.lower()] = {
+                "text": text,
+                "categories": entry.get("categories", []),
+                "content_types": entry.get("content_types", []),
+            }
+
+        self.weak_kw_list = []
+        self.weak_index = {}
+        for entry in c["weak"]["keywords"]:
+            text = entry["text"]
+            self.weak_kw_list.append(text)
+            self.weak_index[text.lower()] = {
+                "text": text,
+                "categories": entry.get("categories", []),
+                "content_types": entry.get("content_types", []),
+            }
+
+        # 歧义规则快速查找
         self.ambiguity_lookup = {}
         for kw, rule in self.ambiguity.items():
             self.ambiguity_lookup[kw.lower()] = rule
+
+        # 分类元数据
+        self.categories_meta = c.get("categories", {})
+        # 内容类型元数据
+        self.content_types_meta = c.get("content_types", {})
+
+        # 地域推断关键词
+        self.region_map = {
+            "cn": [
+                "中国", "国家网信办", "工信部", "cncert", "中国信通院",
+                "全国信安标委", "公安三所", "等保", "网信办",
+            ],
+            "us": [
+                "美国", "CISA", "FBI", "NSA", "白宫", "Biden", "Trump",
+                "美国政府", "US government",
+            ],
+            "eu": [
+                "欧盟", "ENISA", "GDPR", "欧洲", "EU", "European Union",
+            ],
+        }
 
     # ── 文本分段 ──
 
@@ -64,7 +119,6 @@ class SecurityScorer:
         """将条目文本分割为 title / lead / body / tail"""
         title = item.get("title") or ""
 
-        # 正文：优先 summary（阶段2可能是全文），回退原摘要
         body_text = item.get("summary") or ""
         orig = item.get("original_summary") or ""
         if orig and orig != body_text and len(orig) > len(body_text):
@@ -73,7 +127,6 @@ class SecurityScorer:
         if not body_text.strip():
             return {"title": title, "lead": "", "body": "", "tail": ""}
 
-        # 定位 lead（首段/导语）和 tail（尾部）
         if len(body_text) > self.tail_min:
             lead = body_text[:self.lead_max]
             tail = body_text[-self.lead_max:]
@@ -85,39 +138,21 @@ class SecurityScorer:
 
         return {"title": title, "lead": lead, "body": body, "tail": tail}
 
-    # ── 关键词匹配 ──
-
-    def _match_keywords(self, text: str, keywords: list[str]) -> list[str]:
-        """返回文本中匹配到的关键词列表（不区分大小写）"""
-        if not text:
-            return []
-        text_lower = text.lower()
-        matched = []
-        for kw in keywords:
-            if not kw.strip():
-                continue
-            if kw.lower() in text_lower:
-                matched.append(kw)
-        return matched
-
     # ── 歧义消解 ──
 
     def _check_ambiguity(self, kw: str, text: str) -> bool:
         """检查关键词是否满足歧义规则，True=通过（可以计分）"""
         rule = self.ambiguity_lookup.get(kw.lower())
         if rule is None:
-            return True  # 无歧义规则，直接通过
+            return True
 
         text_lower = text.lower()
         kw_lower = kw.lower()
 
-        # 排除模式（exclude_patterns）：命中则不计分
         for pattern in rule.get("exclude_patterns", []):
             if pattern.lower() in text_lower:
                 return False
 
-        # 前缀要求（requires_prefix）：前缀出现在文本中任意位置即通过
-        # 注：不要求紧邻关键词，避免 "CVE-2024: ...漏洞" 等间隔场景被误拦
         prefixes = rule.get("requires_prefix", [])
         if prefixes:
             has_valid_prefix = any(p.lower() in text_lower for p in prefixes)
@@ -132,49 +167,80 @@ class SecurityScorer:
         """检查是否命中负向过滤规则"""
         text_lower = text.lower()
 
-        # 行业排除
         for pattern in self.neg.get("industry_exclusions", []):
             if pattern.lower() in text_lower:
                 return True
 
-        # 内容类型排除
         for pattern in self.neg.get("content_type_exclusions", []):
             if pattern.lower() in text_lower:
                 return True
 
         return False
 
-    # ── 领域分类 ──
+    # ── 领域分类（从匹配关键词聚合） ──
 
-    def _classify(self, matched_strong: list, matched_medium: list, text: str) -> list[str]:
-        """基于命中的关键词匹配安全领域分类，返回 [主分类, 副分类, ...]"""
-        text_lower = text.lower()
+    def _classify(self, matched_all: dict) -> str:
+        """基于命中关键词的 categories 聚合出最佳分类"""
         cat_scores = {}
-
-        for cat_name, cat_config in self.categories.items():
-            score = 0
-            for kw in cat_config.get("keywords", []):
-                if kw.lower() in text_lower:
-                    score += 1
-            # 额外加权：命中强特征词的分类优先
-            for kw in matched_strong:
-                if kw.lower() in text_lower:
-                    # 检查该强特征词是否属于此分类
-                    if kw.lower() in [k.lower() for k in cat_config.get("keywords", [])]:
-                        score += 3
-            if score > 0:
-                cat_scores[cat_name] = score
+        for kw_text, info in matched_all.items():
+            for cat in info.get("categories", []):
+                # 强词加权 2×，中/弱词 1×
+                weight = 2 if kw_text.lower() in self.strong_index else 1
+                cat_scores[cat] = cat_scores.get(cat, 0) + weight
 
         if not cat_scores:
-            return ["未分类"]
+            return "未分类"
 
-        # 按得分排序
+        # 按得分排序取最高分
         ranked = sorted(cat_scores.items(), key=lambda x: -x[1])
-        result = [ranked[0][0]]
-        if len(ranked) > 1 and ranked[1][1] >= ranked[0][1] * 0.5:
-            result.append(ranked[1][0])
+        return ranked[0][0]
 
-        return result
+    # ── 内容类型推断 ──
+
+    def _infer_content_type(self, matched_all: dict, text: str) -> str:
+        """从匹配关键词的 content_types 和全文扫描推断内容类型"""
+        # 方法1：从关键词 content_type 聚合
+        ct_scores = {}
+        for kw_text, info in matched_all.items():
+            for ct in info.get("content_types", []):
+                ct_scores[ct] = ct_scores.get(ct, 0) + 1
+
+        # 方法2：全文模式匹配（覆盖更广）
+        text_lower = text.lower()
+        broad_map = {
+            "研究报告/白皮书": ["白皮书", "研究报告", "whitepaper", "white paper",
+                               "研究", "research paper", "技术报告"],
+            "漏洞披露": ["cve-", "漏洞披露", "vulnerability disclosure", "0-day",
+                         "advisory", "安全公告", "漏洞预警"],
+            "攻击活动报告": ["apt", "攻击活动", "threat actor", "threat group",
+                            "入侵", "intrusion", "campaign", "攻击链"],
+            "工具发布": ["工具", "tool", "发布", "release", "开源项目"],
+            "行业分析": ["市场", "market", "报告", "analysis", "趋势",
+                         "gartner", "forrester", "行业"],
+            "法规/标准发布": ["法规", "regulation", "标准", "standard", "法律",
+                             "法案", "合规", "compliance", "nist", "iso"],
+        }
+        broad_scores = {}
+        for ct, patterns in broad_map.items():
+            score = sum(1 for p in patterns if p.lower() in text_lower)
+            if score > 0:
+                broad_scores[ct] = score
+
+        # 合并两种方法，关键词匹配权重更高
+        for ct, score in broad_scores.items():
+            ct_scores[ct] = ct_scores.get(ct, 0) + score
+
+        return max(ct_scores, key=ct_scores.get) if ct_scores else "综合"
+
+    # ── 地域推断 ──
+
+    def _infer_region(self, text: str) -> str:
+        """从全文扫描推断地域"""
+        text_lower = text.lower()
+        for region, kws in self.region_map.items():
+            if any(kw.lower() in text_lower for kw in kws):
+                return region
+        return ""
 
     # ── 综合评分 ──
 
@@ -185,7 +251,9 @@ class SecurityScorer:
             score: 0-100 分
             level: "high" / "medium" / "low" / "non-security"
             decision: "accepted" / "review" / "filtered"
-            categories: [主分类, 副分类]
+            category: 安全领域分类字符串
+            content_type: 内容类型
+            region: 地域
             matched: {strong: [...], medium: [...], weak: [...]}
             reason: 判定理由简述
         """
@@ -194,7 +262,8 @@ class SecurityScorer:
         all_text = " ".join(v for v in segments.values() if v)
 
         # 2. 按段匹配关键词（同一词取最高位置加成）
-        strong_matched = {}   # keyword -> max multiplier
+        # matched: {kw_text -> {"mult": max_mult, "categories": [], "content_types": []}}
+        strong_matched = {}
         medium_matched = {}
         weak_matched = {}
 
@@ -202,28 +271,50 @@ class SecurityScorer:
             if not seg_text:
                 continue
             mult = self.position_mult.get(seg_name, 1.0)
+            seg_lower = seg_text.lower()
 
-            for kw in self.strong_kw_list:
-                if kw.lower() in seg_text.lower():
-                    if kw not in strong_matched or mult > strong_matched[kw]:
-                        strong_matched[kw] = mult
+            for kw_text in self.strong_kw_list:
+                if not kw_text.strip():
+                    continue
+                if kw_text.lower() in seg_lower:
+                    if kw_text not in strong_matched or mult > strong_matched[kw_text]["mult"]:
+                        idx = self.strong_index.get(kw_text.lower(), {})
+                        strong_matched[kw_text] = {
+                            "mult": mult,
+                            "categories": idx.get("categories", []),
+                            "content_types": idx.get("content_types", []),
+                        }
 
-            for kw in self.medium_kw_list:
-                if kw.lower() in seg_text.lower():
-                    if kw not in medium_matched or mult > medium_matched[kw]:
-                        medium_matched[kw] = mult
+            for kw_text in self.medium_kw_list:
+                if not kw_text.strip():
+                    continue
+                if kw_text.lower() in seg_lower:
+                    if kw_text not in medium_matched or mult > medium_matched[kw_text]["mult"]:
+                        idx = self.medium_index.get(kw_text.lower(), {})
+                        medium_matched[kw_text] = {
+                            "mult": mult,
+                            "categories": idx.get("categories", []),
+                            "content_types": idx.get("content_types", []),
+                        }
 
-            for kw in self.weak_kw_list:
-                if kw.lower() in seg_text.lower():
-                    if kw not in weak_matched or mult > weak_matched[kw]:
-                        weak_matched[kw] = mult
+            for kw_text in self.weak_kw_list:
+                if not kw_text.strip():
+                    continue
+                if kw_text.lower() in seg_lower:
+                    if kw_text not in weak_matched or mult > weak_matched[kw_text]["mult"]:
+                        idx = self.weak_index.get(kw_text.lower(), {})
+                        weak_matched[kw_text] = {
+                            "mult": mult,
+                            "categories": idx.get("categories", []),
+                            "content_types": idx.get("content_types", []),
+                        }
 
         # 3. 歧义消解
         def filter_ambiguity(kw_dict: dict) -> dict:
             result = {}
-            for kw, mult in kw_dict.items():
-                if self._check_ambiguity(kw, all_text):
-                    result[kw] = mult
+            for kw_text, info in kw_dict.items():
+                if self._check_ambiguity(kw_text, all_text):
+                    result[kw_text] = info
             return result
 
         strong_matched = filter_ambiguity(strong_matched)
@@ -234,32 +325,28 @@ class SecurityScorer:
         total = 0.0
         has_strong = len(strong_matched) > 0
 
-        # 强特征词：直接计分
-        for kw, mult in strong_matched.items():
-            total += self.strong_weight * mult
+        for kw_text, info in strong_matched.items():
+            total += self.strong_weight * info["mult"]
 
-        # 中特征词：若配置 requires_strong_or_medium 则需有强词搭配
         medium_requires_context = self.config["medium"].get("requires_strong_or_medium", False)
         if not medium_requires_context or has_strong:
-            for kw, mult in medium_matched.items():
-                total += self.medium_weight * mult
+            for kw_text, info in medium_matched.items():
+                total += self.medium_weight * info["mult"]
 
-        # 弱特征词：独立计分（CVE/Exploit/0day 等无需搭配）
-        for kw, mult in weak_matched.items():
-            total += self.weak_weight * mult
+        for kw_text, info in weak_matched.items():
+            total += self.weak_weight * info["mult"]
 
-        # 5. 负向过滤（无强特征词时生效）
+        # 5. 负向过滤
         source = item.get("source") or ""
         has_negative = self._has_negative_filter(all_text, source)
 
-        # 站点级降权
         site_demotion = self.neg.get("site_demotion", {})
         if site_demotion.get("enabled") and source in site_demotion.get("demoted_sites", []):
             total += site_demotion.get("default_penalty", -20)
 
         if has_negative and not has_strong:
-            total = min(total, 29)  # 强制低于 30 分
-            total = max(total, 10)  # 但保留最低分以示记录
+            total = min(total, 29)
+            total = max(total, 10)
 
         # 6. 封顶
         total = max(0, min(100, total))
@@ -279,12 +366,15 @@ class SecurityScorer:
             else:
                 level = "low"
 
-        # 8. 领域分类
-        categories = self._classify(
-            list(strong_matched.keys()),
-            list(medium_matched.keys()),
-            all_text,
-        )
+        # 8. 分类与元数据（合并所有匹配关键词）
+        all_matched = {}
+        all_matched.update(strong_matched)
+        all_matched.update(medium_matched)
+        all_matched.update(weak_matched)
+
+        category = self._classify(all_matched)
+        content_type = self._infer_content_type(all_matched, all_text)
+        region = self._infer_region(all_text)
 
         # 9. 判定理由
         reason_parts = []
@@ -301,7 +391,9 @@ class SecurityScorer:
             "score": score_int,
             "level": level,
             "decision": decision,
-            "categories": categories,
+            "category": category,
+            "content_type": content_type,
+            "region": region,
             "matched": {
                 "strong": sorted(strong_matched.keys()),
                 "medium": sorted(medium_matched.keys()),
@@ -310,7 +402,7 @@ class SecurityScorer:
             "reason": reason,
         }
 
-    # ── 快速预筛（阶段1用，仅用标题+前200字） ──
+    # ── 快速预筛 ──
 
     def quick_score(self, item: dict) -> dict:
         """快速预评分：只用 title + lead，适用于阶段1。
@@ -331,28 +423,27 @@ class SecurityScorer:
             mult = self.position_mult.get(seg_name, 1.0)
             text_lower = seg_text.lower()
 
-            for kw in self.strong_kw_list:
-                if not kw.strip():
+            for kw_text in self.strong_kw_list:
+                if not kw_text.strip():
                     continue
-                if kw.lower() in text_lower:
-                    if self._check_ambiguity(kw, seg_text):
+                if kw_text.lower() in text_lower:
+                    if self._check_ambiguity(kw_text, seg_text):
                         total += self.strong_weight * mult
                         has_strong = True
 
-            # 中特征词：若配置 requires_strong_or_medium 则需有强词搭配
             if has_strong or not self.config["medium"].get("requires_strong_or_medium", False):
-                for kw in self.medium_kw_list:
-                    if not kw.strip():
+                for kw_text in self.medium_kw_list:
+                    if not kw_text.strip():
                         continue
-                    if kw.lower() in text_lower:
-                        if self._check_ambiguity(kw, seg_text):
+                    if kw_text.lower() in text_lower:
+                        if self._check_ambiguity(kw_text, seg_text):
                             total += self.medium_weight * mult
 
-            for kw in self.weak_kw_list:
-                if not kw.strip():
+            for kw_text in self.weak_kw_list:
+                if not kw_text.strip():
                     continue
-                if kw.lower() in text_lower:
-                    if self._check_ambiguity(kw, seg_text):
+                if kw_text.lower() in text_lower:
+                    if self._check_ambiguity(kw_text, seg_text):
                         total += self.weak_weight * mult
 
         all_text = f"{title} {summary}"

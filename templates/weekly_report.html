@@ -135,8 +135,18 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .detail-summary p { margin-bottom:1em; text-align:justify; text-indent:2em; }
 .detail-summary p:last-child { margin-bottom:0; }
 .detail-summary br { display:block; content:''; margin:0; }
+/* 正文中 CVE/技术名词高亮 */
+.detail-summary code {
+  font-family:"Consolas","Courier New",monospace;
+  font-size:0.9em; background:var(--accent-soft);
+  padding:1px 6px; border-radius:3px; color:var(--accent);
+}
+/* 正文中链接 */
+.detail-summary a {
+  color:var(--accent); text-underline-offset:2px;
+}
 .detail-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:32px; padding-top:20px; border-top:1px solid var(--border-light); }
-.detail-tag { padding:4px 12px; border-radius:4px; font-size:12px; background:var(--bg); color:#059669; }
+.detail-tag { padding:4px 12px; border-radius:4px; font-size:12px; background:var(--accent-soft); color:var(--accent); }
 .detail-original-link { display:inline-flex; align-items:center; gap:8px; margin-top:28px; padding:10px 22px; border-radius:var(--radius-md); font-size:14px; font-weight:600; color:#fff; background:var(--accent); text-decoration:none; transition:background .15s,transform .12s,box-shadow .15s; box-shadow:var(--shadow-sm); }
 .detail-original-link:hover { background:#1d4ed8; transform:translateY(-1px); box-shadow:var(--shadow-md); }
 .detail-original-link::after { content:"→"; font-size:15px; }
@@ -354,8 +364,26 @@ function escAttr(s) { return (''+s).replace(/&/g,'&amp;').replace(/"/g,'&quot;')
 function formatSummary(text) {
   if (!text) return '';
   var html = esc(text)
-    .replace(/\n\n+/g, '</p><p>')
-    .replace(/\n/g, '<br>');
+    // CVE 编号高亮
+    .replace(/\bCVE-\d{4}-\d{4,8}\b/gi, '<code>$&</code>')
+    // URL 自动链接化
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$&" target="_blank" rel="noopener">$&</a>');
+
+  // 原文无换行 → 在句末标点处分段
+  if (html.indexOf('\n') === -1) {
+    // 中文句末标点后分段
+    html = html.replace(/([。！？])\s*/g, '$1</p><p>');
+    // 英文: .!? + 空格 + 大写字母/引号 → 分段
+    html = html.replace(/([.!?])\s+(?=[A-Z"'「『])/g, '$1</p><p>');
+    return '<p>' + html + '</p>';
+  }
+
+  // 有换行 → 按换行分段
+  html = html
+    .replace(/\n{2,}/g, '</p><p>')
+    .replace(/([.!?])\s*\n\s*/g, '$1</p><p>')
+    .replace(/([。！？])\s*\n\s*/g, '$1</p><p>')
+    .replace(/\n+/g, ' ');
   return '<p>' + html + '</p>';
 }
 
@@ -455,7 +483,6 @@ function selectItem(idx) {
   var tags = '';
   if (item.content_type) tags += '<span class="detail-tag">' + esc(item.content_type) + '</span>';
   if (item.source_type) tags += '<span class="detail-tag">' + esc(item.source_type) + '</span>';
-  (item.tags || []).forEach(function(t) { tags += '<span class="detail-tag">' + esc(t) + '</span>'; });
   if (item.region) tags += '<span class="detail-tag">' + esc(item.region) + '</span>';
   dTags.innerHTML = tags;
 }

@@ -12,9 +12,18 @@ PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
 
 
 def strip_html(html_text: str) -> str:
-    """去除 HTML 标签，解码 HTML 实体，保留纯文本"""
-    text = re.sub(r'<[^>]+>', '', html_text)
+    """去除 HTML 标签，解码 HTML 实体，保留纯文本（保留段落边界）"""
+    text = html_text
+    # 块级标签 → 换行
+    for tag in ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                'li', 'tr', 'td', 'th', 'blockquote', 'pre', 'dl', 'dt', 'dd']:
+        text = re.sub(rf'</{tag}>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<hr\s*/?>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', '', text)
     text = html.unescape(text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
 

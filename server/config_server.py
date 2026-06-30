@@ -30,7 +30,6 @@ _DATA_DIR = None
 _REPORT_DIR = None
 _SETTINGS_PATH = None
 _SOURCES_PATH = None
-_CLASSIFIER_PATH = None
 _LLM_PATH = None
 _KEYWORDS_PATH = None
 _PIPELINE_LOG_PATH = None
@@ -40,7 +39,7 @@ _pipeline_proc: subprocess.Popen | None = None
 
 def _init_paths(project_dir: str | None = None):
     global _PROJECT_DIR, _CONFIG_DIR, _DATA_DIR, _REPORT_DIR
-    global _SETTINGS_PATH, _SOURCES_PATH, _CLASSIFIER_PATH, _LLM_PATH, _KEYWORDS_PATH
+    global _SETTINGS_PATH, _SOURCES_PATH, _LLM_PATH, _KEYWORDS_PATH
     global _PIPELINE_LOG_PATH, _SCORING_KEYWORDS_PATH
 
     _PROJECT_DIR = Path(project_dir).resolve() if project_dir else SERVER_DIR.parent
@@ -52,7 +51,6 @@ def _init_paths(project_dir: str | None = None):
     _REPORT_DIR = _PROJECT_DIR / "reports"
     _SETTINGS_PATH = _CONFIG_DIR / "settings.json"
     _SOURCES_PATH = _CONFIG_DIR / "source_config.yaml"
-    _CLASSIFIER_PATH = _CONFIG_DIR / "classifier_rules.yaml"
     _LLM_PATH = _CONFIG_DIR / "llm_config.yaml"
     _KEYWORDS_PATH = _CONFIG_DIR / "keywords.json"
     _SCORING_KEYWORDS_PATH = _CONFIG_DIR / "scoring_keywords.json"
@@ -94,6 +92,138 @@ def write_json(path: Path, data: dict) -> bool:
     except Exception as e:
         print(f"[CONFIG] 写入失败 {path.name}: {e}")
         return False
+
+
+def read_json_array(path: Path) -> list:
+    """读取 JSON 数组文件，失败返回空列表"""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _count_by_source(items: list) -> dict:
+    """按 source_name 统计条目数"""
+    counts = {}
+    for item in items:
+        name = item.get("source_name", "")
+        if name:
+            counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def _load_source_config() -> list[dict]:
+    """从 source_config.yaml 读取信源列表"""
+    try:
+        import yaml
+        cfg = yaml.safe_load(_SOURCES_PATH.read_text(encoding="utf-8"))
+        return cfg.get("sources", [])
+    except Exception:
+        return []
+
+
+def _check_raw_has_rss(raw_items: list, source_name: str) -> bool:
+    """检查原始抓取内容是否包含有效的 RSS/XML"""
+    for r in raw_items:
+        if r.get("source_name") == source_name:
+            xml = r.get("xml_text", "") or ""
+            if not xml.strip():
+                return False
+            # 检查是否为 HTML（非 RSS）
+            stripped = xml.strip()
+            if stripped.startswith("<!DOCTYPE html") or stripped.startswith("<html"):
+                return False
+            return True
+    return False
+
+
+def _build_source_trace(
+    name: str, group: str,
+    fetch_status: dict, raw_items: list,
+    parsed_counts: dict, deduped_counts: dict, final_counts: dict,
+) -> dict:
+    """构建单个信源的管道追踪记录"""
+    fs = fetch_status.get(name, {})
+    fetch_ok = fs.get("status") == "success"
+    fetch_error = fs.get("error") or ""
+    parsed = parsed_counts.get(name, 0)
+    deduped = deduped_counts.get(name, 0)
+    final = final_counts.get(name, 0)
+
+    chain_parts = []
+    reason = ""
+    status = "ok"
+
+    if not fetch_ok:
+        # 抓取失败
+        if "404" in fetch_error:
+            reason = "URL 404，信源地址已失效，需要更新"
+            chain_parts.append("404 抓取失败")
+        elif "403" in fetch_error:
+            reason = "403 被拒绝访问，信源可能开启了反爬"
+            chain_parts.append("403 抓取失败")
+        elif "500" in fetch_error or "503" in fetch_error:
+            reason = f"信源服务器错误（{fetch_error[:30]}）"
+            chain_parts.append(f"服务器错误")
+        elif "SSL" in fetch_error or "certificate" in fetch_error.lower():
+            reason = "SSL 证书验证失败"
+            chain_parts.append("SSL 证书错误")
+        else:
+            reason = fetch_error[:80] if fetch_error else "抓取失败"
+            chain_parts.append("抓取失败")
+        status = "failed"
+    elif parsed == 0:
+        # 抓取成功但解析出 0 条
+        has_rss = _check_raw_has_rss(raw_items, name)
+        if not has_rss:
+            reason = "返回 HTML 而非 RSS/XML，feedparser 无法解析"
+            chain_parts.append("0 条解析")
+        else:
+            reason = "RSS 内容存在但未提取到有效条目（可能是空 feed 或格式异常）"
+            chain_parts.append("0 条解析")
+        status = "empty"
+    else:
+        chain_parts.append(f"{parsed} 条解析")
+
+        if deduped == 0:
+            reason = "全部文章超过7天有效期，被过期过滤策略丢弃"
+            chain_parts.append(f"0 条进去重")
+            status = "filtered"
+        else:
+            chain_parts.append(f"{deduped} 条进去重")
+
+            if final == 0:
+                # 查 deduped 和 parsed 的关系，判断是在 stage1 还是 stage2 丢的
+                reason = "全部文章关键词评分不足30分，经两阶段评分过滤后丢弃"
+                chain_parts.append("0 条过评分")
+                status = "filtered"
+            else:
+                dropped = deduped - final
+                if dropped > 0:
+                    ratio = dropped / deduped * 100
+                    if ratio > 70:
+                        reason = f"大部分文章关键词评分偏低，经两阶段过滤仅保留 {final}/{deduped} 条"
+                    elif ratio > 30:
+                        reason = f"部分文章关键词匹配度不足，经两阶段过滤保留 {final}/{deduped} 条"
+                    else:
+                        reason = f"少量文章被评分过滤，保留 {final}/{deduped} 条"
+                    status = "filtered"
+                else:
+                    reason = "正常"
+                    status = "ok"
+                chain_parts.append(f"{final} 条过评分")
+
+    return {
+        "name": name,
+        "group": group,
+        "chain": " → ".join(chain_parts),
+        "reason": reason,
+        "status": status,
+        "parsed": parsed,
+        "deduped": deduped,
+        "final": final,
+    }
 
 
 def send_json(handler, data, status=200):
@@ -177,8 +307,6 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         # ── API routes ──
         if path == "/api/config/sources":
             return self._get_sources()
-        elif path == "/api/config/classifier":
-            return self._get_classifier()
         elif path == "/api/config/settings":
             return self._get_settings()
         elif path == "/api/config/llm":
@@ -189,6 +317,8 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
             return self._get_category_order()
         elif path == "/api/config/source_status":
             return self._get_source_status()
+        elif path == "/api/config/pipeline_trace":
+            return self._get_pipeline_trace()
         elif path == "/api/config/security_keywords":
             return self._get_security_keywords()
         elif path == "/api/config/scoring_keywords":
@@ -205,8 +335,6 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/config/sources":
             return self._put_sources()
-        elif path == "/api/config/classifier":
-            return self._put_classifier()
         elif path == "/api/config/settings":
             return self._put_settings()
         elif path == "/api/config/llm":
@@ -239,16 +367,6 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         body = read_body(self)
         data = json.loads(body)
         ok = write_yaml(_SOURCES_PATH, data.get("yaml", ""))
-        send_json(self, {"ok": ok})
-
-    def _get_classifier(self):
-        text = read_yaml(_CLASSIFIER_PATH)
-        send_json(self, {"ok": True, "yaml": text})
-
-    def _put_classifier(self):
-        body = read_body(self)
-        data = json.loads(body)
-        ok = write_yaml(_CLASSIFIER_PATH, data.get("yaml", ""))
         send_json(self, {"ok": ok})
 
     def _get_settings(self):
@@ -288,6 +406,51 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         status_path = _DATA_DIR / "fetch_status.json"
         status = read_json(status_path)
         send_json(self, {"ok": True, "status": status})
+
+    def _get_pipeline_trace(self):
+        """追踪每个信源在管道各阶段的数据流"""
+        # 读取各阶段数据（如果存在）
+        fetch_status = read_json(_DATA_DIR / "fetch_status.json")
+        raw_items = read_json_array(_DATA_DIR / "raw_items.json")
+        parsed_items = read_json_array(_DATA_DIR / "parsed_items.json")
+        deduped_items = read_json_array(_DATA_DIR / "deduped_items.json")
+        enhanced_items = read_json_array(_DATA_DIR / "enhanced_items.json")
+        source_config = _load_source_config()
+
+        # 按信源名称聚合各阶段计数
+        parsed_counts = _count_by_source(parsed_items)
+        deduped_counts = _count_by_source(deduped_items)
+        final_counts = _count_by_source(enhanced_items)
+
+        # 构建每个信源的追踪记录
+        result = []
+        seen = set()
+
+        # 遍历信源配置中所有启用的信源（保持配置中的顺序）
+        for src in source_config:
+            name = src["name"]
+            group = src.get("group", "其他")
+            seen.add(name)
+
+            trace = _build_source_trace(
+                name, group, fetch_status, raw_items,
+                parsed_counts, deduped_counts, final_counts,
+            )
+            result.append(trace)
+
+        # 补充不在配置中但出现在数据中的信源
+        all_data_names = set(parsed_counts) | set(deduped_counts) | set(final_counts)
+        for name in all_data_names:
+            if name not in seen:
+                trace = _build_source_trace(
+                    name, "其他", fetch_status, raw_items,
+                    parsed_counts, deduped_counts, final_counts,
+                )
+                result.append(trace)
+
+        send_json(self, {"ok": True, "sources": result})
+
+
 
     def _get_security_keywords(self):
         """读取关键字列表"""

@@ -2,10 +2,10 @@
 LLM 摘要模块 — 对获取到原文的内容生成中文摘要
 
 支持两种模式:
-  1. 抽取式摘要（默认） — 基于句子评分，无需外部 API
+  1. 抽取式摘要（默认） — TextRank 图排序，无需外部 API
   2. LLM 摘要（配置启用） — 调用外部 LLM API
 
-管道位置: 翻译步骤之后，报告生成之前
+管道位置: 评分过滤阶段2之后，翻译步骤之前
 """
 
 import json
@@ -15,26 +15,35 @@ from pathlib import Path
 
 DATA_DIR = Path("data")
 CONFIG_PATH = Path("config/llm_config.yaml")
-TRANSLATED_ITEMS_PATH = DATA_DIR / "translated_items.json"
+PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
 ENHANCED_ITEMS_PATH = DATA_DIR / "enhanced_items.json"
 
-# 安全领域关键词（中英文）
-SECURITY_KEYWORDS = {
-    "攻击", "漏洞", "威胁", "安全", "恶意", "入侵", "泄露", "数据", "网络",
-    "钓鱼", "勒索", "病毒", "木马", "后门", "0day", "补丁", "加密", "权限",
-    "attack", "vulnerability", "threat", "security", "malicious", "breach",
-    "exploit", "malware", "ransomware", "phishing", "backdoor", "patch",
-    "encryption", "privilege", "authentication", "zero-day", "supply chain",
-}
+import jieba
+import numpy as np
 
-# 提示性词语（包含这些词的句子更可能是关键句）
-CUE_WORDS = {
-    "发现", "报告", "披露", "警告", "分析", "研究", "表明", "证实",
-    "发现", "影响", "涉及", "导致", "建议", "紧急", "严重", "高危",
-    "discover", "report", "disclose", "warn", "analyze", "research",
-    "reveal", "affect", "impact", "critical", "urgent", "important",
-    "according", "researcher", "found", "identified", "observed",
-}
+# 中文停用词表（基础）
+_STOP_WORDS: set[str] = set()
+
+
+def _load_stop_words():
+    if not _STOP_WORDS:
+        _STOP_WORDS.update({
+            "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都",
+            "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你",
+            "会", "着", "没有", "看", "好", "自己", "这", "他", "她", "它",
+            "们", "那", "里", "为", "与", "及", "等", "或", "但", "而",
+            "从", "被", "把", "对", "以", "之", "所", "其", "中", "将",
+            "并", "个", "两", "多", "少", "只", "已", "还", "又", "再",
+            "能", "可", "该", "此", "每", "某", "各", "几", "哪", "何",
+            "让", "使", "用", "做", "成", "如", "比", "向", "同", "跟",
+            "a", "an", "the", "is", "are", "was", "were", "be", "been",
+            "being", "have", "has", "had", "do", "does", "did", "will",
+            "would", "can", "could", "may", "might", "shall", "should",
+            "to", "of", "in", "for", "on", "with", "at", "by", "from",
+            "as", "into", "through", "during", "before", "after", "about",
+            "this", "that", "these", "those", "it", "its", "they", "them",
+            "their", "we", "our", "you", "your", "he", "she", "his", "her",
+        })
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -57,59 +66,18 @@ def _split_sentences(text: str) -> list[str]:
     return sentences
 
 
-def _score_sentence(sent: str, position: float, total: int) -> float:
-    """对单个句子进行评分"""
-    score = 0.0
-    lower = sent.lower()
-
-    # 1. 位置分：前 30% 的句子有加分
-    if position < 0.3:
-        score += 2.0 * (1 - position / 0.3)
-    elif position < 0.6:
-        score += 0.5
-
-    # 2. 安全关键词分
-    kw_count = sum(1 for kw in SECURITY_KEYWORDS if kw.lower() in lower)
-    score += kw_count * 1.5
-
-    # 3. 提示词分
-    cue_count = sum(1 for cw in CUE_WORDS if cw.lower() in lower)
-    score += cue_count * 2.0
-
-    # 4. 长度分：偏好 30-150 字符的句子
-    length = len(sent)
-    if 30 <= length <= 150:
-        score += 1.5
-    elif 150 < length <= 300:
-        score += 0.8
-    elif length < 20:
-        score -= 1.0
-
-    # 5. 数字/统计数据加分（含具体数字的句子通常更有信息量）
-    if re.search(r"\d+", sent):
-        score += 0.5
-    if re.search(r"[%％]|percent|million|billion|thousand", lower):
-        score += 1.0
-
-    return score
-
-
 def _is_meaningful(sent: str) -> bool:
     """过滤掉无意义的句子"""
     lower = sent.strip().lower()
-    # 跳过过短的
     if len(lower) < 15:
         return False
-    # 跳过导航/版权/登录类文本
     skip_patterns = [
         r"^(copyright|©|all rights reserved|登录|注册|订阅|点击)",
         r"(subscribe|newsletter|sign up|follow us|@)",
         r"^(home|about|contact|privacy)",
-        # 作者简介/广告
         r"^(is a|is an|是一位|是一名|are a|is the)",
         r"(skip this ad|you can skip|广告)",
         r"(linkedin\.com|twitter\.com|facebook\.com)",
-        # 纯时间/日期行
         r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}",
     ]
     for p in skip_patterns:
@@ -118,10 +86,64 @@ def _is_meaningful(sent: str) -> bool:
     return True
 
 
+def _tokenize(text: str) -> set[str]:
+    """结巴分词，返回去停用词的词集（长度≥2的有效词）"""
+    _load_stop_words()
+    words = jieba.lcut(text)
+    return {w.lower().strip() for w in words
+            if w.strip() and w.lower().strip() not in _STOP_WORDS and len(w.strip()) > 1}
+
+
+def _sentence_similarity(words_i: set[str], words_j: set[str]) -> float:
+    """Jaccard 相似度"""
+    if not words_i or not words_j:
+        return 0
+    union = len(words_i | words_j)
+    return len(words_i & words_j) / union if union else 0
+
+
+def _textrank(sentences: list[str], damping: float = 0.85,
+              max_iter: int = 200, tol: float = 1e-4) -> list[float]:
+    """TextRank 图排序，返回每个句子的 PageRank 分数"""
+    n = len(sentences)
+    if n == 0:
+        return []
+    if n == 1:
+        return [1.0]
+
+    # 预处理：所有句子分词
+    tokenized = [_tokenize(s) for s in sentences]
+
+    # 构建相似度矩阵
+    sim = np.zeros((n, n))
+    for i in range(n):
+        for j in range(i + 1, n):
+            s = _sentence_similarity(tokenized[i], tokenized[j])
+            sim[i, j] = s
+            sim[j, i] = s
+
+    # 列归一化
+    col_sums = sim.sum(axis=0)
+    for j in range(n):
+        if col_sums[j] > 0:
+            sim[:, j] /= col_sums[j]
+        else:
+            sim[:, j] = 1.0 / n
+
+    # PageRank 迭代
+    pr = np.ones(n) / n
+    for _ in range(max_iter):
+        prev = pr.copy()
+        pr = (1 - damping) / n + damping * sim.dot(pr)
+        if np.linalg.norm(pr - prev, 1) < tol:
+            break
+
+    return pr.tolist()
+
+
 def generate_extractive_summary(text: str, max_sentences: int = 5) -> str:
     """
-    基于句子评分的抽取式摘要
-    返回摘要文本（中文）
+    TextRank 抽取式摘要
     """
     if not text or len(text.strip()) < 100:
         return ""
@@ -131,19 +153,17 @@ def generate_extractive_summary(text: str, max_sentences: int = 5) -> str:
     if not sentences:
         return ""
 
-    total = len(sentences)
-    scored = []
-    for i, sent in enumerate(sentences):
-        pos = i / total if total > 1 else 0
-        score = _score_sentence(sent, pos, total)
-        scored.append((score, i, sent))
+    # 句子太少时直接截取前 500 字
+    if len(sentences) <= 3:
+        return text[:500].strip()
 
-    # 按分数降序排列，取 top N
-    scored.sort(key=lambda x: -x[0])
-    top_indices = sorted(item[1] for item in scored[:max_sentences])
+    scores = _textrank(sentences)
+
+    # 取 top-k，按原文顺序重排
+    n = min(max_sentences, len(sentences))
+    top_indices = sorted(np.argsort(scores)[-n:])
 
     result = "".join(sentences[i] for i in top_indices)
-    # 限制最大长度
     if len(result) > 500:
         result = result[:497] + "..."
 
@@ -160,7 +180,7 @@ def process(items: list[dict], config: dict) -> list[dict]:
 
     策略:
       - RSS 已有摘要 → 直接使用（英文则翻译为中文）
-      - RSS 摘要过短，已替换为全文 → 从全文抽取关键句（英文则翻译）
+      - RSS 摘要过短，已由 fulltext_extractor 抓取到全文 → 从全文抽取关键句（英文则翻译）
       - 无内容 → 不生成摘要
     """
     enabled = config.get("enabled", False)
@@ -259,11 +279,11 @@ def run():
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    if not TRANSLATED_ITEMS_PATH.exists():
-        print("[LLM] 无翻译数据，跳过 LLM 摘要生成")
+    if not PARSED_ITEMS_PATH.exists():
+        print("[LLM] 无评分数据，跳过 LLM 摘要生成")
         return
 
-    with open(TRANSLATED_ITEMS_PATH, "r", encoding="utf-8") as f:
+    with open(PARSED_ITEMS_PATH, "r", encoding="utf-8") as f:
         items = json.load(f)
 
     result = process(items, config)
