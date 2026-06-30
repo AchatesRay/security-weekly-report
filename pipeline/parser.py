@@ -111,8 +111,10 @@ def parse_api_secrss(source_info: dict, raw_text: str) -> list[dict]:
 
 def parse_api_arxiv(source_info: dict, raw_text: str) -> list[dict]:
     """解析 arXiv API 返回的 Atom XML 为统一格式"""
-    import feedparser
-    feed = feedparser.parse(raw_text)
+    try:
+        feed = feedparser.parse(raw_text)
+    except Exception:
+        return []
     items = []
     for entry in feed.entries:
         title = entry.get("title", "").strip()
@@ -132,7 +134,7 @@ def parse_api_arxiv(source_info: dict, raw_text: str) -> list[dict]:
             "source_level": source_info["source_level"],
             "region": source_info["region"],
             "language": source_info["language"],
-            "source_type": "API",
+            "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
             "authors": authors,
             "categories": categories,
             "parse_time": datetime.now().isoformat(),
@@ -153,7 +155,7 @@ def parse_api_semantic_scholar(source_info: dict, raw_text: str) -> list[dict]:
             continue
         link = paper.get("url", "")
         summary = paper.get("abstract", "") or paper.get("title", "")
-        published = paper.get("publicationDate", "") or ""
+        published = paper.get("publicationDate", "")
         authors = [a.get("name", "") for a in paper.get("authors", []) if a.get("name")]
         items.append({
             "title": title,
@@ -164,7 +166,7 @@ def parse_api_semantic_scholar(source_info: dict, raw_text: str) -> list[dict]:
             "source_level": source_info["source_level"],
             "region": source_info["region"],
             "language": source_info["language"],
-            "source_type": "API",
+            "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
             "authors": authors,
             "categories": [],
             "parse_time": datetime.now().isoformat(),
@@ -201,7 +203,7 @@ def parse_api_ietf(source_info: dict, raw_text: str) -> list[dict]:
             "source_level": source_info["source_level"],
             "region": source_info["region"],
             "language": source_info["language"],
-            "source_type": "API",
+            "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
             "authors": [],
             "categories": ["IETF", "标准草案"],
             "parse_time": datetime.now().isoformat(),
@@ -242,7 +244,7 @@ def parse_api_mitre_attack(source_info: dict, raw_text: str) -> list[dict]:
             "source_level": source_info["source_level"],
             "region": source_info["region"],
             "language": source_info["language"],
-            "source_type": "API",
+            "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
             "authors": [],
             "categories": [obj.get("type", ""), "MITRE ATT&CK"],
             "parse_time": datetime.now().isoformat(),
@@ -266,7 +268,7 @@ def parse_api_github(source_info: dict, raw_text: str) -> list[dict]:
         stars = repo.get("stargazers_count", 0)
         language = repo.get("language") or "未知"
         summary = description[:500] if description else full_name
-        summary += f" | ⭐{stars} | 语言: {language}"
+        summary += f" | stars: {stars} | 语言: {language}"
         if topics:
             summary += f" | 标签: {', '.join(topics[:5])}"
         items.append({
@@ -278,7 +280,7 @@ def parse_api_github(source_info: dict, raw_text: str) -> list[dict]:
             "source_level": source_info["source_level"],
             "region": source_info["region"],
             "language": source_info["language"],
-            "source_type": "API",
+            "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
             "authors": [repo.get("owner", {}).get("login", "")] if repo.get("owner") else [],
             "categories": topics[:5],
             "parse_time": datetime.now().isoformat(),
