@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime
 import asyncio
 import random
+import os
 
 CONFIG_PATH = Path("config/source_config.yaml")
 DATA_DIR = Path("data")
@@ -23,6 +24,11 @@ RSS_READER_UAS = [
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "NetNewsWire/6.1 (Mac; Intel Mac OS X 14.4)",
 ]
+
+
+# API Keys（从环境变量读取）
+SCHOLAR_API_KEY = os.environ.get("SCHOLAR_API_KEY", "")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 
 async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
@@ -91,6 +97,155 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
         }
 
 
+async def fetch_api(client: httpx.AsyncClient, source: dict) -> dict:
+    """抓取单个 API 信源，返回 {source_name, url, xml_text, error}"""
+    name = source["name"]
+    platform = source.get("api_platform", "")
+    feed_url = source["url"]
+    print(f"  [FETCH API] {name} <- {feed_url}")
+
+    # 按 api_platform 分发
+    platform_handlers = {
+        "arxiv": _fetch_arxiv,
+        "semantic_scholar": _fetch_semantic_scholar,
+        "ietf": _fetch_ietf,
+        "mitre_attack": _fetch_mitre_attack,
+        "github": _fetch_github,
+    }
+
+    handler = platform_handlers.get(platform)
+    if not handler:
+        return {
+            "source_name": name,
+            "source_level": source["source_level"],
+            "region": source["region"],
+            "language": source["language"],
+            "url": feed_url,
+            "type": "api",
+            "xml_text": "",
+            "fetch_time": datetime.now().isoformat(),
+            "error": f"未知 api_platform: {platform}",
+        }
+
+    try:
+        result = await handler(client, source)
+        return result
+    except Exception as e:
+        print(f"  [FETCH API ERROR] {name}: {e}")
+        return {
+            "source_name": name,
+            "source_level": source["source_level"],
+            "region": source["region"],
+            "language": source["language"],
+            "url": feed_url,
+            "type": "api",
+            "xml_text": "",
+            "fetch_time": datetime.now().isoformat(),
+            "error": str(e),
+        }
+
+
+async def _fetch_arxiv(client: httpx.AsyncClient, source: dict) -> dict:
+    """arXiv API: 按分类查询最新论文"""
+    url = source["url"]
+    resp = await client.get(url, timeout=30.0, follow_redirects=True)
+    resp.raise_for_status()
+    return {
+        "source_name": source["name"],
+        "source_level": source["source_level"],
+        "region": source["region"],
+        "language": source["language"],
+        "url": url,
+        "type": "api",
+        "api_platform": "arxiv",
+        "xml_text": resp.text,
+        "fetch_time": datetime.now().isoformat(),
+        "error": None,
+    }
+
+
+async def _fetch_semantic_scholar(client: httpx.AsyncClient, source: dict) -> dict:
+    """Semantic Scholar API: 搜索安全相关论文"""
+    url = source["url"]
+    headers = {}
+    if SCHOLAR_API_KEY:
+        headers["x-api-key"] = SCHOLAR_API_KEY
+    resp = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
+    resp.raise_for_status()
+    return {
+        "source_name": source["name"],
+        "source_level": source["source_level"],
+        "region": source["region"],
+        "language": source["language"],
+        "url": url,
+        "type": "api",
+        "api_platform": "semantic_scholar",
+        "xml_text": resp.text,
+        "fetch_time": datetime.now().isoformat(),
+        "error": None,
+    }
+
+
+async def _fetch_ietf(client: httpx.AsyncClient, source: dict) -> dict:
+    """IETF Datatracker API: 获取最新 drafts"""
+    url = source["url"]
+    resp = await client.get(url, timeout=30.0, follow_redirects=True)
+    resp.raise_for_status()
+    return {
+        "source_name": source["name"],
+        "source_level": source["source_level"],
+        "region": source["region"],
+        "language": source["language"],
+        "url": url,
+        "type": "api",
+        "api_platform": "ietf",
+        "xml_text": resp.text,
+        "fetch_time": datetime.now().isoformat(),
+        "error": None,
+    }
+
+
+async def _fetch_mitre_attack(client: httpx.AsyncClient, source: dict) -> dict:
+    """MITRE ATT&CK STIX: 从 GitHub 获取完整 ATT&CK 数据"""
+    url = source["url"]
+    resp = await client.get(url, timeout=60.0, follow_redirects=True)
+    resp.raise_for_status()
+    return {
+        "source_name": source["name"],
+        "source_level": source["source_level"],
+        "region": source["region"],
+        "language": source["language"],
+        "url": url,
+        "type": "api",
+        "api_platform": "mitre_attack",
+        "xml_text": resp.text,
+        "fetch_time": datetime.now().isoformat(),
+        "error": None,
+    }
+
+
+async def _fetch_github(client: httpx.AsyncClient, source: dict) -> dict:
+    """GitHub API: 搜索安全相关热门仓库"""
+    url = source["url"]
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"token {GITHUB_TOKEN}"
+    resp = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
+    resp.raise_for_status()
+    return {
+        "source_name": source["name"],
+        "source_level": source["source_level"],
+        "region": source["region"],
+        "language": source["language"],
+        "url": url,
+        "type": "api",
+        "api_platform": "github",
+        "xml_text": resp.text,
+        "fetch_time": datetime.now().isoformat(),
+        "error": None,
+    }
+
+
 async def fetch_all() -> list[dict]:
     """抓取所有启用的信源"""
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -104,7 +259,12 @@ async def fetch_all() -> list[dict]:
         "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
     }
     async with httpx.AsyncClient(headers=headers) as client:
-        tasks = [fetch_feed(client, src) for src in sources]
+        tasks = []
+        for src in sources:
+            if src.get("type") == "api":
+                tasks.append(fetch_api(client, src))
+            else:
+                tasks.append(fetch_feed(client, src))
         results = await asyncio.gather(*tasks, return_exceptions=True)
         results = [r if isinstance(r, dict) else {
             "source_name": "",
