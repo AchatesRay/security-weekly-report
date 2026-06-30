@@ -731,6 +731,7 @@ sources:
   group: 国内信源
   url: https://www.secrss.com/api/articles
   type: api
+  api_platform: secrss
   language: zh
   source_level: A
   region: cn
@@ -855,11 +856,56 @@ sources:
   source_level: A
   region: global
   enabled: true
-- name: 新信源ce
-  group: 安全媒体
-  url: https://www
-  type: rss
+
+# ════════════════════════════════════════════
+# API 采集层 — 技术趋势追踪（2026-06-30 新增）
+# ════════════════════════════════════════════
+- name: arXiv cs.CR
+  group: 学术论文
+  url: https://export.arxiv.org/api/query?search_query=cat:cs.CR&sortBy=submittedDate&sortOrder=descending&max_results=50
+  type: api
+  api_platform: arxiv
   language: en
-  source_level: B
+  source_level: S
+  region: global
+  enabled: true
+
+- name: Semantic Scholar
+  group: 学术论文
+  url: https://api.semanticscholar.org/graph/v1/paper/search?query=cybersecurity&limit=50&fields=title,url,abstract,publicationDate,authors
+  type: api
+  api_platform: semantic_scholar
+  language: en
+  source_level: S
+  region: global
+  enabled: true
+
+- name: IETF Datatracker
+  group: 标准框架
+  url: https://datatracker.ietf.org/api/v1/doc/document/?document_group=draft-ietf&limit=50&order_by=-time&format=json
+  type: api
+  api_platform: ietf
+  language: en
+  source_level: S
+  region: global
+  enabled: true
+
+- name: MITRE ATT&CK
+  group: 标准框架
+  url: https://raw.githubusercontent.com/mitre/cti/refs/heads/master/enterprise-attack/enterprise-attack.json
+  type: api
+  api_platform: mitre_attack
+  language: en
+  source_level: S
+  region: global
+  enabled: true
+
+- name: GitHub Security Trending
+  group: 开发者社区
+  url: https://api.github.com/search/repositories?q=security+topic:security&sort=stars&order=desc&per_page=30
+  type: api
+  api_platform: github
+  language: en
+  source_level: A
   region: global
   enabled: true

@@ -70,6 +70,8 @@ data/                     中间数据（gitignored）
 |------|------|
 | `TMT_SECRET_ID` | 腾讯云翻译 API 密钥 ID |
 | `TMT_SECRET_KEY` | 腾讯云翻译 API 密钥 Key |
+| `SCHOLAR_API_KEY` | Semantic Scholar API 密钥（可选，无 key 有频率限制） |
+| `GITHUB_TOKEN` | GitHub Personal Access Token（可选，无 token 有频率限制） |
 
 ## 深入文档
 
