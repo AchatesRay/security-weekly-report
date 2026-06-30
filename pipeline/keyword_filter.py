@@ -2,7 +2,7 @@
 
 基于 SecurityScorer 的加权评分机制：
 
-阶段 1（解析后）：快速预筛，用标题+前200字评分，<30 分提前丢弃
+阶段 1（去重后）：快速预筛，用标题+前200字评分，<30 分提前丢弃
 阶段 2（全文提取后）：完整评分 + 领域分类 + 阈值判定
 
 关键字配置存储在 config/scoring_keywords.json 中。
@@ -15,6 +15,7 @@ from .scorer import SecurityScorer
 
 DATA_DIR = Path("data")
 PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
+DEDUPED_ITEMS_PATH = DATA_DIR / "deduped_items.json"
 
 # 保留旧的 load_keywords/save_keywords 接口供 config_server 调用
 from .scorer import SCORING_CONFIG_PATH
@@ -29,23 +30,36 @@ DEFAULT_KEYWORDS = sorted([
 
 
 def load_keywords() -> list[str]:
-    """从 scoring_keywords.json 读取强特征词作为关键字列表（兼容旧版 API）"""
+    """从 scoring_keywords.json 读取强特征词文本列表（兼容旧版 API）"""
     try:
         with open(SCORING_CONFIG_PATH, encoding="utf-8") as f:
             data = json.load(f)
-        return data.get("strong", {}).get("keywords", [])
+        raw = data.get("strong", {}).get("keywords", [])
+        # 兼容新旧格式：新格式是 [{text: ...}, ...]，旧格式是 [str, ...]
+        return [kw["text"] if isinstance(kw, dict) else kw for kw in raw]
     except Exception:
         return []
 
 
 def save_keywords(keywords: list[str]) -> bool:
-    """保存关键字列表到 scoring_keywords.json 的 strong 字段（兼容旧版 API）"""
+    """保存关键字文本列表到 scoring_keywords.json 的 strong 字段（兼容旧版 API）"""
     try:
         with open(SCORING_CONFIG_PATH, encoding="utf-8") as f:
             data = json.load(f)
-        data.setdefault("strong", {})["keywords"] = sorted(set(
-            kw.strip() for kw in keywords if kw.strip()
-        ))
+        # 保留现有元数据（categories/content_types），只更新 text
+        existing = {kw["text"].lower(): kw for kw in data["strong"]["keywords"] if isinstance(kw, dict)}
+        new_kws = []
+        for kw in keywords:
+            t = kw.strip()
+            if not t:
+                continue
+            if t.lower() in existing:
+                new_kws.append(existing[t.lower()])
+            else:
+                new_kws.append({"text": t})
+        # 按 text 排序
+        new_kws.sort(key=lambda x: x["text"])
+        data["strong"]["keywords"] = new_kws
         with open(SCORING_CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         return True
@@ -65,15 +79,16 @@ def init_default_keywords():
 
 
 def run_stage1():
-    """阶段1过滤：快速预筛，<30 分提前丢弃"""
+    """阶段1过滤：快速预筛，<30 分提前丢弃（读取去重后的数据）"""
     init_default_keywords()
     scorer = SecurityScorer()
 
-    if not PARSED_ITEMS_PATH.exists():
-        print(f"[KEYWORD] 阶段1跳过: {PARSED_ITEMS_PATH} 不存在")
+    source = DEDUPED_ITEMS_PATH if DEDUPED_ITEMS_PATH.exists() else PARSED_ITEMS_PATH
+    if not source.exists():
+        print(f"[KEYWORD] 阶段1跳过: {source} 不存在")
         return
 
-    with open(PARSED_ITEMS_PATH, "r", encoding="utf-8") as f:
+    with open(source, "r", encoding="utf-8") as f:
         items = json.load(f)
 
     total_before = len(items)
@@ -119,7 +134,9 @@ def run_stage2():
         item["confidence_score"] = result["score"]
         item["confidence_level"] = result["level"]
         item["filter_decision"] = result["decision"]
-        item["categories"] = result["categories"]
+        item["category"] = result["category"]
+        item["content_type"] = result["content_type"]
+        item["region"] = result["region"]
         item["scoring_reason"] = result["reason"]
         item["scoring_matched"] = result["matched"]
 

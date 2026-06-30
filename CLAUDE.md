@@ -22,10 +22,10 @@ pipeline/                 9 步数据处理管道
   parser.py               解析为统一数据结构
   keyword_filter.py       两阶段评分过滤（替代旧 classifier.py）
   scorer.py               评分逻辑（被 keyword_filter 调用）
-  fulltext_extractor.py   短摘要文章全文抓取
+  fulltext_extractor.py   短摘要文章原文抓取（右栏正文）
   deduplicator.py         URL 去重 + 标题模糊去重
   translator.py           英文→中文翻译（腾讯云 TMT API）
-  llm_processor.py        AI 摘要（预留空壳）
+  llm_processor.py        摘要翻译与 LLM 增强（预留）
   report_generator.py     Jinja2 HTML 报告生成
   scraper.py              静态页面抓取辅助工具
 config/                   配置文件
@@ -49,12 +49,12 @@ data/                     中间数据（gitignored）
 |---|------|------|
 | 1 | fetcher | 并发抓取所有启用的 RSS/API/Scraper 信源 |
 | 2 | parser | XML 解析为统一结构体 |
-| 3 | keyword_filter (stage1) | 标题+前200字快速评分，<30 分提前丢弃 |
-| 4 | fulltext_extractor | 短摘要文章全文抓取 |
-| 5 | keyword_filter (stage2) | 完整评分+分类+内容类型+地域推断（≥80收录，50-79待复核） |
-| 6 | deduplicator | URL 精确去重 + 标题模糊去重 |
-| 7 | translator | 英文→中文翻译（腾讯云 TMT） |
-| 8 | llm_processor | AI 摘要生成（预留，默认关闭） |
+| 3 | deduplicator | URL 精确去重 + 标题模糊去重 |
+| 4 | keyword_filter (stage1) | 标题+前200字快速评分，<30 分提前丢弃 |
+| 5 | fulltext_extractor | 短摘要文章抓取原文（供右栏正文显示，上限20000字） |
+| 6 | keyword_filter (stage2) | 完整评分+分类+内容类型+地域推断（≥80收录，50-79待复核） |
+| 7 | llm_processor | TextRank 抽取式摘要 → ai_summary，英文摘要→中文翻译 |
+| 8 | translator | 剩余英文摘要→中文翻译（腾讯云 TMT） |
 | 9 | report_generator | Jinja2 → HTML 报告 |
 
 ## 红线

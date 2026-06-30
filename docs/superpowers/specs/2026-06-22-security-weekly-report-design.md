@@ -156,6 +156,10 @@ source_config.yaml        scoring_keywords.json
     (XML 解析 → 统一结构体)        │
          │                        │
          ▼                        │
+    deduplicator.py               │
+    (URL去重 + 标题相似度合并)      │
+         │                        │
+         ▼                        │
     keyword_filter.py (stage1) ───┤
     (快速预筛: 标题+前200字评分,   │
      <30 分提前丢弃)               │
@@ -171,16 +175,12 @@ source_config.yaml        scoring_keywords.json
     ≥80收录, 50-79待复核
          │
          ▼
-    deduplicator.py
-    (URL去重 + 标题相似度合并)
+    llm_processor.py
+    (AI 摘要: 抽取式 / LLM API)
          │
          ▼
     translator.py
-    (英文→中文翻译, 腾讯云 TMT)
-         │
-         ▼
-    [llm_processor.py]  ← 预留，默认关闭
-    (LLM 深度摘要)
+    (英文摘要→中文翻译, 腾讯云 TMT)
          │
          ▼
     report_generator.py
@@ -193,13 +193,13 @@ source_config.yaml        scoring_keywords.json
 |------|------|------|------|
 | fetcher.py | source_config.yaml | raw_items.json | 并发抓取 RSS/API/Scraper 信源 |
 | parser.py | raw_items.json | parsed_items.json | XML 解析，统一字段结构 |
-| keyword_filter.py (stage1) | parsed_items.json | stage1_results.json | 快速预筛，<30 分提前丢弃 |
-| fulltext_extractor.py | stage1_results.json | fulltext_items.json | 短摘要文章全文抓取 |
-| keyword_filter.py (stage2) + scorer.py | fulltext_items.json + scoring_keywords.json | scored_items.json | 完整评分+分类+多维打标 (≥80收录, 50-79待复核) |
-| deduplicator.py | scored_items.json | deduped_items.json | URL 精确去重 + 标题相似度合并 |
-| translator.py | deduped_items.json | translated_items.json | 英文→中文翻译（腾讯云 TMT API） |
-| llm_processor.py | translated_items.json | enhanced_items.json | (预留) LLM 摘要生成 |
-| report_generator.py | enhanced_items.json + templates/ | HTML 报告 | 渲染周报 |
+| deduplicator.py | parsed_items.json | deduped_items.json | URL 精确去重 + 标题相似度合并 |
+| keyword_filter.py (stage1) | deduped_items.json | parsed_items.json(原地写回) | 快速预筛，<30 分提前丢弃 |
+| fulltext_extractor.py | parsed_items.json | parsed_items.json(原地写回) | 短摘要文章全文抓取 |
+| keyword_filter.py (stage2) + scorer.py | parsed_items.json + scoring_keywords.json | parsed_items.json(原地写回) | 完整评分+分类+多维打标 (≥80收录, 50-79待复核) |
+| llm_processor.py | parsed_items.json | enhanced_items.json | AI 摘要（抽取式 / LLM API） |
+| translator.py | enhanced_items.json | translated_items.json | 英文摘要→中文翻译（腾讯云 TMT API） |
+| report_generator.py | translated_items.json + templates/ | HTML 报告 | 渲染周报 |
 
 ### 评分体系
 

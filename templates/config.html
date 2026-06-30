@@ -177,6 +177,16 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
 .badge-A { background:var(--success-soft); color:var(--success); }
 .badge-B { background:rgba(217,119,6,0.1); color:#92400e; }
 .badge-C { background:var(--danger-soft); color:var(--danger); }
+.trace-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:3px; font-size:11px; font-weight:500; white-space:nowrap; }
+.trace-badge::before { content:""; width:5px; height:5px; border-radius:50%; }
+.trace-ok { background:var(--success-soft); color:var(--success); }
+.trace-ok::before { background:var(--success); }
+.trace-fail { background:var(--danger-soft); color:var(--danger); }
+.trace-fail::before { background:var(--danger); }
+.trace-flt { background:rgba(217,119,6,0.1); color:#92400e; }
+.trace-flt::before { background:#f59e0b; }
+.trace-emp { background:var(--accent-soft); color:var(--accent); }
+.trace-emp::before { background:var(--accent); }
 .flex { display:flex; align-items:center; gap:8px; }
 .gap { gap:12px; }
 .mt { margin-top:12px; }
@@ -195,13 +205,13 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
     </div>
     <nav class="nav" id="nav">
       <div class="nav-item active" data-tab="sources"><span class="nav-icon">📡</span> 信源管理</div>
-      <div class="nav-item" data-tab="classifier"><span class="nav-icon">🏷️</span> 分类规则</div>
+      <div class="nav-item" data-tab="keywords-mgr"><span class="nav-icon">🏷️</span> 关键词管理</div>
+      <div class="nav-item" data-tab="scoring"><span class="nav-icon">📊</span> 评分配置</div>
       <div class="nav-item" data-tab="dedup"><span class="nav-icon">🔗</span> 去重策略</div>
       <div class="nav-item" data-tab="llm"><span class="nav-icon">🧠</span> LLM 配置</div>
       <div class="nav-item" data-tab="translate"><span class="nav-icon">🌐</span> 翻译配置</div>
       <div class="nav-item" data-tab="pipeline"><span class="nav-icon">⚡</span> 管道控制</div>
-      <div class="nav-item" data-tab="keywords"><span class="nav-icon">🔑</span> 关键字过滤</div>
-      <div class="nav-item" data-tab="scoring"><span class="nav-icon">📊</span> 评分配置</div>
+      <div class="nav-item" data-tab="trace"><span class="nav-icon">📋</span> 管道溯源</div>
     </nav>
   </aside>
 
@@ -212,28 +222,28 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
     <div class="tab-content active" id="tab-sources">
       <div class="page-title">📡 信源管理</div>
       <div class="page-desc">管理 RSS/API 信源的启用状态和基本参数</div>
-      <div class="card" style="padding:0;overflow:hidden">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border-light)">
-          <span style="font-size:13px;font-weight:600">共 <span id="sourceCount">0</span> 个信源</span>
-          <div class="flex gap">
-            <button class="btn btn-outline btn-sm" onclick="addSource()">+ 新增信源</button>
-            <button class="btn btn-primary btn-sm" onclick="saveSources()">保存更改</button>
-          </div>
+      <div class="card" style="padding:0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border-light);flex-shrink:0;background:var(--surface)">
+          <span style="font-size:13px;font-weight:600;white-space:nowrap">共 <span id="sourceCount">0</span> 个信源 <span id="sourceStats" style="font-weight:400;font-size:12px;color:var(--text-muted);margin-left:4px"></span></span>
+          <input type="text" id="sourceFilterSearch" placeholder="🔍 搜索信源名称或URL..." style="flex:1;min-width:80px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:12px" oninput="renderSources()">
+          <span class="text-muted" id="sourceFilterCount" style="font-size:12px;white-space:nowrap"></span>
+          <button class="btn btn-outline btn-sm" onclick="addSource()" style="flex-shrink:0">+ 新增信源</button>
+          <button class="btn btn-primary btn-sm" onclick="saveSources()" style="flex-shrink:0">保存更改</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" style="overflow-y:auto;max-height:calc(100vh - 240px)">
           <table id="sourceTable">
-            <thead>
+            <thead style="position:sticky;top:0;z-index:2">
               <tr>
-                <th style="width:42px">启用</th>
-                <th style="width:12%">名称</th>
-                <th style="width:80px">获取状态</th>
-                <th>URL</th>
-                <th style="width:78px">类型</th>
-                <th style="width:64px">语言</th>
-                <th style="width:56px">等级</th>
-                <th style="width:80px">区域</th>
-                <th style="width:12%">分类</th>
-                <th style="width:34px"></th>
+                <th style="width:42px;background:var(--surface)">启用</th>
+                <th style="width:12%;background:var(--surface)">名称</th>
+                <th style="width:80px;background:var(--surface)">获取状态</th>
+                <th style="background:var(--surface)">URL</th>
+                <th style="width:78px;background:var(--surface)">类型</th>
+                <th style="width:64px;background:var(--surface)">语言</th>
+                <th style="width:56px;background:var(--surface)">等级</th>
+                <th style="width:80px;background:var(--surface)">区域</th>
+                <th style="width:12%;background:var(--surface)">分类</th>
+                <th style="width:34px;background:var(--surface)"></th>
               </tr>
             </thead>
             <tbody id="sourceBody"></tbody>
@@ -243,21 +253,112 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
       <div class="text-muted">修改后点击"保存更改"立即生效，下次运行管道时使用新配置。</div>
     </div>
 
-    <!-- Tab: 分类规则 -->
-    <div class="tab-content" id="tab-classifier">
-      <div class="page-title">🏷️ 分类规则</div>
-      <div class="page-desc">管理各分类的关键词规则</div>
-      <div class="flex gap mb" style="flex-wrap:wrap">
-        <button class="btn btn-outline btn-sm" data-cat="0">① AI/LLM 安全</button>
-        <button class="btn btn-outline btn-sm" data-cat="1">② 威胁情报与攻防对抗</button>
-        <button class="btn btn-outline btn-sm" data-cat="2">③ 漏洞态势与供应链安全</button>
-        <button class="btn btn-outline btn-sm" data-cat="3">④ 政策法规与标准框架</button>
-        <button class="btn btn-outline btn-sm" data-cat="4">⑤ 产业动态与技术趋势</button>
-        <button class="btn btn-outline btn-sm" data-cat="5">⑥ 数据安全与隐私保护</button>
+    <!-- Tab: 关键词管理 -->
+    <div class="tab-content" id="tab-keywords-mgr">
+      <div class="page-title">🏷️ 关键词管理</div>
+      <div class="page-desc">统一管理评分关键词 — 每个关键词同时参与评分、分类和内容类型推断</div>
+
+      <!-- 筛选 + 保存 -->
+      <div class="card" style="padding:14px 20px">
+        <div class="flex gap" style="flex-wrap:wrap;align-items:center">
+          <select id="kwFilterWeight" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:12px" onchange="renderKeywordManager()">
+            <option value="">全部权重</option>
+            <option value="strong">强词 (30分)</option>
+            <option value="medium">中词 (15分)</option>
+            <option value="weak">弱词 (5分)</option>
+          </select>
+          <select id="kwFilterCat" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:12px" onchange="renderKeywordManager()">
+            <option value="">全部分类</option>
+            <option value="① AI/LLM 安全">① AI/LLM 安全</option>
+            <option value="② 威胁情报与攻防对抗">② 威胁情报与攻防对抗</option>
+            <option value="③ 漏洞态势与供应链安全">③ 漏洞态势与供应链安全</option>
+            <option value="④ 政策法规与标准框架">④ 政策法规与标准框架</option>
+            <option value="⑤ 产业动态与技术趋势">⑤ 产业动态与技术趋势</option>
+            <option value="⑥ 数据安全与隐私保护">⑥ 数据安全与隐私保护</option>
+            <option value="__none__">未分配分类</option>
+          </select>
+          <input type="text" id="kwFilterSearch" placeholder="🔍 搜索关键词..." style="flex:1;min-width:120px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:12px" oninput="renderKeywordManager()">
+          <span class="text-muted" id="kwMgrCount" style="font-size:12px"></span>
+          <span class="text-muted" style="font-size:11px">共 <span id="kwMgrTotal">0</span> 个</span>
+          <button class="btn btn-primary btn-sm" onclick="saveKwMgr()" style="margin-left:auto">保存所有更改</button>
+        </div>
       </div>
-      <div id="catPanels"></div>
-      <div class="mt">
-        <button class="btn btn-primary btn-sm" onclick="saveClassifier()">保存分类规则</button>
+
+      <!-- 添加 -->
+      <div class="card" style="padding:14px 20px">
+        <div class="flex gap" style="flex-wrap:wrap;align-items:flex-end">
+          <div class="form-group" style="flex:2;min-width:140px;margin-bottom:0">
+            <label>关键词文本</label>
+            <input type="text" id="kwNewText" placeholder="输入新关键词..." onkeydown="if(event.key==='Enter')addKwMgr()">
+          </div>
+          <div class="form-group" style="flex:1;min-width:100px;margin-bottom:0">
+            <label>权重</label>
+            <select id="kwNewWeight"><option value="strong">强词 (30分)</option><option value="medium">中词 (15分)</option><option value="weak">弱词 (5分)</option></select>
+          </div>
+          <div class="form-group" style="flex:1;min-width:120px;margin-bottom:0">
+            <label>分类</label>
+            <select id="kwNewCat">
+              <option value="">（不分配）</option>
+              <option value="① AI/LLM 安全">① AI/LLM 安全</option>
+              <option value="② 威胁情报与攻防对抗">② 威胁情报与攻防对抗</option>
+              <option value="③ 漏洞态势与供应链安全">③ 漏洞态势与供应链安全</option>
+              <option value="④ 政策法规与标准框架">④ 政策法规与标准框架</option>
+              <option value="⑤ 产业动态与技术趋势">⑤ 产业动态与技术趋势</option>
+              <option value="⑥ 数据安全与隐私保护">⑥ 数据安全与隐私保护</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;min-width:100px;margin-bottom:0">
+            <label>内容类型</label>
+            <select id="kwNewCT">
+              <option value="">（不指定）</option>
+              <option value="研究报告/白皮书">研究报告/白皮书</option>
+              <option value="漏洞披露">漏洞披露</option>
+              <option value="攻击活动报告">攻击活动报告</option>
+              <option value="工具发布">工具发布</option>
+              <option value="行业分析">行业分析</option>
+              <option value="法规/标准发布">法规/标准发布</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="addKwMgr()" style="margin-bottom:1px">+ 添加</button>
+        </div>
+      </div>
+
+      <!-- 关键词列表（可滚动） -->
+      <div class="card" style="padding:0;overflow:hidden;flex:1;min-height:0">
+        <div id="kwMgrScroll" style="overflow-y:auto;overflow-x:auto;max-height:calc(100vh - 250px)">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:var(--bg);position:sticky;top:0;z-index:1">
+                <th style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border-light);min-width:160px">关键词</th>
+                <th style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border-light);width:90px">权重</th>
+                <th style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border-light);min-width:160px">分类</th>
+                <th style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border-light);min-width:130px">内容类型</th>
+                <th style="text-align:center;padding:10px 14px;border-bottom:1px solid var(--border-light);width:80px">操作</th>
+              </tr>
+            </thead>
+            <tbody id="kwMgrBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: 评分配置 -->
+    <div class="tab-content" id="tab-scoring">
+      <div class="page-title">📊 评分配置</div>
+      <div class="page-desc">配置评分引擎的权重、阈值、特征词库、歧义消解规则</div>
+      <div class="card">
+        <div class="flex gap mb" style="align-items:center;justify-content:space-between">
+          <div>
+            <span class="card-title" style="margin-bottom:0">评分关键词配置</span>
+            <span class="text-muted" id="scoringInfo" style="font-size:12px;margin-left:8px"></span>
+          </div>
+          <div class="flex gap" style="gap:6px">
+            <button class="btn btn-outline btn-sm" id="scoringLoadBtn" onclick="loadScoringConfig()">重新加载</button>
+            <button class="btn btn-primary btn-sm" onclick="saveScoringConfig()">保存配置</button>
+          </div>
+        </div>
+        <div class="card-desc">直接编辑 JSON，修改后点击"保存配置"生效。慎改结构，错误的配置可能导致评分引擎异常。</div>
+        <textarea id="scoringEditor" style="width:100%;min-height:500px;font-family:monospace;font-size:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);resize:vertical;white-space:pre;overflow-wrap:normal;overflow-x:auto" spellcheck="false"></textarea>
       </div>
     </div>
 
@@ -352,64 +453,6 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
       <button class="btn btn-primary" onclick="saveSettings()">保存翻译配置</button>
     </div>
 
-    <!-- Tab: 关键字过滤 -->
-    <div class="tab-content" id="tab-keywords">
-      <div class="page-title">🔑 关键字过滤</div>
-      <div class="page-desc">配置网络安全关键字，用于两阶段过滤。命中任意关键字即保留条目。</div>
-      <div class="card">
-        <div class="flex gap" style="margin-bottom:12px;align-items:center;justify-content:space-between">
-          <div>
-            <span class="card-title" style="margin-bottom:0">关键字列表</span>
-            <span class="text-muted" id="keywordCount" style="font-size:12px;margin-left:8px"></span>
-          </div>
-          <div class="flex gap" style="gap:6px">
-            <button class="btn btn-outline btn-sm" onclick="resetDefaultKeywords()">恢复默认</button>
-            <button class="btn btn-primary btn-sm" onclick="addKeyword()">+ 添加</button>
-          </div>
-        </div>
-        <div style="margin-bottom:8px">
-          <input type="text" id="newKeywordInput" placeholder="输入新关键字，回车添加..."
-                 style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--bg)"
-                 onkeydown="if(event.key==='Enter')addKeyword()">
-        </div>
-        <div id="keywordList" style="max-height:400px;overflow-y:auto"></div>
-        <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
-          <span class="text-muted" style="font-size:11px">修改后需保存生效</span>
-          <button class="btn btn-primary" onclick="saveKeywords()">保存关键字</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-title">过滤说明</div>
-        <div style="font-size:13px;line-height:1.7;color:var(--text-secondary)">
-          <p>🔹 <strong>阶段1</strong> — 解析 RSS 后，对标题和摘要进行关键字匹配。匹配到的条目标记为"已匹配"，未匹配的暂保留进入阶段2。</p>
-          <p>🔹 <strong>阶段2</strong> — 全文提取后，对未匹配的条目再次匹配（此时标题+摘要+正文全量匹配）。仍不匹配的丢弃。</p>
-          <p>🔹 匹配逻辑：<strong>OR</strong>，即命中列表中的<strong>任意一个</strong>关键字即通过。</p>
-          <p>🔹 匹配范围：标题、摘要、正文（如有）。</p>
-          <p>🔹 不区分大小写。</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab: 评分配置 -->
-    <div class="tab-content" id="tab-scoring">
-      <div class="page-title">📊 评分配置</div>
-      <div class="page-desc">配置评分引擎的权重、阈值、特征词库、歧义消解规则</div>
-      <div class="card">
-        <div class="flex gap mb" style="align-items:center;justify-content:space-between">
-          <div>
-            <span class="card-title" style="margin-bottom:0">评分关键词配置</span>
-            <span class="text-muted" id="scoringInfo" style="font-size:12px;margin-left:8px"></span>
-          </div>
-          <div class="flex gap" style="gap:6px">
-            <button class="btn btn-outline btn-sm" id="scoringLoadBtn" onclick="loadScoringConfig()">重新加载</button>
-            <button class="btn btn-primary btn-sm" onclick="saveScoringConfig()">保存配置</button>
-          </div>
-        </div>
-        <div class="card-desc">直接编辑 JSON，修改后点击"保存配置"生效。慎改结构，错误的配置可能导致评分引擎异常。</div>
-        <textarea id="scoringEditor" style="width:100%;min-height:500px;font-family:monospace;font-size:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);resize:vertical;white-space:pre;overflow-wrap:normal;overflow-x:auto" spellcheck="false"></textarea>
-      </div>
-    </div>
-
     <!-- Tab: 管道控制 -->
     <div class="tab-content" id="tab-pipeline">
       <div class="page-title">⚡ 管道控制</div>
@@ -431,6 +474,36 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
       </div>
     </div>
 
+    <!-- Tab: 管道溯源 -->
+    <div class="tab-content" id="tab-trace">
+      <div class="page-title">📋 管道溯源</div>
+      <div class="page-desc">追踪每个信源在管道各阶段的数据流动，快速定位抓取失败、解析异常或评分过滤的原因</div>
+      <div id="traceSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px"></div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border-light)">
+          <span style="font-size:13px;font-weight:600">共 <span id="traceCount">0</span> 个信源</span>
+          <div class="flex gap">
+            <span class="text-muted" id="traceStats" style="font-size:12px"></span>
+            <button class="btn btn-outline btn-sm" onclick="loadTrace()">刷新</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="traceTable">
+            <thead>
+              <tr>
+                <th style="width:16%">信源</th>
+                <th style="width:38%">处理链路</th>
+                <th style="width:38%">原因 / 说明</th>
+                <th style="width:8%">状态</th>
+              </tr>
+            </thead>
+            <tbody id="traceBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="text-muted">数据来源：各阶段中间文件（parsed_items.json / deduped_items.json / enhanced_items.json），最近一次管道运行后的快照。</div>
+    </div>
+
   </div>
 </div>
 
@@ -441,11 +514,9 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
 // -- State --
 var _sources = [];
 var _sourceStatus = {};
-var _classifier = { rules: [] };
 var _settings = { dedup: {}, translate: {} };
 var _llm = { enabled: false, provider: 'openai', api_key: '', model: '', base_url: '', prompt_template: '' };
 var _catNames = ['① AI/LLM 安全','② 威胁情报与攻防对抗','③ 漏洞态势与供应链安全','④ 政策法规与标准框架','⑤ 产业动态与技术趋势','⑥ 数据安全与隐私保护'];
-var _keywords = [];
 
 // -- Protocol check --
 if (window.location.protocol === 'file:') {
@@ -482,6 +553,8 @@ document.querySelectorAll('.nav-item').forEach(function(el) {
     document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
     el.classList.add('active');
     document.getElementById('tab-' + el.dataset.tab).classList.add('active');
+    // 切换到管道溯源 tab 时自动刷新
+    if (el.dataset.tab === 'trace') loadTrace();
   });
 });
 
@@ -544,19 +617,55 @@ function renderSourceStatus(i) {
 
 function renderSources() {
   var tbody = document.getElementById('sourceBody');
+  var q = (document.getElementById('sourceFilterSearch').value || '').toLowerCase().trim();
+
   var groups = {};
   _sources.forEach(function(s) { var g = s.group || '其他'; if (!groups[g]) groups[g] = []; groups[g].push(s); });
   var sortedGroups = Object.keys(groups).sort(function(a,b) {
     var ai = GROUP_ORDER.indexOf(a); var bi = GROUP_ORDER.indexOf(b);
     return (ai===-1?999:ai) - (bi===-1?999:bi);
   });
+
+  // 统计：停用 / 成功 / 失败
+  var disabledCount = _sources.filter(function(s){ return !s.enabled; }).length;
+  var successCount = 0, failCount = 0;
+  Object.keys(_sourceStatus).forEach(function(name) {
+    if (_sourceStatus[name].status === 'success') successCount++;
+    else failCount++;
+  });
+  document.getElementById('sourceStats').textContent =
+    '｜停用 ' + disabledCount + ' 个｜成功 ' + successCount + ' 个｜失败 ' + failCount + ' 个';
+
   var html = '';
+  var visibleCount = 0;
+
   sortedGroups.forEach(function(gName) {
     var items = groups[gName];
+    var filtered = items;
+    if (q) {
+      filtered = items.filter(function(s) {
+        var st = _sourceStatus[s.name];
+        var stText = !st ? '--' : (st.status === 'success' ? '成功' : '失败');
+        return (s.name || '').toLowerCase().indexOf(q) !== -1 ||
+               (s.url || '').toLowerCase().indexOf(q) !== -1 ||
+               (s.group || '').toLowerCase().indexOf(q) !== -1 ||
+               (s.type || '').toLowerCase().indexOf(q) !== -1 ||
+               (s.region || '').toLowerCase().indexOf(q) !== -1 ||
+               stText.indexOf(q) !== -1;
+      });
+    }
+    if (q && !filtered.length) return; // 搜索时隐藏空组
+
     var en = items.filter(function(s){ return s.enabled; }).length;
-    html += '<tr class="group-header"><td colspan="10">' + esc(gName) + ' <span class="text-muted">(' + en + '/' + items.length + ' 已启用)</span></td></tr>';
-    items.forEach(function(s) {
+    var fEn = filtered.filter(function(s){ return s.enabled; }).length;
+    if (q) {
+      html += '<tr class="group-header"><td colspan="10">' + esc(gName) + ' <span class="text-muted">(' + fEn + '/' + filtered.length + ' 已启用)</span></td></tr>';
+    } else {
+      html += '<tr class="group-header"><td colspan="10">' + esc(gName) + ' <span class="text-muted">(' + en + '/' + items.length + ' 已启用)</span></td></tr>';
+    }
+    filtered.forEach(function(s) {
       var i = _sources.indexOf(s);
+      visibleCount++;
       html += '<tr>' +
         '<td><label class="toggle"><input type="checkbox" ' + (s.enabled?'checked':'') + ' onchange="toggleSource(' + i + ')"><span class="toggle-slider"></span></label></td>' +
         '<td><input value="' + escAttr(s.name) + '" onchange="_sources[' + i + '].name=this.value;dirtySources=true" class="name-input"></td>' +
@@ -571,8 +680,16 @@ function renderSources() {
         '</tr>';
     });
   });
+
+  if (!html) {
+    html = '<tr><td colspan="10" style="padding:24px;text-align:center;color:var(--text-muted)">无匹配信源</td></tr>';
+  }
+
   tbody.innerHTML = html;
   document.getElementById('sourceCount').textContent = _sources.length;
+
+  var fEl = document.getElementById('sourceFilterCount');
+  fEl.textContent = q ? '显示 ' + visibleCount + '/' + _sources.length : '';
 }
 
 function toggleSource(i) {
@@ -608,104 +725,170 @@ function saveSources() {
 
 function esc(s) { return (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-// -- Classifier --
+function escAttr(s) { return (''+s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
-function parseClassifier(yaml) {
-  var rules = [];
-  var current = null;
-  var inKeywords = false;
-  yaml.split('\n').forEach(function(line) {
-    var m = line.match(/^\s+-\s+category:\s*(.+)$/);
-    if (m) {
-      if (current) rules.push(current);
-      current = { category: m[1].trim(), keywords: [], tags: [] };
-      inKeywords = false;
-    }
-    if (current && line.includes('keywords:')) { inKeywords = true; return; }
-    if (current && line.includes('tags:')) { inKeywords = false; return; }
-    if (current && inKeywords) {
-      var km = line.match(/^\s+-\s+(.+)$/);
-      if (km) current.keywords.push(km[1].trim());
-    }
+// -- Keyword Manager (unified: weight + category + content_type) --
+
+function _kwFlat() {
+  var list = [];
+  if (!_scoringConfig) return list;
+  ['strong','medium','weak'].forEach(function(lv) {
+    var cfg = _scoringConfig[lv];
+    if (!cfg || !cfg.keywords) return;
+    cfg.keywords.forEach(function(kw) {
+      if (typeof kw === 'string') {
+        list.push({ text: kw, _weight: lv, categories: [], content_types: [] });
+      } else {
+        list.push({ text: kw.text, _weight: lv, categories: kw.categories || [], content_types: kw.content_types || [] });
+      }
+    });
   });
-  if (current) rules.push(current);
-  return { rules: rules };
+  return list;
 }
 
-function buildClassifierYaml(data) {
-  var lines = ['rules:'];
-  data.rules.forEach(function(r) {
-    lines.push('  - category: ' + r.category);
-    lines.push('    keywords:');
-    r.keywords.forEach(function(k) { lines.push('      - ' + k); });
-    lines.push('    tags: []');
-  });
-  return lines.join('\n');
-}
+function renderKeywordManager() {
+  var filterW = document.getElementById('kwFilterWeight').value;
+  var filterCat = document.getElementById('kwFilterCat').value;
+  var filterQ = (document.getElementById('kwFilterSearch').value || '').toLowerCase().trim();
 
-function renderClassifier() {
-  var container = document.getElementById('catPanels');
+  var all = _kwFlat();
+  var filtered = all.filter(function(kw) {
+    if (filterW && kw._weight !== filterW) return false;
+    if (filterCat === '__none__') { if (kw.categories.length > 0) return false; }
+    else if (filterCat) { if (kw.categories.indexOf(filterCat) === -1) return false; }
+    if (filterQ && kw.text.toLowerCase().indexOf(filterQ) === -1) return false;
+    return true;
+  });
+
+  document.getElementById('kwMgrTotal').textContent = all.length;
+  document.getElementById('kwMgrCount').textContent = '显示 ' + filtered.length + '/' + all.length;
+
+  var WEIGHT_OPTIONS = ['strong','medium','weak'];
+  var WEIGHT_LABEL = { strong: '强词 30', medium: '中词 15', weak: '弱词 5' };
+  var CAT_OPTIONS = ['','① AI/LLM 安全','② 威胁情报与攻防对抗','③ 漏洞态势与供应链安全','④ 政策法规与标准框架','⑤ 产业动态与技术趋势','⑥ 数据安全与隐私保护'];
+  var CT_OPTIONS = ['','研究报告/白皮书','漏洞披露','攻击活动报告','工具发布','行业分析','法规/标准发布'];
   var html = '';
-  var data = _classifier;
-  data.rules.forEach(function(r, ci) {
-    var active = ci === 0 ? '' : ' style="display:none"';
-    html += '<div class="card cat-panel"' + active + ' data-ci="' + ci + '">';
-    html += '<div class="card-title">' + esc(r.category) + ' <span style="font-size:12px;color:var(--text-muted);font-weight:400">(' + r.keywords.length + ' 个关键词)</span></div>';
-    html += '<div class="keyword-editor">';
-    html += '<input id="kwInput' + ci + '" placeholder="添加关键词..." onkeydown="if(event.key===\'Enter\')addKeyword(' + ci + ')">';
-    html += '<button class="btn btn-primary btn-sm" onclick="addKeyword(' + ci + ')">添加</button>';
-    html += '</div>';
-    html += '<div class="tag-list">';
-    r.keywords.forEach(function(k) {
-      html += '<span class="tag">' + esc(k) + '<span class="tag-remove" onclick="removeKeyword(' + ci + ',\'' + escAttr(k) + '\')">×</span></span>';
-    });
-    html += '</div></div>';
+  filtered.forEach(function(kw, flatIdx) {
+    var safeText = escAttr(kw.text);
+    var cats = kw.categories;
+    var cts = kw.content_types;
+    var weightOpts = WEIGHT_OPTIONS.map(function(w) {
+      return '<option value="' + w + '"' + (kw._weight === w ? ' selected' : '') + '>' + WEIGHT_LABEL[w] + '</option>';
+    }).join('');
+    var catOpts = CAT_OPTIONS.map(function(c) {
+      return '<option value="' + escAttr(c) + '"' + (cats.indexOf(c) !== -1 ? ' selected' : '') + '>' + (c || '（不分配）') + '</option>';
+    }).join('');
+    var ctOpts = CT_OPTIONS.map(function(ct) {
+      return '<option value="' + escAttr(ct) + '"' + (cts.indexOf(ct) !== -1 ? ' selected' : '') + '>' + (ct || '（不指定）') + '</option>';
+    }).join('');
+    html += '<tr>' +
+      '<td style="padding:8px 14px;border-bottom:1px solid var(--border-light);text-align:center"><input type="text" class="kw-text-input" value="' + safeText + '" style="font-weight:500;text-align:center"></td>' +
+      '<td style="padding:8px 14px;border-bottom:1px solid var(--border-light);text-align:center"><select class="kw-weight-select">' + weightOpts + '</select></td>' +
+      '<td style="padding:8px 14px;border-bottom:1px solid var(--border-light);text-align:center"><select class="kw-cat-select">' + catOpts + '</select></td>' +
+      '<td style="padding:8px 14px;border-bottom:1px solid var(--border-light);text-align:center"><select class="kw-ct-select">' + ctOpts + '</select></td>' +
+      '<td style="padding:8px 14px;border-bottom:1px solid var(--border-light);text-align:center;white-space:nowrap">' +
+        '<button class="btn btn-success btn-sm" onclick="saveKwMgrRow(' + flatIdx + ',\'' + safeText + '\',\'' + kw._weight + '\')" style="margin-right:4px" title="保存修改">保存</button>' +
+        '<button class="btn-icon" onclick="removeKwMgr(\'' + safeText + '\',\'' + kw._weight + '\')" title="删除">✕</button>' +
+      '</td>' +
+      '</tr>';
   });
-  container.innerHTML = html;
-
-  // Category tab switching
-  document.querySelectorAll('[data-cat]').forEach(function(el) {
-    el.addEventListener('click', function() {
-      var ci = parseInt(this.dataset.cat);
-      document.querySelectorAll('.cat-panel').forEach(function(p) { p.style.display = 'none'; });
-      var panel = document.querySelector('.cat-panel[data-ci="' + ci + '"]');
-      if (panel) panel.style.display = 'block';
-      document.querySelectorAll('[data-cat]').forEach(function(b) { b.classList.remove('active'); });
-      this.classList.add('active');
-    });
-  });
-  // Activate first
-  var firstCat = document.querySelector('[data-cat="0"]');
-  if (firstCat) firstCat.classList.add('active');
-}
-
-function addKeyword(ci) {
-  var input = document.getElementById('kwInput' + ci);
-  var kw = input.value.trim();
-  if (!kw) return;
-  if (!_classifier.rules[ci]) return;
-  if (_classifier.rules[ci].keywords.indexOf(kw) === -1) {
-    _classifier.rules[ci].keywords.push(kw);
+  if (!filtered.length) {
+    html = '<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--text-muted)">无匹配关键词</td></tr>';
   }
-  input.value = '';
-  renderClassifier();
+  document.getElementById('kwMgrBody').innerHTML = html;
 }
 
-function removeKeyword(ci, kw) {
-  if (!_classifier.rules[ci]) return;
-  _classifier.rules[ci].keywords = _classifier.rules[ci].keywords.filter(function(k) { return k !== kw; });
-  renderClassifier();
+function addKwMgr() {
+  var text = document.getElementById('kwNewText').value.trim();
+  if (!text) { toast('请输入关键词文本', 'error'); return; }
+  var weight = document.getElementById('kwNewWeight').value;
+  var cat = document.getElementById('kwNewCat').value;
+  var ct = document.getElementById('kwNewCT').value;
+
+  var flat = _kwFlat();
+  for (var i = 0; i < flat.length; i++) {
+    if (flat[i].text.toLowerCase() === text.toLowerCase() && flat[i]._weight === weight) {
+      toast('该关键词已存在同权重列表中', 'error');
+      return;
+    }
+  }
+
+  var obj = { text: text };
+  if (cat) obj.categories = [cat];
+  if (ct) obj.content_types = [ct];
+
+  _scoringConfig[weight].keywords.push(obj);
+  document.getElementById('kwNewText').value = '';
+  renderKeywordManager();
+  toast('已添加: ' + text, 'success');
 }
 
-function saveClassifier() {
-  var yaml = buildClassifierYaml(_classifier);
-  api('PUT', '/api/config/classifier', { yaml: yaml }).then(function(r) {
-    if (r.ok) toast('分类规则已保存', 'success');
+function removeKwMgr(text, weight) {
+  if (!confirm('确认删除关键词 "' + text + '"？（保存后生效）')) return;
+  var arr = _scoringConfig[weight].keywords;
+  for (var i = 0; i < arr.length; i++) {
+    var kw = arr[i];
+    var t = typeof kw === 'string' ? kw : kw.text;
+    if (t === text) { arr.splice(i, 1); break; }
+  }
+  renderKeywordManager();
+}
+
+function saveKwMgrRow(flatIdx, oldText, oldWeight) {
+  var row = document.getElementById('kwMgrBody').children[flatIdx];
+  if (!row) { toast('找不到该行', 'error'); return; }
+
+  var textInput = row.querySelector('.kw-text-input');
+  var weightSelect = row.querySelector('.kw-weight-select');
+  var catSelect = row.querySelector('.kw-cat-select');
+  var ctSelect = row.querySelector('.kw-ct-select');
+  if (!textInput || !weightSelect) return;
+
+  var newText = textInput.value.trim();
+  var newWeight = weightSelect.value;
+  var newCat = catSelect.value;
+  var newCt = ctSelect.value;
+
+  if (!newText) { toast('关键词不能为空', 'error'); return; }
+
+  // 检查同权重下是否重复（跳过自身）
+  if (newText.toLowerCase() !== oldText.toLowerCase() || newWeight !== oldWeight) {
+    var all = _kwFlat();
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].text === oldText && all[i]._weight === oldWeight) continue;
+      if (all[i].text.toLowerCase() === newText.toLowerCase() && all[i]._weight === newWeight) {
+        toast('同权重列表中已存在该关键词', 'error');
+        return;
+      }
+    }
+  }
+
+  // 从原权重列表中移除旧条目
+  var oldArr = _scoringConfig[oldWeight].keywords;
+  for (var i = 0; i < oldArr.length; i++) {
+    var kw = oldArr[i];
+    var t = typeof kw === 'string' ? kw : kw.text;
+    if (t === oldText) { oldArr.splice(i, 1); break; }
+  }
+
+  // 构建新条目
+  var obj = { text: newText };
+  if (newCat) obj.categories = [newCat];
+  if (newCt) obj.content_types = [newCt];
+
+  // 加入（可能变更后的）权重列表
+  _scoringConfig[newWeight].keywords.push(obj);
+
+  renderKeywordManager();
+  toast('已更新: ' + newText, 'success');
+}
+
+function saveKwMgr() {
+  api('PUT', '/api/config/scoring_keywords', { config: _scoringConfig }).then(function(r) {
+    if (r.ok) { toast('关键词配置已保存', 'success'); document.getElementById('scoringEditor').value = JSON.stringify(_scoringConfig, null, 2); }
     else toast('保存失败', 'error');
   });
 }
-
-function escAttr(s) { return (''+s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 // -- Settings (dedup + translate) --
 
@@ -791,82 +974,6 @@ function saveLlm() {
   api('PUT', '/api/config/llm', { yaml: yaml }).then(function(r) {
     if (r.ok) toast('LLM 配置已保存', 'success');
     else toast('保存失败', 'error');
-  });
-}
-
-// -- Keywords --
-
-function loadKeywords() {
-  api('GET', '/api/config/security_keywords').then(function(r) {
-    if (r.ok) {
-      _keywords = r.keywords || [];
-      renderKeywords();
-    }
-  });
-}
-
-function renderKeywords() {
-  var el = document.getElementById('keywordList');
-  var count = document.getElementById('keywordCount');
-  if (!el) return;
-  count.textContent = _keywords.length + ' 个关键字';
-  if (_keywords.length === 0) {
-    el.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center;font-size:13px">暂无关键字，请添加</div>';
-    return;
-  }
-  var html = '';
-  _keywords.forEach(function(kw, i) {
-    html += '<div class="keyword-item" data-index="' + i + '">' +
-      '<span class="keyword-text">' + escHtml(kw) + '</span>' +
-      '<button class="btn btn-danger btn-sm" onclick="removeKeyword(' + i + ')" style="padding:2px 8px;font-size:11px">删除</button>' +
-      '</div>';
-  });
-  el.innerHTML = html;
-}
-
-function addKeyword() {
-  var input = document.getElementById('newKeywordInput');
-  var kw = input.value.trim();
-  if (!kw) return;
-  if (_keywords.indexOf(kw) !== -1) {
-    toast('关键字已存在', 'warn');
-    return;
-  }
-  _keywords.push(kw);
-  _keywords.sort(function(a, b) { return a.localeCompare(b, 'zh-CN'); });
-  renderKeywords();
-  input.value = '';
-  input.focus();
-  toast('已添加: ' + kw, 'success');
-}
-
-function removeKeyword(index) {
-  var kw = _keywords[index];
-  _keywords.splice(index, 1);
-  renderKeywords();
-  toast('已移除: ' + kw, 'info');
-}
-
-function saveKeywords() {
-  api('PUT', '/api/config/security_keywords', { keywords: _keywords }).then(function(r) {
-    if (r.ok) {
-      _keywords = r.keywords || _keywords;
-      renderKeywords();
-      toast('关键字已保存', 'success');
-    } else {
-      toast('保存失败', 'error');
-    }
-  });
-}
-
-function resetDefaultKeywords() {
-  if (!confirm('将重置为默认关键字列表，确认？')) return;
-  api('PUT', '/api/config/security_keywords', { keywords: [] }).then(function(r) {
-    if (r.ok) {
-      _keywords = r.keywords || [];
-      renderKeywords();
-      toast('已恢复默认关键字', 'success');
-    }
   });
 }
 
@@ -968,17 +1075,73 @@ function clearLog() {
   document.getElementById('logBox').innerHTML = '<span class="text-muted">日志已清空</span>';
 }
 
+// -- Pipeline Trace --
+
+var TRACE_GROUP_ORDER = ['政府与CERT','安全厂商','安全媒体','国内信源','AI厂商','开发者社区','其他'];
+
+function loadTrace() {
+  api('GET', '/api/config/pipeline_trace').then(function(r) {
+    if (!r.ok || !r.sources) { toast('加载溯源数据失败', 'error'); return; }
+    renderTrace(r.sources);
+  });
+}
+
+function renderTrace(sources) {
+  document.getElementById('traceCount').textContent = sources.length;
+
+  var stats = {ok: 0, failed: 0, filtered: 0, empty: 0};
+  sources.forEach(function(s) { if (stats[s.status] !== undefined) stats[s.status]++; });
+  document.getElementById('traceStats').textContent =
+    '正常 ' + stats.ok + ' | 失败 ' + stats.failed + ' | 部分过滤 ' + stats.filtered + ' | 空 ' + stats.empty;
+
+  var groups = {};
+  sources.forEach(function(s) {
+    var g = s.group || '其他';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(s);
+  });
+
+  var sortedGroups = Object.keys(groups).sort(function(a,b) {
+    var ai = TRACE_GROUP_ORDER.indexOf(a);
+    var bi = TRACE_GROUP_ORDER.indexOf(b);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+
+  var STATUS_LABEL = { ok: '正常', failed: '失败', filtered: '部分过滤', empty: '空' };
+  var STATUS_CLASS = { ok: 'trace-ok', failed: 'trace-fail', filtered: 'trace-flt', empty: 'trace-emp' };
+
+  var html = '';
+  sortedGroups.forEach(function(gName) {
+    var items = groups[gName].slice().sort(function(a,b) { return b.final - a.final; });
+    html += '<tr class="group-header"><td colspan="4">' + esc(gName) + ' <span class="text-muted">(' + items.length + ' 个信源)</span></td></tr>';
+    items.forEach(function(s) {
+      var st = s.status || 'ok';
+      html += '<tr>' +
+        '<td class="source-name" title="' + escAttr(s.name) + '">' + esc(s.name) + '</td>' +
+        '<td style="font-size:12px;font-family:monospace">' + esc(s.chain) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-secondary)">' + esc(s.reason) + '</td>' +
+        '<td><span class="trace-badge ' + (STATUS_CLASS[st] || '') + '">' + (STATUS_LABEL[st] || st) + '</span></td>' +
+        '</tr>';
+    });
+  });
+
+  if (!sources.length) {
+    html = '<tr><td colspan="4" style="padding:24px;text-align:center;color:var(--text-muted)">暂无数据，请先运行管道</td></tr>';
+  }
+
+  document.getElementById('traceBody').innerHTML = html;
+}
+
 // -- Load all configs --
 
 function loadAll() {
   Promise.all([
     api('GET', '/api/config/sources').then(function(r) { if (r.yaml) _sources = parseSources(r.yaml); renderSources(); }),
-    api('GET', '/api/config/classifier').then(function(r) { if (r.yaml) _classifier = parseClassifier(r.yaml); renderClassifier(); }),
     api('GET', '/api/config/settings').then(function(r) { if (r.ok) _settings = r.settings; renderSettings(); }),
     api('GET', '/api/config/llm').then(function(r) { if (r.yaml) _llm = parseLlm(r.yaml); renderLlm(); }),
     api('GET', '/api/config/source_status').then(function(r) { if (r.ok) _sourceStatus = r.status || {}; renderSources(); }),
-    api('GET', '/api/config/security_keywords').then(function(r) { if (r.ok) { _keywords = r.keywords || []; renderKeywords(); } }),
-    api('GET', '/api/config/scoring_keywords').then(function(r) { if (r.ok) { _scoringConfig = r.config; var editor = document.getElementById('scoringEditor'); if (editor) editor.value = JSON.stringify(r.config, null, 2); } }),
+    api('GET', '/api/config/scoring_keywords').then(function(r) { if (r.ok) { _scoringConfig = r.config; var editor = document.getElementById('scoringEditor'); if (editor) editor.value = JSON.stringify(r.config, null, 2); renderKeywordManager(); } }),
+    loadTrace(),
   ]).catch(function(e) {
     toast('无法加载配置，请确认 config_server.py 已启动', 'error');
     console.error(e);

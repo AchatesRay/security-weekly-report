@@ -5,10 +5,18 @@ from pathlib import Path
 
 DATA_DIR = Path("data")
 CONFIG_PATH = Path("config/settings.json")
-CLASSIFIED_ITEMS_PATH = DATA_DIR / "classified_items.json"
+ENHANCED_ITEMS_PATH = DATA_DIR / "enhanced_items.json"
 TRANSLATED_ITEMS_PATH = DATA_DIR / "translated_items.json"
 
 _cache: dict[str, str] = {}
+
+
+def _is_chinese(text: str) -> bool:
+    """检测文本是否主要是中文"""
+    if not text:
+        return False
+    chinese_chars = sum(1 for c in text if '一' <= c <= '鿿')
+    return chinese_chars > len(text) * 0.3 if text else False
 
 
 def _load_translate_config() -> dict:
@@ -97,17 +105,19 @@ def translate_text(text: str) -> str:
 
 
 def translate_all() -> list[dict]:
-    with open(CLASSIFIED_ITEMS_PATH, "r", encoding="utf-8") as f:
+    with open(ENHANCED_ITEMS_PATH, "r", encoding="utf-8") as f:
         items = json.load(f)
 
     en_items = [i for i in items if i.get("language") == "en"]
     other_items = [i for i in items if i.get("language") != "en"]
     total = len(en_items)
     print(f"[TRANSLATOR] 需翻译: {total} 条英文内容")
+    print(f"[TRANSLATOR] 需检查 AI 摘要: {len(items)} 条")
 
     from datetime import datetime as dt
     start = dt.now()
     translated_count = 0
+    ai_translated = 0
     consecutive_failures = 0
 
     for idx, item in enumerate(en_items):
@@ -137,10 +147,23 @@ def translate_all() -> list[dict]:
 
         time.sleep(0.5)
 
+    # 检查所有条目的 ai_summary，英文则翻译
+    for item in items:
+        ai_summary = item.get("ai_summary", "")
+        if ai_summary and not _is_chinese(ai_summary):
+            translated = translate_text(ai_summary)
+            if translated and translated != ai_summary:
+                item["ai_summary_zh"] = translated
+                ai_translated += 1
+            else:
+                item["ai_summary_zh"] = ai_summary
+        else:
+            item["ai_summary_zh"] = ai_summary
+
     all_items = en_items + other_items
     elapsed = (dt.now() - start).total_seconds()
     print(f"[TRANSLATOR] 翻译完成: {total} 条, 其中成功 {translated_count} 条, "
-          f"耗时 {elapsed:.0f}s")
+          f"AI 摘要翻译 {ai_translated} 条, 耗时 {elapsed:.0f}s")
 
     with open(TRANSLATED_ITEMS_PATH, "w", encoding="utf-8") as f:
         json.dump(all_items, f, ensure_ascii=False, indent=2)

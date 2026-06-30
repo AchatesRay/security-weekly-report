@@ -9,8 +9,8 @@ sources:
   enabled: true
 - name: 360 Netlab
   group: 国内信源
-  url: https://blog.netlab.360.com/feed/
-  type: rss
+  url: https://360.net/research/analysis/
+  type: scraper
   language: zh
   source_level: A
   region: cn
@@ -38,7 +38,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: Anthropic Engineering
   group: AI厂商
   url: https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_engineering.xml
@@ -94,14 +94,6 @@ sources:
   language: en
   source_level: B
   region: global
-  enabled: true
-- name: CERT Poland
-  group: 政府与CERT
-  url: https://cert.pl/feed
-  type: rss
-  language: en
-  source_level: S
-  region: eu
   enabled: true
 - name: CERT-FR (ANSSI)
   group: 政府与CERT
@@ -398,7 +390,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: Microsoft AI Blog
   group: AI厂商
   url: https://blogs.microsoft.com/feed/
@@ -782,4 +774,92 @@ sources:
   language: zh
   source_level: B
   region: cn
+  enabled: true
+- name: Rapid7 Blog
+  group: 安全厂商
+  url: https://blog.rapid7.com/feed/
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Troy Hunt
+  group: 安全媒体
+  url: https://www.troyhunt.com/rss/
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: PortSwigger Research
+  group: 安全厂商
+  url: https://portswigger.net/research/rss
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Sonatype Blog
+  group: 开发者社区
+  url: https://blog.sonatype.com/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: HackerOne Hacktivity
+  group: 开发者社区
+  url: https://hackerone.com/hacktivity.rss
+  type: rss
+  language: en
+  source_level: B
+  region: global
+  enabled: true
+- name: Varonis Blog
+  group: 安全厂商
+  url: https://www.varonis.com/blog/feed/
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: F-Secure Blog
+  group: 安全厂商
+  url: https://blog.f-secure.com/feed/
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Huntress Blog
+  group: 安全厂商
+  url: https://www.huntress.com/blog/feed
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Praetorian Blog
+  group: 安全厂商
+  url: https://www.praetorian.com/blog/feed/
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: Cynet Blog
+  group: 安全厂商
+  url: https://www.cynet.com/blog/feed/
+  type: rss
+  language: en
+  source_level: A
+  region: global
+  enabled: true
+- name: 新信源ce
+  group: 安全媒体
+  url: https://www
+  type: rss
+  language: en
+  source_level: B
+  region: global
   enabled: true
