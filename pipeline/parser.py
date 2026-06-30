@@ -193,7 +193,7 @@ def parse_api_ietf(source_info: dict, raw_text: str) -> list[dict]:
         if doc.get("group"):
             summary_parts.append(f"工作组: {doc['group']}")
         summary = " | ".join(summary_parts)
-        published = doc.get("time", "") or ""
+        published = doc.get("time", "")
         items.append({
             "title": f"{name} - {title}" if name else title,
             "url": link,
