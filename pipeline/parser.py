@@ -109,9 +109,191 @@ def parse_api_secrss(source_info: dict, raw_text: str) -> list[dict]:
     return items
 
 
+def parse_api_arxiv(source_info: dict, raw_text: str) -> list[dict]:
+    """解析 arXiv API 返回的 Atom XML 为统一格式"""
+    import feedparser
+    feed = feedparser.parse(raw_text)
+    items = []
+    for entry in feed.entries:
+        title = entry.get("title", "").strip()
+        if not title:
+            continue
+        link = entry.get("link", "").strip()
+        summary = entry.get("summary", "").strip()
+        published = entry.get("published", "")
+        authors = [a.get("name", "") for a in entry.get("authors", []) if a.get("name")]
+        categories = [c.get("term", "") for c in entry.get("tags", []) if c.get("term")]
+        items.append({
+            "title": title,
+            "url": link,
+            "summary": summary,
+            "published_date": published,
+            "source_name": source_info["source_name"],
+            "source_level": source_info["source_level"],
+            "region": source_info["region"],
+            "language": source_info["language"],
+            "source_type": "API",
+            "authors": authors,
+            "categories": categories,
+            "parse_time": datetime.now().isoformat(),
+        })
+    return items
+
+
+def parse_api_semantic_scholar(source_info: dict, raw_text: str) -> list[dict]:
+    """解析 Semantic Scholar API 返回的 JSON"""
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return []
+    items = []
+    for paper in data.get("data", []):
+        title = paper.get("title", "").strip()
+        if not title:
+            continue
+        link = paper.get("url", "")
+        summary = paper.get("abstract", "") or paper.get("title", "")
+        published = paper.get("publicationDate", "") or ""
+        authors = [a.get("name", "") for a in paper.get("authors", []) if a.get("name")]
+        items.append({
+            "title": title,
+            "url": link,
+            "summary": summary,
+            "published_date": published,
+            "source_name": source_info["source_name"],
+            "source_level": source_info["source_level"],
+            "region": source_info["region"],
+            "language": source_info["language"],
+            "source_type": "API",
+            "authors": authors,
+            "categories": [],
+            "parse_time": datetime.now().isoformat(),
+        })
+    return items
+
+
+def parse_api_ietf(source_info: dict, raw_text: str) -> list[dict]:
+    """解析 IETF Datatracker API 返回的 JSON"""
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return []
+    items = []
+    for doc in data.get("objects", []):
+        title = doc.get("title", "").strip()
+        if not title:
+            continue
+        name = doc.get("name", "")
+        link = f"https://datatracker.ietf.org/doc/{name}/" if name else ""
+        summary_parts = [f"状态: {doc.get('state', '未知')}"]
+        if doc.get("intended_std_level"):
+            summary_parts.append(f"标准级别: {doc['intended_std_level']}")
+        if doc.get("group"):
+            summary_parts.append(f"工作组: {doc['group']}")
+        summary = " | ".join(summary_parts)
+        published = doc.get("time", "") or ""
+        items.append({
+            "title": f"{name} - {title}" if name else title,
+            "url": link,
+            "summary": summary,
+            "published_date": published,
+            "source_name": source_info["source_name"],
+            "source_level": source_info["source_level"],
+            "region": source_info["region"],
+            "language": source_info["language"],
+            "source_type": "API",
+            "authors": [],
+            "categories": ["IETF", "标准草案"],
+            "parse_time": datetime.now().isoformat(),
+        })
+    return items
+
+
+def parse_api_mitre_attack(source_info: dict, raw_text: str) -> list[dict]:
+    """解析 MITRE ATT&CK STIX JSON"""
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return []
+    items = []
+    seen_names = set()
+    for obj in data.get("objects", []):
+        if obj.get("type") not in ("attack-pattern", "malware", "tool", "intrusion-set", "campaign"):
+            continue
+        name = obj.get("name", "").strip()
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+        description = obj.get("description", "")
+        summary = description[:500] if description else name
+        ext_refs = obj.get("external_references", [])
+        link = ""
+        for ref in ext_refs:
+            if ref.get("source_name") == "mitre-attack" and ref.get("url"):
+                link = ref["url"]
+                break
+        modified = obj.get("modified", "")
+        items.append({
+            "title": f"[MITRE {obj['type']}] {name}",
+            "url": link,
+            "summary": summary,
+            "published_date": modified,
+            "source_name": source_info["source_name"],
+            "source_level": source_info["source_level"],
+            "region": source_info["region"],
+            "language": source_info["language"],
+            "source_type": "API",
+            "authors": [],
+            "categories": [obj.get("type", ""), "MITRE ATT&CK"],
+            "parse_time": datetime.now().isoformat(),
+        })
+    return items
+
+
+def parse_api_github(source_info: dict, raw_text: str) -> list[dict]:
+    """解析 GitHub API 返回的仓库搜索 JSON"""
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return []
+    items = []
+    for repo in data.get("items", []):
+        full_name = repo.get("full_name", "").strip()
+        if not full_name:
+            continue
+        description = repo.get("description", "") or ""
+        topics = repo.get("topics", [])
+        stars = repo.get("stargazers_count", 0)
+        language = repo.get("language") or "未知"
+        summary = description[:500] if description else full_name
+        summary += f" | ⭐{stars} | 语言: {language}"
+        if topics:
+            summary += f" | 标签: {', '.join(topics[:5])}"
+        items.append({
+            "title": full_name,
+            "url": repo.get("html_url", f"https://github.com/{full_name}"),
+            "summary": summary,
+            "published_date": repo.get("created_at", ""),
+            "source_name": source_info["source_name"],
+            "source_level": source_info["source_level"],
+            "region": source_info["region"],
+            "language": source_info["language"],
+            "source_type": "API",
+            "authors": [repo.get("owner", {}).get("login", "")] if repo.get("owner") else [],
+            "categories": topics[:5],
+            "parse_time": datetime.now().isoformat(),
+        })
+    return items
+
+
 # API 解析器注册表: source_name -> parse function
 API_PARSERS = {
     "安全内参": parse_api_secrss,
+    "arXiv cs.CR": parse_api_arxiv,
+    "Semantic Scholar": parse_api_semantic_scholar,
+    "IETF Datatracker": parse_api_ietf,
+    "MITRE ATT&CK": parse_api_mitre_attack,
+    "GitHub Security Trending": parse_api_github,
 }
 
 
