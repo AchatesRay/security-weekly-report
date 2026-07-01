@@ -46,7 +46,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: Anthropic News
   group: AI厂商
   url: https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/anthropic-news.xml
@@ -54,7 +54,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: Anthropic Red Team
   group: AI厂商
   url: https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_red.xml
@@ -62,7 +62,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: Anthropic Research
   group: AI厂商
   url: https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/anthropic-research.xml
@@ -70,10 +70,10 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: Aqua Security Blog
   group: 安全厂商
-  url: https://blog.aquasec.com/feed
+  url: https://www.aquasec.com/feed/
   type: rss
   language: en
   source_level: A
@@ -86,7 +86,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: BleepingComputer
   group: 安全媒体
   url: https://www.bleepingcomputer.com/feed/
@@ -94,7 +94,7 @@ sources:
   language: en
   source_level: B
   region: global
-  enabled: true
+  enabled: false
 - name: CERT-FR (ANSSI)
   group: 政府与CERT
   url: https://www.cert.ssi.gouv.fr/feed/
@@ -230,7 +230,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: FreeBuf
   group: 国内信源
   url: https://www.freebuf.com/feed
@@ -246,7 +246,7 @@ sources:
   language: en
   source_level: A
   region: global
-  enabled: true
+  enabled: false
 - name: GitHub Security Lab
   group: 开发者社区
   url: https://github.blog/security/feed/
@@ -262,7 +262,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: Google Cloud Security Blog
   group: 安全厂商
   url: https://cloud.google.com/blog/products/identity-security/rss/
@@ -270,7 +270,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: HP Threat Research
   group: 安全厂商
   url: https://threatresearch.ext.hp.com/feed
@@ -297,7 +297,7 @@ sources:
   enabled: true
 - name: IAPP
   group: 开发者社区
-  url: https://iapp.org/news/rss/
+  url: https://iapp.org/rss/
   type: rss
   language: en
   source_level: A
@@ -310,7 +310,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: Infosecurity Magazine
   group: 安全媒体
   url: https://www.infosecurity-magazine.com/rss/news/
@@ -382,7 +382,7 @@ sources:
   language: en
   source_level: A
   region: global
-  enabled: true
+  enabled: false
 - name: Meta AI Blog
   group: AI厂商
   url: https://ai.meta.com/blog/rss/
@@ -406,7 +406,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: Microsoft Security Blog
   group: 安全厂商
   url: https://www.microsoft.com/security/blog/feed
@@ -422,7 +422,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: NCSC UK
   group: 政府与CERT
   url: https://www.ncsc.gov.uk/api/1/services/v1/all-rss-feed.xml
@@ -449,7 +449,7 @@ sources:
   enabled: true
 - name: OWASP Blog
   group: 开发者社区
-  url: https://owasp.org/news/feed/
+  url: https://owasp.org/feed.xml
   type: rss
   language: en
   source_level: A
@@ -465,7 +465,7 @@ sources:
   enabled: true
 - name: Okta Security Blog
   group: 安全厂商
-  url: https://www.okta.com/blog/feed/
+  url: https://developer.okta.com/feed.xml
   type: rss
   language: en
   source_level: S
@@ -495,6 +495,7 @@ sources:
   source_level: B
   region: global
   enabled: true
+  ssl_verify: false
 - name: Palo Alto Networks Blog
   group: 安全厂商
   url: https://www.paloaltonetworks.com/blog/feed/
@@ -518,7 +519,7 @@ sources:
   language: en
   source_level: C
   region: global
-  enabled: true
+  enabled: false
 - name: Redwood Research
   group: AI厂商
   url: https://www.redwoodresearch.org/feed.xml
@@ -526,7 +527,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: Reuters Cybersecurity
   group: 安全媒体
   url: https://www.reuters.com/feed/
@@ -534,7 +535,7 @@ sources:
   language: en
   source_level: B
   region: global
-  enabled: true
+  enabled: false
 - name: SANS ISC
   group: 开发者社区
   url: https://isc.sans.edu/rssfeed.xml
@@ -558,7 +559,7 @@ sources:
   language: en
   source_level: B
   region: global
-  enabled: true
+  enabled: false
 - name: Seebug (知道创宇404实验室)
   group: 国内信源
   url: https://paper.seebug.org/rss/
@@ -598,7 +599,7 @@ sources:
   language: en
   source_level: A
   region: global
-  enabled: true
+  enabled: false
 - name: Sophos News
   group: 安全厂商
   url: https://news.sophos.com/feed
@@ -630,7 +631,7 @@ sources:
   language: en
   source_level: B
   region: global
-  enabled: true
+  enabled: false
 - name: The Record / Recorded Future
   group: 安全媒体
   url: https://therecord.media/feed/
@@ -638,7 +639,7 @@ sources:
   language: en
   source_level: A
   region: global
-  enabled: true
+  enabled: false
 - name: Threatpost
   group: 安全媒体
   url: https://threatpost.com/feed/
@@ -649,7 +650,7 @@ sources:
   enabled: true
 - name: Trend Micro Research
   group: 安全厂商
-  url: https://www.trendmicro.com/vinfo/us/security/rss/rss.xml
+  url: https://www.trendmicro.com/rss/
   type: rss
   language: en
   source_level: B
@@ -681,7 +682,7 @@ sources:
   enabled: true
 - name: Wiz Blog
   group: 安全厂商
-  url: https://www.wiz.io/blog/feed.xml
+  url: https://www.wiz.io/blog/rss
   type: rss
   language: en
   source_level: A
@@ -689,7 +690,7 @@ sources:
   enabled: true
 - name: Zero Day Initiative
   group: 安全厂商
-  url: https://www.zerodayinitiative.com/feed/
+  url: https://www.zerodayinitiative.com/rss/
   type: rss
   language: en
   source_level: A
@@ -702,7 +703,7 @@ sources:
   language: en
   source_level: S
   region: global
-  enabled: true
+  enabled: false
 - name: 先知安全社区
   group: 国内信源
   url: https://xz.aliyun.com/feed
@@ -718,7 +719,7 @@ sources:
   language: zh
   source_level: B
   region: cn
-  enabled: true
+  enabled: false
 - name: 奇安信威胁情报中心
   group: 国内信源
   url: https://ti.qianxin.com/blog/
@@ -752,6 +753,7 @@ sources:
   source_level: B
   region: cn
   enabled: true
+  ssl_verify: false
 - name: 数世咨询
   group: 国内信源
   url: https://www.dashishuo.com/feed
@@ -759,10 +761,10 @@ sources:
   language: zh
   source_level: B
   region: cn
-  enabled: true
+  enabled: false
 - name: 深信服安全研究
   group: 国内信源
-  url: https://www.sangfor.com.cn/security-research/feed
+  url: https://sec.sangfor.com.cn/feed
   type: rss
   language: zh
   source_level: A
@@ -778,7 +780,7 @@ sources:
   enabled: true
 - name: Rapid7 Blog
   group: 安全厂商
-  url: https://blog.rapid7.com/feed/
+  url: https://blog.rapid7.com/rss
   type: rss
   language: en
   source_level: A
@@ -807,7 +809,7 @@ sources:
   language: en
   source_level: A
   region: global
-  enabled: true
+  enabled: false
 - name: HackerOne Hacktivity
   group: 开发者社区
   url: https://hackerone.com/hacktivity.rss
@@ -815,7 +817,7 @@ sources:
   language: en
   source_level: B
   region: global
-  enabled: true
+  enabled: false
 - name: Varonis Blog
   group: 安全厂商
   url: https://www.varonis.com/blog/feed/
@@ -839,7 +841,7 @@ sources:
   language: en
   source_level: A
   region: global
-  enabled: true
+  enabled: false
 - name: Praetorian Blog
   group: 安全厂商
   url: https://www.praetorian.com/blog/feed/
@@ -856,10 +858,6 @@ sources:
   source_level: A
   region: global
   enabled: true
-
-# ════════════════════════════════════════════
-# API 采集层 — 技术趋势追踪（2026-06-30 新增）
-# ════════════════════════════════════════════
 - name: arXiv cs.CR
   group: 学术论文
   url: https://export.arxiv.org/api/query?search_query=cat:cs.CR&sortBy=submittedDate&sortOrder=descending&max_results=50
@@ -869,7 +867,6 @@ sources:
   source_level: S
   region: global
   enabled: true
-
 - name: Semantic Scholar
   group: 学术论文
   url: https://api.semanticscholar.org/graph/v1/paper/search?query=cybersecurity&limit=50&fields=title,url,abstract,publicationDate,authors
@@ -879,7 +876,6 @@ sources:
   source_level: S
   region: global
   enabled: true
-
 - name: IETF Datatracker
   group: 标准框架
   url: https://datatracker.ietf.org/api/v1/doc/document/?limit=50&order_by=-id&format=json
@@ -889,7 +885,6 @@ sources:
   source_level: S
   region: global
   enabled: true
-
 - name: MITRE ATT&CK
   group: 标准框架
   url: https://raw.githubusercontent.com/mitre/cti/refs/heads/master/enterprise-attack/enterprise-attack.json
@@ -899,7 +894,6 @@ sources:
   source_level: S
   region: global
   enabled: true
-
 - name: GitHub Security Trending
   group: 开发者社区
   url: https://api.github.com/search/repositories?q=security+topic:security&sort=stars&order=desc&per_page=30
