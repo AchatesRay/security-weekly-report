@@ -22,6 +22,20 @@ from pathlib import Path
 from typing import Any
 
 
+SECRETS_PATH = Path("config/secrets.json")
+
+
+def load_secrets() -> dict:
+    """从 config/secrets.json 加载 API 密钥，文件不存在则返回空字典"""
+    if SECRETS_PATH.exists():
+        try:
+            with open(SECRETS_PATH, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
 def atomic_write(path: str | Path, data: Any, **json_kwargs):
     """原子写入 JSON 文件：先写临时文件，再 rename 覆盖目标路径。
 

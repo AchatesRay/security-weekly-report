@@ -4,3 +4,4 @@ data/
 reports/
 .env
 .worktrees/
+config/secrets.json

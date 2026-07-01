@@ -7,6 +7,8 @@ import asyncio
 import random
 import os
 
+from . import atomic_write, load_secrets
+
 CONFIG_PATH = Path("config/source_config.yaml")
 DATA_DIR = Path("data")
 RAW_ITEMS_PATH = DATA_DIR / "raw_items.json"
@@ -29,9 +31,10 @@ RSS_READER_UAS = [
 ]
 
 
-# API Keys（从环境变量读取）
-SCHOLAR_API_KEY = os.environ.get("SCHOLAR_API_KEY", "")
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+# API Keys（从 secrets.json 读取，回退到环境变量）
+_secrets = load_secrets()
+SCHOLAR_API_KEY = _secrets.get("scholar_api_key") or os.environ.get("SCHOLAR_API_KEY", "")
+GITHUB_TOKEN = _secrets.get("github_token") or os.environ.get("GITHUB_TOKEN", "")
 
 # ── 信源健康追踪 ──
 
@@ -49,7 +52,6 @@ def _load_health() -> dict:
 def _save_health(health: dict):
     """写入信源健康记录"""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    from . import atomic_write
     atomic_write(SOURCE_HEALTH_PATH, health, indent=2)
 
 
@@ -334,7 +336,6 @@ async def fetch_all() -> list[dict]:
     _save_health(health)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    from . import atomic_write
     atomic_write(RAW_ITEMS_PATH, results, indent=2)
 
     # Write per-source fetch status for config UI
@@ -350,7 +351,6 @@ async def fetch_all() -> list[dict]:
             "error": r["error"],
             "fetch_time": r.get("fetch_time", ""),
         }
-    from . import atomic_write
     atomic_write(DATA_DIR / "fetch_status.json", fetch_status, indent=2)
 
     success = sum(1 for r in results if r["error"] is None)
