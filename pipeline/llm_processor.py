@@ -289,8 +289,8 @@ def run():
     result = process(items, config)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(ENHANCED_ITEMS_PATH, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
+    from . import atomic_write
+    atomic_write(ENHANCED_ITEMS_PATH, result, indent=2)
 
 
 if __name__ == "__main__":

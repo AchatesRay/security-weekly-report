@@ -7,6 +7,7 @@ DATA_DIR = Path("data")
 CONFIG_PATH = Path("config/settings.json")
 ENHANCED_ITEMS_PATH = DATA_DIR / "enhanced_items.json"
 TRANSLATED_ITEMS_PATH = DATA_DIR / "translated_items.json"
+TRANSLATION_STATUS_PATH = DATA_DIR / "translation_status.json"
 
 _cache: dict[str, str] = {}
 
@@ -33,13 +34,10 @@ TRANSLATE_TIMEOUT = _translate_cfg.get("timeout", 8)
 
 
 def _get_tencent_creds() -> tuple[str, str]:
-    """从环境变量或 config_settings.json 读取腾讯云密钥"""
-    sid = os.environ.get("TENCENT_SECRET_ID")
-    key = os.environ.get("TENCENT_SECRET_KEY")
-    if sid and key:
-        return sid, key
-    cfg = _load_translate_config()
-    return cfg.get("tencent_secret_id", ""), cfg.get("tencent_secret_key", "")
+    """从环境变量读取腾讯云翻译密钥（CLAUDEMD 标准 + 旧名兼容）"""
+    sid = os.environ.get("TMT_SECRET_ID") or os.environ.get("TENCENT_SECRET_ID")
+    key = os.environ.get("TMT_SECRET_KEY") or os.environ.get("TENCENT_SECRET_KEY")
+    return sid or "", key or ""
 
 
 def _call_free_translate(text: str) -> str | None:
@@ -55,11 +53,10 @@ def _call_free_translate(text: str) -> str | None:
 
 
 def _call_tencent_translate(text: str) -> str | None:
-    """腾讯云翻译（TMT）"""
+    """腾讯云翻译（TMT），失败返回 None"""
     secret_id, secret_key = _get_tencent_creds()
     if not secret_id or not secret_key:
-        # 回退到免费翻译
-        return _call_free_translate(text)
+        return None
     try:
         from tencentcloud.common import credential
         from tencentcloud.common.profile.client_profile import ClientProfile
@@ -112,38 +109,28 @@ def translate_all() -> list[dict]:
     other_items = [i for i in items if i.get("language") != "en"]
     total = len(en_items)
     print(f"[TRANSLATOR] 需翻译: {total} 条英文内容")
-    print(f"[TRANSLATOR] 需检查 AI 摘要: {len(items)} 条")
 
     from datetime import datetime as dt
     start = dt.now()
     translated_count = 0
     ai_translated = 0
-    consecutive_failures = 0
 
     for idx, item in enumerate(en_items):
         title = item.get("title", "")
         summary = item.get("original_summary") or item.get("summary", "")
 
-        # 连续失败 5 次则跳过后续（被限流）
-        if consecutive_failures < 5:
-            item["title_zh"] = translate_text(title)
-            if len(summary) > 500:
-                item["summary_zh"] = translate_text(summary[:500])
-            else:
-                item["summary_zh"] = translate_text(summary)
-
-            if item["title_zh"] != title:
-                translated_count += 1
-                consecutive_failures = 0
-            else:
-                consecutive_failures += 1
+        item["title_zh"] = translate_text(title)
+        if len(summary) > 500:
+            item["summary_zh"] = translate_text(summary[:500])
         else:
-            item["title_zh"] = title
+            item["summary_zh"] = translate_text(summary)
+
+        if item["title_zh"] != title:
+            translated_count += 1
 
         if (idx + 1) % 10 == 0:
             elapsed = (dt.now() - start).total_seconds()
-            print(f"  [TRANSLATOR] 进度: {idx+1}/{total} ({elapsed:.0f}s)"
-                  f"{' [跳过剩余]' if consecutive_failures >= 5 else ''}")
+            print(f"  [TRANSLATOR] 进度: {idx+1}/{total} ({elapsed:.0f}s)")
 
         time.sleep(0.5)
 
@@ -165,14 +152,34 @@ def translate_all() -> list[dict]:
     print(f"[TRANSLATOR] 翻译完成: {total} 条, 其中成功 {translated_count} 条, "
           f"AI 摘要翻译 {ai_translated} 条, 耗时 {elapsed:.0f}s")
 
-    with open(TRANSLATED_ITEMS_PATH, "w", encoding="utf-8") as f:
-        json.dump(all_items, f, ensure_ascii=False, indent=2)
+    from . import atomic_write
+    atomic_write(TRANSLATED_ITEMS_PATH, all_items, indent=2)
 
     return all_items
 
 
 def run():
+    """翻译入口：检查腾讯云翻译可用性，不可用时跳过并记录状态"""
+    secret_id, secret_key = _get_tencent_creds()
+    available = bool(secret_id and secret_key)
+
+    if not available:
+        print("[TRANSLATOR] 腾讯云翻译未配置（需设置 TMT_SECRET_ID/TMT_SECRET_KEY）")
+        print("[TRANSLATOR] 跳过翻译阶段，原文保留")
+        # 直接将增强数据透传为翻译数据
+        with open(ENHANCED_ITEMS_PATH, "r", encoding="utf-8") as f:
+            items = json.load(f)
+        from . import atomic_write
+        atomic_write(TRANSLATED_ITEMS_PATH, items, indent=2)
+        atomic_write(TRANSLATION_STATUS_PATH, {
+            "status": "unavailable",
+            "message": "腾讯云翻译API未配置，部分内容显示为英文原文",
+        })
+        return
+
+    # 翻译可用，执行翻译
     translate_all()
+    atomic_write(TRANSLATION_STATUS_PATH, {"status": "ok"})
 
 
 if __name__ == "__main__":

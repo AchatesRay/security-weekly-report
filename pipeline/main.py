@@ -20,15 +20,24 @@ DATA_DIR = Path("data")
 def ensure_dirs():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# 管道错误收集器
+_pipeline_errors: list[str] = []
+
 def run_step(step_num: int, total: int, name: str, fn, skip_ok: bool = False):
     """执行单个管道步骤，失败时记错但不阻断后续流程"""
-    print(f"[{step_num}/{total}] 正在{name}...")
+    t0 = datetime.now()
+    print(f"[{step_num}/{total}] {datetime.now().strftime('%H:%M:%S')} 正在{name}...")
     try:
         fn()
+        elapsed = (datetime.now() - t0).total_seconds()
+        print(f"[{step_num}/{total}] {name}完成 ({elapsed:.1f}s)")
         print()
         return True
     except Exception as e:
-        print(f"  [ERROR] {name}失败: {e}")
+        elapsed = (datetime.now() - t0).total_seconds()
+        msg = f"步骤{step_num}「{name}」失败: {e} ({elapsed:.1f}s)"
+        print(f"  [ERROR] {msg}")
+        _pipeline_errors.append(msg)
         if skip_ok:
             print(f"  [WARN] 跳过该步骤，继续后续流程")
             print()
@@ -39,6 +48,8 @@ def run_step(step_num: int, total: int, name: str, fn, skip_ok: bool = False):
 def run_pipeline(skip_fetch: bool = False):
     """执行完整管道"""
     ensure_dirs()
+    global _pipeline_errors
+    _pipeline_errors = []
     start = datetime.now()
     print("=== 网络安全周报系统 ===")
     print(f"开始时间: {start.isoformat()}")
@@ -103,10 +114,95 @@ def run_pipeline(skip_fetch: bool = False):
     except Exception as e:
         print(f"  [ERROR] 生成报告失败: {e}")
 
+    # ── 评分质量周对比 ──
+    _print_scoring_comparison()
+
     elapsed = (datetime.now() - start).total_seconds()
     print(f"=== 完成! 耗时 {elapsed:.1f} 秒 ===")
+    if _pipeline_errors:
+        print(f"\n⚠️  管道错误摘要 ({len(_pipeline_errors)} 个):")
+        for err in _pipeline_errors:
+            print(f"  • {err}")
+        print()
     if report_path:
         print(f"报告: {report_path}")
+
+
+def _print_scoring_comparison():
+    """对比本轮与上轮的评分统计，标注异常偏离"""
+    stats_path = DATA_DIR / "scoring_stats.json"
+    if not stats_path.exists():
+        return
+
+    try:
+        import json
+        with open(stats_path, encoding="utf-8") as f:
+            cur = json.load(f)
+    except Exception:
+        return
+
+    # 从存档找上一轮的统计
+    prev = None
+    archive_dir = DATA_DIR / "scoring_history"
+    if archive_dir.exists():
+        archives = sorted(archive_dir.glob("stats_*.json"), reverse=True)
+        if archives:
+            try:
+                with open(archives[0], encoding="utf-8") as f:
+                    prev = json.load(f)
+            except Exception:
+                pass
+
+    # 存档本轮数据
+    from datetime import datetime
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    week_str = datetime.now().strftime("%Y%m%d")
+    archive_path = archive_dir / f"stats_{week_str}.json"
+    from . import atomic_write
+    atomic_write(archive_path, cur, indent=2)
+
+    if not prev:
+        print(f"[MAIN] 评分质量: accepted={cur['total_accepted']}, "
+              f"review={cur['total_review']}, discarded={cur['total_discarded']} "
+              f"（首次运行，无历史对比）")
+        return
+
+    # 对比决策分布
+    cur_total = cur["total_accepted"] + cur["total_review"] + cur["total_discarded"]
+    prev_total = prev["total_accepted"] + prev["total_review"] + prev["total_discarded"]
+
+    changes = []
+    for key, label in [("total_accepted", "高置信"), ("total_review", "待复核"), ("total_discarded", "丢弃")]:
+        cur_pct = cur[key] / cur_total * 100 if cur_total else 0
+        prev_pct = prev[key] / prev_total * 100 if prev_total else 0
+        diff = cur_pct - prev_pct
+        if abs(diff) >= 5:
+            direction = "↑" if diff > 0 else "↓"
+            changes.append(f"  {label}: {prev[key]}→{cur[key]} ({direction}{abs(diff):.0f}%)")
+
+    if changes:
+        print(f"[MAIN] ⚠️ 评分分布周变化（偏离≥5%）：")
+        for c in changes:
+            print(c)
+    else:
+        print(f"[MAIN] 评分分布稳定（最大偏离<5%）")
+
+    # 分数段对比
+    cur_buckets = cur.get("score_buckets", [])
+    prev_buckets = prev.get("score_buckets", [])
+    if cur_buckets and prev_buckets and len(cur_buckets) == len(prev_buckets):
+        bucket_diffs = []
+        for i in range(len(cur_buckets)):
+            diff = cur_buckets[i] - prev_buckets[i]
+            if abs(diff) >= 5:
+                lo = i * 10
+                hi = min(i * 10 + 9, 100)
+                direction = "↑" if diff > 0 else "↓"
+                bucket_diffs.append(f"    {lo:3d}-{hi:3d}: {prev_buckets[i]}→{cur_buckets[i]} ({direction}{abs(diff)})")
+        if bucket_diffs:
+            print(f"  [MAIN] 分数段周变化（差异≥5条）：")
+            for d in bucket_diffs:
+                print(d)
 
 
 def main():

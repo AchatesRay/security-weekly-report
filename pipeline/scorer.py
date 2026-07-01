@@ -161,6 +161,11 @@ class SecurityScorer:
 
         return True
 
+    def _should_score(self, kw_text: str) -> bool:
+        """检查关键词是否实际贡献分数（standalone_score=false 不计分，仅用于分类）"""
+        rule = self.ambiguity_lookup.get(kw_text.lower())
+        return not (rule and rule.get("standalone_score") is False)
+
     # ── 负向过滤 ──
 
     def _has_negative_filter(self, text: str, source: str = "") -> bool:
@@ -321,20 +326,23 @@ class SecurityScorer:
         medium_matched = filter_ambiguity(medium_matched)
         weak_matched = filter_ambiguity(weak_matched)
 
-        # 4. 计算总分
+        # 4. 计算总分（skip standalone_score=false keywords）
         total = 0.0
-        has_strong = len(strong_matched) > 0
+        has_strong = any(self._should_score(k) for k in strong_matched)
 
         for kw_text, info in strong_matched.items():
-            total += self.strong_weight * info["mult"]
+            if self._should_score(kw_text):
+                total += self.strong_weight * info["mult"]
 
         medium_requires_context = self.config["medium"].get("requires_strong_or_medium", False)
         if not medium_requires_context or has_strong:
             for kw_text, info in medium_matched.items():
-                total += self.medium_weight * info["mult"]
+                if self._should_score(kw_text):
+                    total += self.medium_weight * info["mult"]
 
         for kw_text, info in weak_matched.items():
-            total += self.weak_weight * info["mult"]
+            if self._should_score(kw_text):
+                total += self.weak_weight * info["mult"]
 
         # 5. 负向过滤
         source = item.get("source") or ""
@@ -427,7 +435,7 @@ class SecurityScorer:
                 if not kw_text.strip():
                     continue
                 if kw_text.lower() in text_lower:
-                    if self._check_ambiguity(kw_text, seg_text):
+                    if self._check_ambiguity(kw_text, seg_text) and self._should_score(kw_text):
                         total += self.strong_weight * mult
                         has_strong = True
 
@@ -436,14 +444,14 @@ class SecurityScorer:
                     if not kw_text.strip():
                         continue
                     if kw_text.lower() in text_lower:
-                        if self._check_ambiguity(kw_text, seg_text):
+                        if self._check_ambiguity(kw_text, seg_text) and self._should_score(kw_text):
                             total += self.medium_weight * mult
 
             for kw_text in self.weak_kw_list:
                 if not kw_text.strip():
                     continue
                 if kw_text.lower() in text_lower:
-                    if self._check_ambiguity(kw_text, seg_text):
+                    if self._check_ambiguity(kw_text, seg_text) and self._should_score(kw_text):
                         total += self.weak_weight * mult
 
         all_text = f"{title} {summary}"

@@ -103,8 +103,8 @@ def run():
             print(f"  [FULLTEXT] 进度: {idx+1}/{total}")
 
     # 写回 parsed_items.json（后续步骤从中读取更新后的数据）
-    with open(PARSED_ITEMS_PATH, "w", encoding="utf-8") as f:
-        json.dump(items, f, ensure_ascii=False, indent=2)
+    from . import atomic_write
+    atomic_write(PARSED_ITEMS_PATH, items, indent=2)
 
     print(f"[FULLTEXT] 全文提取完成: {fetched_count}/{total} 条获取到正文")
 

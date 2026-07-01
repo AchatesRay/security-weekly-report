@@ -1,10 +1,11 @@
 import json
+import os
 import shutil
 import yaml
 from pathlib import Path
 from datetime import datetime, timedelta
 import re
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 DATA_DIR = Path("data")
 REPORTS_DIR = Path("reports")
@@ -15,6 +16,7 @@ TRANSLATED_ITEMS_PATH = DATA_DIR / "translated_items.json"
 ENHANCED_ITEMS_PATH = DATA_DIR / "enhanced_items.json"
 FETCH_STATUS_PATH = DATA_DIR / "fetch_status.json"
 SOURCE_CONFIG_PATH = Path("config/source_config.yaml")
+SOURCE_HEALTH_PATH = DATA_DIR / "source_health.json"
 LATEST_REPORT = REPORTS_DIR / "Security_Reports.html"
 
 # 信源组别 → 告警严重级别
@@ -107,8 +109,8 @@ def build_json_items(items: list[dict]) -> list[dict]:
 def save_weekly_data(items: list[dict], week_str: str):
     """将本周数据保存为独立 JSON 文件"""
     path = REPORTS_DIR / f"data_{week_str}.json"
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(items, f, ensure_ascii=False)
+    from . import atomic_write
+    atomic_write(path, items)
 
 
 def update_manifest(week_str: str, date_range: str, total_count: int):
@@ -128,8 +130,8 @@ def update_manifest(week_str: str, date_range: str, total_count: int):
     })
     manifest.sort(key=lambda x: x["week"], reverse=True)
 
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    from . import atomic_write
+    atomic_write(manifest_path, manifest, indent=2)
 
 
 def rebuild_manifest_from_archives():
@@ -180,6 +182,15 @@ def generate_source_alerts() -> list[dict]:
         except Exception:
             pass
 
+    # 读取信源健康记录
+    source_health = {}
+    if SOURCE_HEALTH_PATH.exists():
+        try:
+            with open(SOURCE_HEALTH_PATH, encoding="utf-8") as f:
+                source_health = json.load(f)
+        except Exception:
+            pass
+
     # 读取条目的 source_name 计数
     parsed_items_path = DATA_DIR / "parsed_items.json"
     source_item_counts = {}
@@ -200,8 +211,26 @@ def generate_source_alerts() -> list[dict]:
         status = fetch_status.get(name, {})
         fetch_ok = status.get("status") == "success"
         item_count = source_item_counts.get(name, 0)
+        health = source_health.get(name, {})
+        cons_fails = health.get("consecutive_failures", 0)
 
-        if not fetch_ok and item_count == 0:
+        if status.get("status") == "auto_disabled":
+            alerts.append({
+                "source_name": name,
+                "group": group,
+                "severity": "high",
+                "reason": f"自动禁用（连续{cons_fails}次失败）",
+                "fetch_error": status.get("error"),
+            })
+        elif cons_fails >= 3 and not fetch_ok and item_count == 0:
+            alerts.append({
+                "source_name": name,
+                "group": group,
+                "severity": "high" if cons_fails >= 5 else "medium",
+                "reason": f"连续{cons_fails}次抓取失败",
+                "fetch_error": status.get("error"),
+            })
+        elif not fetch_ok and item_count == 0:
             alerts.append({
                 "source_name": name,
                 "group": group,
@@ -218,7 +247,6 @@ def generate_source_alerts() -> list[dict]:
                 "fetch_error": None,
             })
         elif name not in fetch_status and item_count == 0:
-            # 抓取未执行（可能被跳过）
             alerts.append({
                 "source_name": name,
                 "group": group,
@@ -264,6 +292,18 @@ def generate_report():
     # 信源缺失告警
     source_alerts = generate_source_alerts()
 
+    # 翻译状态（用于模板展示提示横幅）
+    translation_warning = ""
+    translation_status_path = DATA_DIR / "translation_status.json"
+    if translation_status_path.exists():
+        try:
+            with open(translation_status_path, encoding="utf-8") as f:
+                ts = json.load(f)
+            if ts.get("status") == "unavailable":
+                translation_warning = ts.get("message", "翻译API不可用")
+        except Exception:
+            pass
+
     # 保存当前周数据 + 更新清单
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     save_weekly_data(json_items, week_str)
@@ -276,7 +316,7 @@ def generate_report():
         with open(manifest_path, encoding="utf-8") as f:
             manifest = json.load(f)
 
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("weekly_report.html")
 
     # 提取分类名（去掉前缀）和数量，用于三栏模板的侧边栏
@@ -298,6 +338,7 @@ def generate_report():
         json_items=json_items,
         manifest=manifest,
         source_alerts=source_alerts,
+        translation_warning=translation_warning,
         cat_names=cat_names,
         cat_counts=cat_counts,
     )
@@ -305,9 +346,15 @@ def generate_report():
     # 归档旧 HTML
     archive_previous_report()
 
-    # 写新报告
-    with open(LATEST_REPORT, "w", encoding="utf-8") as f:
-        f.write(html)
+    # 写新报告（原子写入，避免中断导致 HTML 损坏）
+    import tempfile
+    tmp = LATEST_REPORT.with_suffix(".tmp")
+    try:
+        tmp.write_text(html, encoding="utf-8")
+        os.replace(str(tmp), str(LATEST_REPORT))
+    finally:
+        if tmp.exists():
+            tmp.unlink()
 
     print(f"[REPORT] 周报生成完成: {LATEST_REPORT}")
     print(f"[REPORT] 共 {total_count} 条")
