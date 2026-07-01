@@ -94,6 +94,13 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .source-alerts-clear { display:block; width:100%; text-align:center; padding:4px; font-size:10px; color:var(--text-muted); cursor:pointer; border-radius:4px; }
 .source-alerts-clear:hover { background:var(--sidebar-hover); }
 
+.translation-notice {
+  display:flex; align-items:center; gap:8px;
+  padding:8px 12px; margin:4px 8px 0; border-radius:var(--radius-sm);
+  font-size:11px; line-height:1.4;
+  background:rgba(239,68,68,0.08); color:#dc2626;
+}
+
 /* List */
 .list-panel { width:340px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; height:100vh; }
 .list-header { padding:18px 20px 14px; border-bottom:1px solid var(--border-light); flex-shrink:0; }
@@ -274,6 +281,12 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
       </div>
       {% endfor %}
       <div class="source-alerts-clear" onclick="document.getElementById('sourceAlertsBar').style.display='none';document.getElementById('sourceAlertsDetail').style.display='none';">忽略</div>
+    </div>
+    {% endif %}
+    {% if translation_warning %}
+    <div class="translation-notice">
+      <span>&#x26A0;</span>
+      <span>{{ translation_warning }}</span>
     </div>
     {% endif %}
     <div class="sidebar-footer" id="sidebarFooter">{{ total_count }} 条 · {{ groups | length }} 个分类</div>

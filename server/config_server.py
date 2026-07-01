@@ -246,6 +246,41 @@ def read_body(handler) -> str:
     return handler.rfile.read(length).decode("utf-8")
 
 
+# ── 认证配置（从环境变量读取，留空则不启用）──
+_CONFIG_USER = os.environ.get("CONFIG_USERNAME", "")
+_CONFIG_PASS = os.environ.get("CONFIG_PASSWORD", "")
+_AUTH_ENABLED = bool(_CONFIG_USER and _CONFIG_PASS)
+
+
+def _check_auth(handler) -> bool:
+    """验证 HTTP Basic Auth，未通过时返回 401"""
+    if not _AUTH_ENABLED:
+        return True
+    auth = handler.headers.get("Authorization", "")
+    if not auth.startswith("Basic "):
+        handler.send_response(401)
+        handler.send_header("WWW-Authenticate", 'Basic realm="Config Server"')
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
+        handler.end_headers()
+        handler.wfile.write('{"ok":false,"error":"认证失败"}'.encode("utf-8"))
+        return False
+    try:
+        import base64
+        encoded = auth[len("Basic "):]
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        user, _, pwd = decoded.partition(":")
+        if user == _CONFIG_USER and pwd == _CONFIG_PASS:
+            return True
+    except Exception:
+        pass
+    handler.send_response(401)
+    handler.send_header("WWW-Authenticate", 'Basic realm="Config Server"')
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.end_headers()
+    handler.wfile.write('{"ok":false,"error":"认证失败"}'.encode("utf-8"))
+    return False
+
+
 # ── Request Handler ──
 
 class ConfigHandler(http.server.SimpleHTTPRequestHandler):
@@ -257,12 +292,14 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def _safe_call(self, fn):
         """执行 API 方法，捕获所有异常避免服务器崩溃"""
         try:
+            if not _check_auth(self):
+                return
             fn()
         except OSError:
             pass  # 客户端断开连接
@@ -554,6 +591,12 @@ def main():
 
     _init_paths(args.project_dir)
     port = args.port
+
+    if _AUTH_ENABLED:
+        print(f"[CONFIG] 认证已启用（用户: {_CONFIG_USER}）")
+    else:
+        print("[CONFIG] 警告: 认证未启用，请设置 CONFIG_USERNAME/CONFIG_PASSWORD 环境变量")
+        print("[CONFIG] 当前配置: 任何可访问此端口的人均可完全控制配置")
 
     server = http.server.HTTPServer(("0.0.0.0", port), ConfigHandler)
     print(f"[CONFIG] 管理后台: http://localhost:{port}/config.html")

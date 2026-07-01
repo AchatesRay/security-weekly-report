@@ -68,8 +68,10 @@ data/                     中间数据（gitignored）
 
 | 变量 | 用途 |
 |------|------|
-| `TMT_SECRET_ID` | 腾讯云翻译 API 密钥 ID |
-| `TMT_SECRET_KEY` | 腾讯云翻译 API 密钥 Key |
+| `TMT_SECRET_ID` | 腾讯云翻译 API 密钥 ID（旧名 `TENCENT_SECRET_ID` 兼容） |
+| `TMT_SECRET_KEY` | 腾讯云翻译 API 密钥 Key（旧名 `TENCENT_SECRET_KEY` 兼容） |
+| `CONFIG_USERNAME` | 管理后台 HTTP Basic Auth 用户名（留空则不启用认证） |
+| `CONFIG_PASSWORD` | 管理后台 HTTP Basic Auth 密码（留空则不启用认证） |
 | `SCHOLAR_API_KEY` | Semantic Scholar API 密钥（可选，无 key 有频率限制） |
 | `GITHUB_TOKEN` | GitHub Personal Access Token（可选，无 token 有频率限制） |
 

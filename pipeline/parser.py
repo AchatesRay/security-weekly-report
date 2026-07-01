@@ -359,8 +359,8 @@ def parse_all() -> list[dict]:
     print(f"[PARSER] 解析完成: {len(all_items)} 条")
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(PARSED_ITEMS_PATH, "w", encoding="utf-8") as f:
-        json.dump(all_items, f, ensure_ascii=False, indent=2)
+    from . import atomic_write
+    atomic_write(PARSED_ITEMS_PATH, all_items, indent=2)
 
     return all_items
 

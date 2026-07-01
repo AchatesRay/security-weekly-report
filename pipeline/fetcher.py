@@ -10,6 +10,9 @@ import os
 CONFIG_PATH = Path("config/source_config.yaml")
 DATA_DIR = Path("data")
 RAW_ITEMS_PATH = DATA_DIR / "raw_items.json"
+SOURCE_HEALTH_PATH = DATA_DIR / "source_health.json"
+# 连续失败上限：达到后自动禁用信源
+MAX_CONSECUTIVE_FAILURES = 5
 
 # User-Agents to rotate between for bypassing RSS blocks
 USER_AGENTS = [
@@ -29,6 +32,60 @@ RSS_READER_UAS = [
 # API Keys（从环境变量读取）
 SCHOLAR_API_KEY = os.environ.get("SCHOLAR_API_KEY", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+
+# ── 信源健康追踪 ──
+
+def _load_health() -> dict:
+    """读取信源健康记录"""
+    if SOURCE_HEALTH_PATH.exists():
+        try:
+            with open(SOURCE_HEALTH_PATH, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_health(health: dict):
+    """写入信源健康记录"""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    from . import atomic_write
+    atomic_write(SOURCE_HEALTH_PATH, health, indent=2)
+
+
+def _get_auto_disabled_sources(health: dict) -> set[str]:
+    """返回连续 MAX_CONSECUTIVE_FAILURES 次失败的信源名称集合"""
+    disabled = set()
+    for name, h in health.items():
+        if h.get("consecutive_failures", 0) >= MAX_CONSECUTIVE_FAILURES and not h.get("recovered", False):
+            disabled.add(name)
+    return disabled
+
+
+def _update_health(health: dict, name: str, success: bool):
+    """更新单个信源的健康状态"""
+    now = datetime.now().isoformat()
+    if name not in health:
+        health[name] = {
+            "consecutive_failures": 0,
+            "total_fetches": 0,
+            "total_errors": 0,
+            "last_success": "",
+            "last_error": "",
+        }
+    h = health[name]
+    h["total_fetches"] = h.get("total_fetches", 0) + 1
+    if success:
+        h["consecutive_failures"] = 0
+        h["last_success"] = now
+        # 恢复标记：此前被自动禁用但现已恢复
+        if h.get("consecutive_failures", 0) == 0:
+            h["recovered"] = True
+    else:
+        h["consecutive_failures"] = h.get("consecutive_failures", 0) + 1
+        h["total_errors"] = h.get("total_errors", 0) + 1
+        h["last_error"] = now
+        h["recovered"] = False
 
 
 async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
@@ -207,12 +264,27 @@ async def _fetch_secrss(client: httpx.AsyncClient, source: dict) -> dict:
 
 
 async def fetch_all() -> list[dict]:
-    """抓取所有启用的信源"""
+    """抓取所有启用的信源（自动跳过健康状态异常的信源）"""
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    sources = [s for s in config["sources"] if s.get("enabled", True)]
-    print(f"[FETCHER] 开始抓取 {len(sources)} 个信源...")
+    all_sources = [s for s in config["sources"] if s.get("enabled", True)]
+
+    # 加载健康记录，自动过滤异常信源
+    health = _load_health()
+    auto_disabled = _get_auto_disabled_sources(health)
+    sources = [s for s in all_sources if s["name"] not in auto_disabled]
+    skipped = [s for s in all_sources if s["name"] in auto_disabled]
+
+    if skipped:
+        print(f"[FETCHER] 自动跳过 {len(skipped)} 个异常信源（连续{MAX_CONSECUTIVE_FAILURES}+次失败）:")
+        for s in skipped:
+            h = health.get(s["name"], {})
+            fails = h.get("consecutive_failures", 0)
+            last_err = h.get("last_error", "")[:19] if h.get("last_error") else ""
+            print(f"  ⛔ {s['name']} ({fails}次连续失败, 最后失败: {last_err})")
+
+    print(f"[FETCHER] 开始抓取 {len(sources)} 个信源（跳过 {len(skipped)} 个异常信源）...")
 
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
@@ -238,9 +310,32 @@ async def fetch_all() -> list[dict]:
             "error": str(r),
         } for r in results]
 
+    # 追加自动跳过信源的记录（保留在结果内供下游查看）
+    for s in skipped:
+        h = health.get(s["name"], {})
+        fail_count = h.get("consecutive_failures", 0)
+        results.append({
+            "source_name": s["name"],
+            "source_level": s["source_level"],
+            "region": s["region"],
+            "language": s["language"],
+            "url": s["url"],
+            "type": s.get("type", "rss"),
+            "xml_text": "",
+            "fetch_time": datetime.now().isoformat(),
+            "error": f"auto_disabled ({fail_count}次连续失败)",
+        })
+
+    # 更新健康记录
+    for r in results:
+        name = r.get("source_name", "")
+        if name:
+            _update_health(health, name, r["error"] is None)
+    _save_health(health)
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(RAW_ITEMS_PATH, "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
+    from . import atomic_write
+    atomic_write(RAW_ITEMS_PATH, results, indent=2)
 
     # Write per-source fetch status for config UI
     fetch_status = {}
@@ -248,16 +343,22 @@ async def fetch_all() -> list[dict]:
         name = r.get("source_name", "")
         if not name:
             continue
+        error = r["error"]
+        is_auto_disabled = isinstance(error, str) and error.startswith("auto_disabled")
         fetch_status[name] = {
-            "status": "success" if r["error"] is None else "error",
+            "status": "success" if error is None else ("auto_disabled" if is_auto_disabled else "error"),
             "error": r["error"],
             "fetch_time": r.get("fetch_time", ""),
         }
-    with open(DATA_DIR / "fetch_status.json", "w", encoding="utf-8") as f:
-        json.dump(fetch_status, f, ensure_ascii=False, indent=2)
+    from . import atomic_write
+    atomic_write(DATA_DIR / "fetch_status.json", fetch_status, indent=2)
 
     success = sum(1 for r in results if r["error"] is None)
-    print(f"[FETCHER] 完成: {success}/{len(results)} 成功")
+    auto_skipped = sum(1 for r in results if isinstance(r.get("error"), str) and r["error"].startswith("auto_disabled"))
+    msg = f"[FETCHER] 完成: {success}/{len(results)} 成功"
+    if auto_skipped:
+        msg += f" ({auto_skipped} 个自动跳过)"
+    print(msg)
     return results
 
 

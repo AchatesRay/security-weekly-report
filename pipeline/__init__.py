@@ -15,6 +15,36 @@
 Web 管理:  app.py server [port]
 """
 
+import json
+import os
+import tempfile
+from pathlib import Path
+from typing import Any
+
+
+def atomic_write(path: str | Path, data: Any, **json_kwargs):
+    """原子写入 JSON 文件：先写临时文件，再 rename 覆盖目标路径。
+
+    管道各阶段共享 parsed_items.json 作为中间数据，普通写入若在
+    写入中途崩溃会导致 JSON 截断/损坏。本函数确保写入要么完全
+    成功，要么完全不改变目标文件。
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, **json_kwargs)
+        os.replace(tmp, path)
+    except Exception:
+        # 清理临时文件
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 from .fetcher import fetch_all
 from .parser import parse_all
 from .keyword_filter import run_stage1, run_stage2, init_default_keywords
@@ -26,6 +56,7 @@ from .report_generator import generate_report
 from .main import run_pipeline
 
 __all__ = [
+    "atomic_write",
     "fetch_all",
     "parse_all",
     "init_default_keywords", "run_stage1", "run_stage2",

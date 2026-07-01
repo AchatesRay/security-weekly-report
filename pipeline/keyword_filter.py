@@ -105,8 +105,8 @@ def run_stage1():
         else:
             kept.append(item)
 
-    with open(PARSED_ITEMS_PATH, "w", encoding="utf-8") as f:
-        json.dump(kept, f, ensure_ascii=False, indent=2)
+    from . import atomic_write
+    atomic_write(PARSED_ITEMS_PATH, kept, indent=2)
 
     print(f"[KEYWORD] 阶段1过滤: {total_before} → {len(kept)} 条保留"
           f" ({len(dropped)} 条得分<{scorer.thresholds.get('stage1_drop_below', 30)} 提前丢弃)")
@@ -150,21 +150,55 @@ def run_stage2():
     # 写回：保留 accepted + review（review 进入人工审核池）
     final = accepted + review
 
-    with open(PARSED_ITEMS_PATH, "w", encoding="utf-8") as f:
-        json.dump(final, f, ensure_ascii=False, indent=2)
+    from . import atomic_write
+    atomic_write(PARSED_ITEMS_PATH, final, indent=2)
 
     print(f"[KEYWORD] 阶段2过滤: {total_before} → {len(final)} 条保留"
           f" ({len(accepted)} 高置信, {len(review)} 待复核, {len(discarded)} 丢弃)")
 
-    # 输出分类统计
-    cat_stats = {}
+    # ── 评分质量仪表盘 ──
+    all_scored = accepted + review + discarded
+
+    # 分数段分布
+    buckets = [0] * 11  # 0-9, 10-19, ..., 90-100
+    for item in all_scored:
+        s = item.get("confidence_score", 0)
+        idx = min(s // 10, 10)
+        buckets[idx] += 1
+
+    print(f"[KEYWORD] 评分分布:")
+    for i in range(11):
+        lo, hi = i * 10, min(i * 10 + 9, 100)
+        count = buckets[i]
+        if count > 0 or i in (0, 5, 8, 10):
+            bar = "█" * min(count, 20) + ("…" if count > 20 else "")
+            print(f"  {lo:3d}-{hi:3d}: {count:3d} {bar}")
+
+    # 分发决策分布
+    print(f"[KEYWORD] 决策分布: accepted={len(accepted)}, "
+          f"review={len(review)}, discarded={len(discarded)}")
+
+    # 分类分布（使用 item["category"]）
+    cat_dist = {}
     for item in final:
-        for cat in item.get("categories", []):
-            cat_stats[cat] = cat_stats.get(cat, 0) + 1
-    if cat_stats:
+        cat = item.get("category", "未分类")
+        cat_dist[cat] = cat_dist.get(cat, 0) + 1
+    if cat_dist:
         print(f"[KEYWORD] 分类分布:")
-        for cat, count in sorted(cat_stats.items(), key=lambda x: -x[1]):
+        for cat, count in sorted(cat_dist.items(), key=lambda x: -x[1]):
             print(f"  {cat}: {count}")
+
+    # 保存本轮统计数据供后续对比
+    stats = {
+        "total_input": total_before,
+        "total_accepted": len(accepted),
+        "total_review": len(review),
+        "total_discarded": len(discarded),
+        "score_buckets": buckets,
+        "category_distribution": cat_dist,
+    }
+    from . import atomic_write
+    atomic_write(DATA_DIR / "scoring_stats.json", stats, indent=2)
 
 
 if __name__ == "__main__":
