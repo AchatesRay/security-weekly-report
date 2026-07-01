@@ -225,12 +225,12 @@ sources:
   enabled: true
 - name: Fortinet Blog
   group: 安全厂商
-  url: https://www.fortinet.com/blog/feed/
+  url: https://feeds.fortinet.com/fortinet/blogs
   type: rss
   language: en
   source_level: S
   region: global
-  enabled: false
+  enabled: true
 - name: FreeBuf
   group: 国内信源
   url: https://www.freebuf.com/feed
@@ -522,12 +522,12 @@ sources:
   enabled: false
 - name: Redwood Research
   group: AI厂商
-  url: https://www.redwoodresearch.org/feed.xml
+  url: https://blog.redwoodresearch.org/feed
   type: rss
   language: en
   source_level: S
   region: global
-  enabled: false
+  enabled: true
 - name: Reuters Cybersecurity
   group: 安全媒体
   url: https://www.reuters.com/feed/
@@ -804,12 +804,12 @@ sources:
   enabled: true
 - name: Sonatype Blog
   group: 开发者社区
-  url: https://blog.sonatype.com/feed
+  url: https://www.sonatype.com/blog/rss.xml
   type: rss
   language: en
   source_level: A
   region: global
-  enabled: false
+  enabled: true
 - name: HackerOne Hacktivity
   group: 开发者社区
   url: https://hackerone.com/hacktivity.rss
@@ -836,12 +836,18 @@ sources:
   enabled: true
 - name: Huntress Blog
   group: 安全厂商
-  url: https://www.huntress.com/blog/feed
-  type: rss
+  url: https://www.huntress.com/blog
+  type: scraper
   language: en
   source_level: A
   region: global
   enabled: false
+  scraper_config:
+    article_selector: '[class*="card"]'
+    title_selector: h2 a, h3 a
+    summary_selector: p
+    date_selector: time
+    link_base: https://www.huntress.com
 - name: Praetorian Blog
   group: 安全厂商
   url: https://www.praetorian.com/blog/feed/
