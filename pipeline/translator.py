@@ -3,7 +3,7 @@ import time
 import os
 from pathlib import Path
 
-from . import load_secrets
+from . import atomic_write, load_secrets
 
 DATA_DIR = Path("data")
 CONFIG_PATH = Path("config/settings.json")
@@ -155,7 +155,6 @@ def translate_all() -> list[dict]:
     print(f"[TRANSLATOR] 翻译完成: {total} 条, 其中成功 {translated_count} 条, "
           f"AI 摘要翻译 {ai_translated} 条, 耗时 {elapsed:.0f}s")
 
-    from . import atomic_write
     atomic_write(TRANSLATED_ITEMS_PATH, all_items, indent=2)
 
     return all_items
@@ -172,7 +171,6 @@ def run():
         # 直接将增强数据透传为翻译数据
         with open(ENHANCED_ITEMS_PATH, "r", encoding="utf-8") as f:
             items = json.load(f)
-        from . import atomic_write
         atomic_write(TRANSLATED_ITEMS_PATH, items, indent=2)
         atomic_write(TRANSLATION_STATUS_PATH, {
             "status": "unavailable",
