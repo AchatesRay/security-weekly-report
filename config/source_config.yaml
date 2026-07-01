@@ -882,7 +882,7 @@ sources:
 
 - name: IETF Datatracker
   group: 标准框架
-  url: https://datatracker.ietf.org/api/v1/doc/document/?document_group=draft-ietf&limit=50&order_by=-time&format=json
+  url: https://datatracker.ietf.org/api/v1/doc/document/?limit=50&order_by=-id&format=json
   type: api
   api_platform: ietf
   language: en
