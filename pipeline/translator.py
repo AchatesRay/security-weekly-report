@@ -3,6 +3,8 @@ import time
 import os
 from pathlib import Path
 
+from . import load_secrets
+
 DATA_DIR = Path("data")
 CONFIG_PATH = Path("config/settings.json")
 ENHANCED_ITEMS_PATH = DATA_DIR / "enhanced_items.json"
@@ -34,9 +36,10 @@ TRANSLATE_TIMEOUT = _translate_cfg.get("timeout", 8)
 
 
 def _get_tencent_creds() -> tuple[str, str]:
-    """从环境变量读取腾讯云翻译密钥（CLAUDEMD 标准 + 旧名兼容）"""
-    sid = os.environ.get("TMT_SECRET_ID") or os.environ.get("TENCENT_SECRET_ID")
-    key = os.environ.get("TMT_SECRET_KEY") or os.environ.get("TENCENT_SECRET_KEY")
+    """从 secrets.json 读取腾讯云翻译密钥，兼容环境变量回退"""
+    secrets = load_secrets()
+    sid = secrets.get("tmt_secret_id") or os.environ.get("TMT_SECRET_ID") or os.environ.get("TENCENT_SECRET_ID")
+    key = secrets.get("tmt_secret_key") or os.environ.get("TMT_SECRET_KEY") or os.environ.get("TENCENT_SECRET_KEY")
     return sid or "", key or ""
 
 
