@@ -94,7 +94,39 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
     """抓取单个 RSS 信源，返回 {source_name, url, xml_text, error}"""
     name = source["name"]
     feed_url = source["url"]
+    ssl_verify = source.get("ssl_verify", True)
     print(f"  [FETCH] {name} <- {feed_url}")
+
+    # 对需要跳过 SSL 验证的信源使用独立客户端
+    if not ssl_verify:
+        try:
+            async with httpx.AsyncClient(verify=False, headers=client.headers) as insecure_client:
+                resp = await insecure_client.get(feed_url, timeout=30.0, follow_redirects=True)
+                resp.raise_for_status()
+                if resp.text.strip():
+                    return {
+                        "source_name": name,
+                        "source_level": source["source_level"],
+                        "region": source["region"],
+                        "language": source["language"],
+                        "url": feed_url,
+                        "type": source.get("type", "rss"),
+                        "xml_text": resp.text,
+                        "fetch_time": datetime.now().isoformat(),
+                        "error": None,
+                    }
+        except Exception as e:
+            return {
+                "source_name": name,
+                "source_level": source["source_level"],
+                "region": source["region"],
+                "language": source["language"],
+                "url": feed_url,
+                "type": source.get("type", "rss"),
+                "xml_text": "",
+                "fetch_time": datetime.now().isoformat(),
+                "error": str(e),
+            }
 
     first_ua = client.headers.get("User-Agent", "")
 
