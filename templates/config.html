@@ -240,8 +240,6 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
                 <th style="background:var(--surface)">URL</th>
                 <th style="width:78px;background:var(--surface)">类型</th>
                 <th style="width:64px;background:var(--surface)">语言</th>
-                <th style="width:56px;background:var(--surface)">等级</th>
-                <th style="width:80px;background:var(--surface)">区域</th>
                 <th style="width:12%;background:var(--surface)">分类</th>
                 <th style="width:34px;background:var(--surface)"></th>
               </tr>
@@ -346,6 +344,19 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
     <div class="tab-content" id="tab-scoring">
       <div class="page-title">📊 评分配置</div>
       <div class="page-desc">配置评分引擎的权重、阈值、特征词库、歧义消解规则</div>
+      <div class="card">
+        <div class="card-title">收录阈值</div>
+        <div class="card-desc">低于此分值的文章直接丢弃，等于/高于此分值的收录进入周报</div>
+        <div class="flex gap" style="align-items:center">
+          <span style="font-size:12px;color:var(--text-muted);min-width:60px">0 分 (丢弃)</span>
+          <input type="range" id="acceptThreshold" min="10" max="90" step="1"
+                 style="flex:1;max-width:400px"
+                 oninput="updateThresholdHint(this.value)">
+          <span id="acceptThresholdVal" style="font-weight:600;font-size:20px;min-width:30px">50</span>
+          <span style="font-size:12px;color:var(--text-muted);min-width:60px">100 分 (收录)</span>
+        </div>
+        <div style="margin-top:4px;font-size:11px;color:var(--text-muted)" id="acceptThresholdHint"></div>
+      </div>
       <div class="card">
         <div class="flex gap mb" style="align-items:center;justify-content:space-between">
           <div>
@@ -567,15 +578,13 @@ function parseSources(yaml) {
     var m = line.match(/^-\s+name:\s*(.+)$/);
     if (m) {
       if (current) sources.push(current);
-      current = { name: m[1].trim(), url: '', type: 'rss', language: 'en', source_level: 'B', region: 'global', group: '其他', enabled: true };
+      current = { name: m[1].trim(), url: '', type: 'rss', language: 'en', group: '其他', enabled: true };
     }
     if (current) {
       var kv;
       kv = line.match(/^\s+url:\s*(.+)$/); if (kv) current.url = kv[1].trim();
       kv = line.match(/^\s+type:\s*(.+)$/); if (kv) current.type = kv[1].trim();
       kv = line.match(/^\s+language:\s*(.+)$/); if (kv) current.language = kv[1].trim();
-      kv = line.match(/^\s+source_level:\s*(.+)$/); if (kv) current.source_level = kv[1].trim();
-      kv = line.match(/^\s+region:\s*(.+)$/); if (kv) current.region = kv[1].trim();
       kv = line.match(/^\s+group:\s*(.+)$/); if (kv) current.group = kv[1].trim();
       kv = line.match(/^\s+enabled:\s*(.+)$/); if (kv) current.enabled = kv[1].trim() === 'true';
     }
@@ -592,8 +601,6 @@ function buildSourcesYaml(sources) {
     lines.push('  url: ' + s.url);
     lines.push('  type: ' + s.type);
     lines.push('  language: ' + s.language);
-    lines.push('  source_level: ' + s.source_level);
-    lines.push('  region: ' + s.region);
     lines.push('  enabled: ' + (s.enabled ? 'true' : 'false'));
   });
   return lines.join('\n');
@@ -650,7 +657,6 @@ function renderSources() {
                (s.url || '').toLowerCase().indexOf(q) !== -1 ||
                (s.group || '').toLowerCase().indexOf(q) !== -1 ||
                (s.type || '').toLowerCase().indexOf(q) !== -1 ||
-               (s.region || '').toLowerCase().indexOf(q) !== -1 ||
                stText.indexOf(q) !== -1;
       });
     }
@@ -659,9 +665,9 @@ function renderSources() {
     var en = items.filter(function(s){ return s.enabled; }).length;
     var fEn = filtered.filter(function(s){ return s.enabled; }).length;
     if (q) {
-      html += '<tr class="group-header"><td colspan="10">' + esc(gName) + ' <span class="text-muted">(' + fEn + '/' + filtered.length + ' 已启用)</span></td></tr>';
+      html += '<tr class="group-header"><td colspan="8">' + esc(gName) + ' <span class="text-muted">(' + fEn + '/' + filtered.length + ' 已启用)</span></td></tr>';
     } else {
-      html += '<tr class="group-header"><td colspan="10">' + esc(gName) + ' <span class="text-muted">(' + en + '/' + items.length + ' 已启用)</span></td></tr>';
+      html += '<tr class="group-header"><td colspan="8">' + esc(gName) + ' <span class="text-muted">(' + en + '/' + items.length + ' 已启用)</span></td></tr>';
     }
     filtered.forEach(function(s) {
       var i = _sources.indexOf(s);
@@ -673,8 +679,6 @@ function renderSources() {
         '<td class="url-cell" title="' + escAttr(s.url) + '"><input value="' + escAttr(s.url) + '" onchange="_sources[' + i + '].url=this.value;dirtySources=true"></td>' +
         '<td><select onchange="_sources[' + i + '].type=this.value;dirtySources=true"><option value="rss"' + (s.type==='rss'?' selected':'') + '>RSS</option><option value="api"' + (s.type==='api'?' selected':'') + '>API</option><option value="scraper"' + (s.type==='scraper'?' selected':'') + '>爬虫</option></select></td>' +
         '<td><select onchange="_sources[' + i + '].language=this.value;dirtySources=true"><option value="en"' + (s.language==='en'?' selected':'') + '>EN</option><option value="zh"' + (s.language==='zh'?' selected':'') + '>ZH</option></select></td>' +
-        '<td><select onchange="_sources[' + i + '].source_level=this.value;dirtySources=true"><option value="S"' + (s.source_level==='S'?' selected':'') + '>S</option><option value="A"' + (s.source_level==='A'?' selected':'') + '>A</option><option value="B"' + (s.source_level==='B'?' selected':'') + '>B</option><option value="C"' + (s.source_level==='C'?' selected':'') + '>C</option></select></td>' +
-        '<td><input value="' + escAttr(s.region) + '" onchange="_sources[' + i + '].region=this.value;dirtySources=true"></td>' +
         '<td><select onchange="_sources[' + i + '].group=this.value;dirtySources=true">' + GROUP_ORDER.map(function(g){ return '<option value="' + g + '"' + (s.group===g?' selected':'') + '>' + g + '</option>'; }).join('') + '</select></td>' +
         '<td><button class="btn-icon" onclick="removeSource(' + i + ')" title="删除此信源">✕</button></td>' +
         '</tr>';
@@ -682,7 +686,7 @@ function renderSources() {
   });
 
   if (!html) {
-    html = '<tr><td colspan="10" style="padding:24px;text-align:center;color:var(--text-muted)">无匹配信源</td></tr>';
+    html = '<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--text-muted)">无匹配信源</td></tr>';
   }
 
   tbody.innerHTML = html;
@@ -700,7 +704,7 @@ function toggleSource(i) {
 var dirtySources = false;
 
 function addSource() {
-  _sources.push({ name: '新信源', url: 'https://', type: 'rss', language: 'en', source_level: 'B', region: 'global', group: '其他', enabled: true });
+  _sources.push({ name: '新信源', url: 'https://', type: 'rss', language: 'en', group: '其他', enabled: true });
   renderSources();
   dirtySources = true;
   toast('已添加新信源，请填写信息后保存', 'info');
@@ -983,6 +987,18 @@ function escHtml(str) {
 
 // -- Scoring Config --
 
+function updateThresholdHint(val) {
+  document.getElementById('acceptThresholdVal').textContent = val;
+  if (_scoringConfig && _scoringConfig.thresholds) {
+    _scoringConfig.thresholds.accept_threshold = parseInt(val);
+  }
+  var hint = document.getElementById('acceptThresholdHint');
+  if (val < 30) hint.textContent = '宽松：大部分文章会被收录，周报条目较多';
+  else if (val < 60) hint.textContent = '适中：平衡收录量与质量';
+  else if (val < 80) hint.textContent = '严格：仅高分文章被收录，周报条目较少';
+  else hint.textContent = '极严：仅最强相关的文章才能进入周报';
+}
+
 function loadScoringConfig() {
   document.getElementById('scoringLoadBtn').disabled = true;
   document.getElementById('scoringLoadBtn').textContent = '加载中...';
@@ -997,6 +1013,11 @@ function loadScoringConfig() {
       });
       document.getElementById('scoringInfo').textContent =
         '强特征 ' + counts.strong + ' | 中特征 ' + counts.medium + ' | 弱特征 ' + counts.weak;
+      // 同步收录阈值滑块
+      var t = r.config.thresholds || {};
+      var at = t.accept_threshold || t.direct_accept || 50;
+      document.getElementById('acceptThreshold').value = at;
+      updateThresholdHint(at);
       toast('评分配置已加载', 'success');
     } else {
       toast('加载失败: ' + (r.error || '未知错误'), 'error');
@@ -1011,13 +1032,21 @@ function saveScoringConfig() {
   var editor = document.getElementById('scoringEditor');
   var raw = editor.value.trim();
   if (!raw) { toast('配置不能为空', 'error'); return; }
+  var cfg;
   try {
-    JSON.parse(raw);
+    cfg = JSON.parse(raw);
   } catch(e) {
     toast('JSON 格式错误: ' + e.message, 'error');
     return;
   }
-  api('PUT', '/api/config/scoring_keywords', { config: JSON.parse(raw) }).then(function(r) {
+  // 同步收录阈值滑块值到保存的配置
+  var sliderVal = parseInt(document.getElementById('acceptThreshold').value);
+  if (!cfg.thresholds) cfg.thresholds = {};
+  cfg.thresholds.accept_threshold = sliderVal;
+  delete cfg.thresholds.direct_accept;
+  delete cfg.thresholds.review_lower;
+  editor.value = JSON.stringify(cfg, null, 2);
+  api('PUT', '/api/config/scoring_keywords', { config: cfg }).then(function(r) {
     if (r.ok) {
       toast('评分配置已保存', 'success');
       loadScoringConfig();

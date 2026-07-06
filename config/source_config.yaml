@@ -3,909 +3,677 @@ sources:
   group: 安全媒体
   url: https://aihot.virxact.com/feed
   type: rss
-  language: en
-  source_level: S
-  region: global
+  language: zh
   enabled: true
 - name: 360 Netlab
   group: 国内信源
   url: https://360.net/research/analysis/
   type: scraper
   language: zh
-  source_level: A
-  region: cn
   enabled: true
 - name: AWS Security Blog
   group: 安全厂商
   url: https://aws.amazon.com/blogs/security/feed/
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: Acunetix Blog
   group: 安全厂商
   url: https://www.acunetix.com/blog/feed
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Anthropic Blog
   group: AI厂商
   url: https://www.anthropic.com/feed.xml
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: Anthropic Engineering
   group: AI厂商
   url: https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_engineering.xml
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: Anthropic News
   group: AI厂商
   url: https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/anthropic-news.xml
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: Anthropic Red Team
   group: AI厂商
   url: https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_red.xml
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: Anthropic Research
   group: AI厂商
   url: https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/anthropic-research.xml
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: Aqua Security Blog
   group: 安全厂商
   url: https://www.aquasec.com/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Azure Security Blog
   group: 安全厂商
   url: https://techcommunity.microsoft.com/t5/security-compliance-and-identity/bg-p/SecurityComplianceIdentity/feed
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: BleepingComputer
   group: 安全媒体
   url: https://www.bleepingcomputer.com/feed/
   type: rss
   language: en
-  source_level: B
-  region: global
-  enabled: false
+  enabled: true
 - name: CERT-FR (ANSSI)
   group: 政府与CERT
   url: https://www.cert.ssi.gouv.fr/feed/
   type: rss
   language: fr
-  source_level: S
-  region: fr
-  enabled: true
+  enabled: false
 - name: CERT.hr (Croatia)
   group: 政府与CERT
   url: https://www.cert.hr/feed
   type: rss
   language: hr
-  source_level: S
-  region: hr
-  enabled: true
+  enabled: false
 - name: CERT/CC Vulnerability Notes
   group: 政府与CERT
   url: https://www.kb.cert.org/vulfeed/
   type: rss
   language: en
-  source_level: S
-  region: us
   enabled: true
 - name: CIS Advisories (MS-ISAC)
   group: 政府与CERT
   url: https://www.cisecurity.org/feed/advisories
   type: rss
   language: en
-  source_level: S
-  region: us
   enabled: true
 - name: CISA Alerts
   group: 政府与CERT
   url: https://www.cisa.gov/cybersecurity-advisories/alerts.xml
   type: rss
   language: en
-  source_level: S
-  region: us
   enabled: true
 - name: CSO Online
   group: 安全媒体
   url: https://www.csoonline.com/feed
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: Check Point Research
   group: 安全厂商
   url: https://research.checkpoint.com/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Cisco Talos Blog
   group: 安全厂商
   url: https://blog.talosintelligence.com/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: CrowdStrike Blog
   group: 安全厂商
   url: https://www.crowdstrike.com/blog/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: CyberScoop
   group: 安全媒体
   url: https://cyberscoop.com/feed/
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: DFIR Report
   group: 安全厂商
   url: https://thedfirreport.com/feed
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Dark Reading
   group: 安全媒体
   url: https://www.darkreading.com/rss.xml
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: DeepSeek
   group: AI厂商
   url: https://deepseek.com/feed.xml
   type: rss
   language: zh
-  source_level: S
-  region: cn
   enabled: true
 - name: ESET WeLiveSecurity
   group: 安全厂商
   url: https://www.welivesecurity.com/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Elastic Security Blog
   group: 安全厂商
   url: https://www.elastic.co/blog/feed
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Exploit-DB
   group: 开发者社区
   url: https://www.exploit-db.com/rss.xml
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: Fortinet Blog
   group: 安全厂商
   url: https://feeds.fortinet.com/fortinet/blogs
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: FreeBuf
   group: 国内信源
   url: https://www.freebuf.com/feed
   type: rss
   language: zh
-  source_level: B
-  region: cn
   enabled: true
 - name: GitHub Security Advisories
   group: 开发者社区
   url: https://github.com/advisories.rss
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: false
 - name: GitHub Security Lab
   group: 开发者社区
   url: https://github.blog/security/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Google AI Blog
   group: AI厂商
   url: https://blog.google/technology/ai/rss/
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: Google Cloud Security Blog
   group: 安全厂商
   url: https://cloud.google.com/blog/products/identity-security/rss/
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: HP Threat Research
   group: 安全厂商
   url: https://threatresearch.ext.hp.com/feed
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Hacker News
   group: 开发者社区
   url: https://hnrss.org/frontpage
   type: rss
   language: en
-  source_level: C
-  region: global
   enabled: true
 - name: HashiCorp Security Blog
   group: 安全厂商
   url: https://www.hashicorp.com/blog/feed.xml
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: IAPP
   group: 开发者社区
   url: https://iapp.org/rss/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: INTERPOL Cyber Threats
   group: 政府与CERT
   url: https://www.interpol.int/feed
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: Infosecurity Magazine
   group: 安全媒体
   url: https://www.infosecurity-magazine.com/rss/news/
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: Intezer Blog
   group: 安全厂商
   url: https://intezer.com/blog/feed
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: JPCERT/CC Blog
   group: 政府与CERT
   url: https://blogs.jpcert.or.jp/en/atom.xml
   type: rss
   language: en
-  source_level: S
-  region: jp
-  enabled: true
+  enabled: false
 - name: Kaspersky Securelist
   group: 安全厂商
   url: https://securelist.com/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Krebs on Security
   group: 安全媒体
   url: https://krebsonsecurity.com/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: LWN.net
   group: 安全媒体
   url: https://lwn.net/headlines/newrss
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: false
 - name: MSRC
   group: 安全厂商
   url: https://msrc.microsoft.com/feed
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: Malwarebytes Blog
   group: 安全厂商
   url: https://blog.malwarebytes.com/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Mandiant / Google Cloud Threat Intel
   group: 安全厂商
   url: https://cloudblog.withgoogle.com/topics/threat-intelligence/rss/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: false
 - name: Meta AI Blog
   group: AI厂商
   url: https://ai.meta.com/blog/rss/
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: Microsoft AI Blog
   group: AI厂商
   url: https://blogs.microsoft.com/feed/
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: Microsoft Entra Blog
   group: 安全厂商
   url: https://techcommunity.microsoft.com/t5/microsoft-entra-blog/bg-p/EntraBlog/feed
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: Microsoft Security Blog
   group: 安全厂商
   url: https://www.microsoft.com/security/blog/feed
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: Mistral AI
   group: AI厂商
   url: https://raw.githubusercontent.com/0xSMW/rss-feeds/main/feeds/feed_mistral_news.xml
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: NCSC UK
   group: 政府与CERT
   url: https://www.ncsc.gov.uk/api/1/services/v1/all-rss-feed.xml
   type: rss
   language: en
-  source_level: S
-  region: uk
   enabled: true
 - name: NIST Cybersecurity Insights
   group: 政府与CERT
   url: https://www.nist.gov/blogs/cybersecurity-insights/rss.xml
   type: rss
   language: en
-  source_level: S
-  region: us
   enabled: true
 - name: NVD
   group: 政府与CERT
   url: https://nvd.nist.gov/vuln/search/results?form_type=RSS&results_type=RSS&query=
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: OWASP Blog
   group: 开发者社区
   url: https://owasp.org/feed.xml
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: OWASP LLM Top 10
   group: 开发者社区
   url: https://genai.owasp.org/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Okta Security Blog
   group: 安全厂商
   url: https://developer.okta.com/feed.xml
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: OpenAI Blog
   group: AI厂商
   url: https://openai.com/news/rss.xml
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: OpenSSF Blog
   group: 开发者社区
   url: https://openssf.org/blog/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Packet Storm Security
   group: 开发者社区
   url: https://rss.packetstormsecurity.com/
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
-  ssl_verify: false
 - name: Palo Alto Networks Blog
   group: 安全厂商
   url: https://www.paloaltonetworks.com/blog/feed/
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: Qualys Blog
   group: 安全厂商
   url: https://blog.qualys.com/feed
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Reddit r/netsec
   group: 开发者社区
   url: https://www.reddit.com/r/netsec/.rss
   type: rss
   language: en
-  source_level: C
-  region: global
   enabled: false
 - name: Redwood Research
   group: AI厂商
   url: https://blog.redwoodresearch.org/feed
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: Reuters Cybersecurity
   group: 安全媒体
   url: https://www.reuters.com/feed/
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: false
 - name: SANS ISC
   group: 开发者社区
   url: https://isc.sans.edu/rssfeed.xml
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: SC Media
   group: 安全媒体
   url: https://www.scmagazine.com/rss
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: SecurityWeek
   group: 安全媒体
   url: https://feeds.feedburner.com/securityweek
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: false
 - name: Seebug (知道创宇404实验室)
   group: 国内信源
   url: https://paper.seebug.org/rss/
   type: rss
   language: zh
-  source_level: A
-  region: cn
   enabled: true
 - name: Sekoia Blog
   group: 安全厂商
   url: https://blog.sekoia.io/feed
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: SentinelOne Blog
   group: 安全厂商
   url: https://www.sentinelone.com/blog/feed/
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: Snyk Blog
   group: 安全厂商
   url: https://snyk.io/blog/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Socket.dev Blog
   group: 开发者社区
   url: https://socket.dev/blog/feed
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: false
 - name: Sophos News
   group: 安全厂商
   url: https://news.sophos.com/feed
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Sysdig Blog
   group: 安全厂商
   url: https://sysdig.com/blog/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: false
 - name: The Cyber Express
   group: 安全媒体
   url: https://thecyberexpress.com/feed
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: The Hacker News
   group: 安全媒体
   url: https://feeds.feedburner.com/TheHackersNews
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: false
 - name: The Record / Recorded Future
   group: 安全媒体
   url: https://therecord.media/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: false
 - name: Threatpost
   group: 安全媒体
   url: https://threatpost.com/feed/
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: Trend Micro Research
   group: 安全厂商
   url: https://www.trendmicro.com/rss/
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: true
 - name: Unit 42
   group: 安全厂商
   url: https://unit42.paloaltonetworks.com/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: WIRED Security
   group: 安全媒体
   url: https://www.wired.com/feed/tag/security/latest/rss
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: false
 - name: WithSecure
   group: 安全厂商
   url: https://www.withsecure.com/feed
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Wiz Blog
   group: 安全厂商
   url: https://www.wiz.io/blog/rss
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Zero Day Initiative
   group: 安全厂商
   url: https://www.zerodayinitiative.com/rss/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: xAI News
   group: AI厂商
   url: https://raw.githubusercontent.com/0xSMW/rss-feeds/main/feeds/feed_xai_news.xml
   type: rss
   language: en
-  source_level: S
-  region: global
   enabled: false
 - name: 先知安全社区
   group: 国内信源
   url: https://xz.aliyun.com/feed
   type: rss
   language: zh
-  source_level: B
-  region: cn
   enabled: true
 - name: 嘶吼 RoarTalk
   group: 国内信源
   url: https://www.4hou.com/feed
   type: rss
   language: zh
-  source_level: B
-  region: cn
   enabled: false
 - name: 奇安信威胁情报中心
   group: 国内信源
   url: https://ti.qianxin.com/blog/
   type: scraper
   language: zh
-  source_level: A
-  region: cn
   enabled: true
 - name: 安全内参
   group: 国内信源
   url: https://www.secrss.com/api/articles
   type: api
-  api_platform: secrss
   language: zh
-  source_level: A
-  region: cn
   enabled: true
 - name: 安全客
   group: 国内信源
   url: https://api.anquanke.com/feed
   type: rss
   language: zh
-  source_level: B
-  region: cn
   enabled: true
 - name: 安全牛
   group: 国内信源
   url: https://www.aqniu.com/feed
   type: rss
   language: zh
-  source_level: B
-  region: cn
   enabled: true
-  ssl_verify: false
 - name: 数世咨询
   group: 国内信源
   url: https://www.dashishuo.com/feed
   type: rss
   language: zh
-  source_level: B
-  region: cn
   enabled: false
 - name: 深信服安全研究
   group: 国内信源
   url: https://sec.sangfor.com.cn/feed
   type: rss
   language: zh
-  source_level: A
-  region: cn
   enabled: true
 - name: 绿盟科技博客
   group: 国内信源
   url: https://blog.nsfocus.net/feed/
   type: rss
   language: zh
-  source_level: B
-  region: cn
   enabled: true
 - name: Rapid7 Blog
   group: 安全厂商
   url: https://blog.rapid7.com/rss
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Troy Hunt
   group: 安全媒体
   url: https://www.troyhunt.com/rss/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: PortSwigger Research
   group: 安全厂商
   url: https://portswigger.net/research/rss
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Sonatype Blog
   group: 开发者社区
   url: https://www.sonatype.com/blog/rss.xml
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: HackerOne Hacktivity
   group: 开发者社区
   url: https://hackerone.com/hacktivity.rss
   type: rss
   language: en
-  source_level: B
-  region: global
   enabled: false
 - name: Varonis Blog
   group: 安全厂商
   url: https://www.varonis.com/blog/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: F-Secure Blog
   group: 安全厂商
   url: https://blog.f-secure.com/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Huntress Blog
   group: 安全厂商
   url: https://www.huntress.com/blog
   type: scraper
   language: en
-  source_level: A
-  region: global
   enabled: false
-  scraper_config:
-    article_selector: '[class*="card"]'
-    title_selector: h2 a, h3 a
-    summary_selector: p
-    date_selector: time
-    link_base: https://www.huntress.com
 - name: Praetorian Blog
   group: 安全厂商
   url: https://www.praetorian.com/blog/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: Cynet Blog
   group: 安全厂商
   url: https://www.cynet.com/blog/feed/
   type: rss
   language: en
-  source_level: A
-  region: global
   enabled: true
 - name: arXiv cs.CR
   group: 学术论文
   url: https://export.arxiv.org/api/query?search_query=cat:cs.CR&sortBy=submittedDate&sortOrder=descending&max_results=50
   type: api
-  api_platform: arxiv
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: Semantic Scholar
   group: 学术论文
   url: https://api.semanticscholar.org/graph/v1/paper/search?query=cybersecurity&limit=50&fields=title,url,abstract,publicationDate,authors
   type: api
-  api_platform: semantic_scholar
   language: en
-  source_level: S
-  region: global
-  enabled: true
+  enabled: false
 - name: IETF Datatracker
   group: 标准框架
   url: https://datatracker.ietf.org/api/v1/doc/document/?limit=50&order_by=-id&format=json
   type: api
-  api_platform: ietf
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: MITRE ATT&CK
   group: 标准框架
-  url: https://raw.githubusercontent.com/mitre/cti/refs/heads/master/enterprise-attack/enterprise-attack.json
-  type: api
-  api_platform: mitre_attack
+  url: https://medium.com/feed/mitre-attack
+  type: rss
   language: en
-  source_level: S
-  region: global
   enabled: true
 - name: GitHub Security Trending
   group: 开发者社区
   url: https://api.github.com/search/repositories?q=security+topic:security&sort=stars&order=desc&per_page=30
   type: api
-  api_platform: github
   language: en
-  source_level: A
-  region: global
+  enabled: true
+- name: CybersecurityNews
+  group: 安全媒体
+  url: https://cybersecuritynews.com/feed/
+  type: rss
+  language: en
   enabled: true

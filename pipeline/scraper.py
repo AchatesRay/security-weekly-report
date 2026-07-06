@@ -99,8 +99,6 @@ def extract_articles(source: dict, html_text: str) -> list[dict]:
             "summary": summary[:2000] if summary else "",
             "published_date": published_date,
             "source_name": source["name"],
-            "source_level": source.get("source_level", "B"),
-            "region": source.get("region", "global"),
             "language": source.get("language", "en"),
             "parse_time": datetime.now().isoformat(),
         })
