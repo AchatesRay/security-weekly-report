@@ -45,7 +45,18 @@ def parse_entry(source_info: dict, entry) -> dict:
     """将 feedparser 的 entry 转换为统一结构"""
     title = entry.get("title", "").strip()
     link = entry.get("link", "").strip()
-    summary = extract_body(entry)
+
+    # 摘要 = <description>/<summary>（短文本）
+    summary = strip_html(entry.get("summary", entry.get("description", "")).strip())
+
+    # 正文 = <content:encoded>（若有，否则与摘要同）
+    full_body = ""
+    content_list = entry.get("content", [])
+    if content_list and isinstance(content_list, list) and len(content_list) > 0:
+        raw = content_list[0].get("value", "") if hasattr(content_list[0], "get") else str(content_list[0])
+        raw = raw.strip()
+        if raw:
+            full_body = strip_html(raw)
 
     # 尝试 feedparser 解析；失败时用 email.utils 回退
     pub_date = ""
@@ -64,18 +75,22 @@ def parse_entry(source_info: dict, entry) -> dict:
             except Exception:
                 pass
 
-    return {
+    result = {
         "title": title,
         "url": link,
         "summary": summary,
         "published_date": pub_date,
         "source_name": source_info["source_name"],
-        "source_level": source_info["source_level"],
-        "region": source_info["region"],
         "language": source_info["language"],
         "source_type": TYPE_LABEL.get(source_info.get("type", "rss"), "RSS"),
         "parse_time": datetime.now().isoformat(),
     }
+
+    # content:encoded 与 description 不同时存为 full_body
+    if full_body and full_body != summary:
+        result["full_body"] = full_body
+
+    return result
 
 
 def parse_api_secrss(source_info: dict, raw_text: str) -> list[dict]:
@@ -98,8 +113,6 @@ def parse_api_secrss(source_info: dict, raw_text: str) -> list[dict]:
                 "summary": summary,
                 "published_date": published,
                 "source_name": source_info["source_name"],
-                "source_level": source_info["source_level"],
-                "region": source_info["region"],
                 "language": source_info["language"],
                 "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
                 "parse_time": datetime.now().isoformat(),
@@ -131,8 +144,6 @@ def parse_api_arxiv(source_info: dict, raw_text: str) -> list[dict]:
             "summary": summary,
             "published_date": published,
             "source_name": source_info["source_name"],
-            "source_level": source_info["source_level"],
-            "region": source_info["region"],
             "language": source_info["language"],
             "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
             "authors": authors,
@@ -163,8 +174,6 @@ def parse_api_semantic_scholar(source_info: dict, raw_text: str) -> list[dict]:
             "summary": summary,
             "published_date": published,
             "source_name": source_info["source_name"],
-            "source_level": source_info["source_level"],
-            "region": source_info["region"],
             "language": source_info["language"],
             "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
             "authors": authors,
@@ -200,8 +209,6 @@ def parse_api_ietf(source_info: dict, raw_text: str) -> list[dict]:
             "summary": summary,
             "published_date": published,
             "source_name": source_info["source_name"],
-            "source_level": source_info["source_level"],
-            "region": source_info["region"],
             "language": source_info["language"],
             "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
             "authors": [],
@@ -241,8 +248,6 @@ def parse_api_mitre_attack(source_info: dict, raw_text: str) -> list[dict]:
             "summary": summary,
             "published_date": modified,
             "source_name": source_info["source_name"],
-            "source_level": source_info["source_level"],
-            "region": source_info["region"],
             "language": source_info["language"],
             "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
             "authors": [],
@@ -277,8 +282,6 @@ def parse_api_github(source_info: dict, raw_text: str) -> list[dict]:
             "summary": summary,
             "published_date": repo.get("created_at", ""),
             "source_name": source_info["source_name"],
-            "source_level": source_info["source_level"],
-            "region": source_info["region"],
             "language": source_info["language"],
             "source_type": TYPE_LABEL.get(source_info.get("type", "api"), "API"),
             "authors": [repo.get("owner", {}).get("login", "")] if repo.get("owner") else [],
@@ -346,8 +349,6 @@ def parse_all() -> list[dict]:
                         "summary": "",
                         "published_date": "",
                         "source_name": source["source_name"],
-                        "source_level": source["source_level"],
-                        "region": source["region"],
                         "language": source["language"],
                         "source_type": TYPE_LABEL.get(source.get("type", "rss"), "RSS"),
                         "parse_time": datetime.now().isoformat(),

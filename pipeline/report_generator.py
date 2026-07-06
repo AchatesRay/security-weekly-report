@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import hashlib
 import yaml
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -80,6 +81,12 @@ def archive_previous_report():
         print(f"[REPORT] 归档旧报告: {archive_name.name}")
 
 
+def _source_color(source_name: str) -> int:
+    """为信源名称生成确定性的色相值 (0-360)"""
+    h = int(hashlib.md5(source_name.encode()).hexdigest()[:6], 16) % 360
+    return h
+
+
 def build_json_items(items: list[dict]) -> list[dict]:
     """预处理条目为前端 JSON 格式"""
     result = []
@@ -94,14 +101,17 @@ def build_json_items(items: list[dict]) -> list[dict]:
             "ai_summary": item.get("ai_summary_zh") or item.get("ai_summary") or "",
             "url": item.get("url", ""),
             "source_name": item.get("source_name", ""),
-            "source_level": item.get("source_level", ""),
             "published_date": (item.get("published_date") or "")[:10],
             "content_type": item.get("content_type") or "",
             "source_type": item.get("source_type") or "",
-            "region": item.get("region") or "",
             "category": item.get("category", "未分类"),
             "merged_sources": item.get("merged_sources") or [],
             "fulltext_fetched": item.get("fulltext_fetched"),
+            "scoring_matched": item.get("scoring_matched") or {},
+            "source_hue": _source_color(item.get("source_name", "")),
+            "filter_decision": item.get("filter_decision", ""),
+            "confidence_score": item.get("confidence_score", 0),
+            "full_body": item.get("full_body") or "",
         })
     return result
 
@@ -281,13 +291,20 @@ def generate_report():
     sunday = monday + timedelta(days=6)
     date_range = f"{monday.strftime('%Y.%m.%d')}-{sunday.strftime('%Y.%m.%d')}"
 
-    groups = group_by_category(items)
+    # 分离 accepted 和 review 条目
+    accepted_items = [i for i in items if i.get("filter_decision") != "review"]
+    review_items = [i for i in items if i.get("filter_decision") == "review"]
 
-    # 预处理前端数据
-    json_items = build_json_items(items)
+    # 主报告用 accepted（分类统计基于 accepted）
+    groups = group_by_category(accepted_items)
+
+    # 前端数据包含所有条目（含 review），通过 filter_decision 区分
+    all_items = accepted_items + review_items
+    json_items = build_json_items(all_items)
 
     # 统计
-    total_count = len(items)
+    total_count = len(accepted_items)
+    review_count = len(review_items)
 
     # 信源缺失告警
     source_alerts = generate_source_alerts()
@@ -306,7 +323,8 @@ def generate_report():
 
     # 保存当前周数据 + 更新清单
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    save_weekly_data(json_items, week_str)
+    save_weekly_data(build_json_items(accepted_items), week_str)
+    save_weekly_data(build_json_items(review_items), f"{week_str}_review")
     update_manifest(week_str, date_range, total_count)
 
     # 读取 manifest 供模板使用
@@ -334,6 +352,7 @@ def generate_report():
         date_range=date_range,
         generate_time=now.strftime("%Y-%m-%d %H:%M"),
         total_count=total_count,
+        review_count=review_count,
         groups=groups,
         json_items=json_items,
         manifest=manifest,
@@ -357,7 +376,7 @@ def generate_report():
             tmp.unlink()
 
     print(f"[REPORT] 周报生成完成: {LATEST_REPORT}")
-    print(f"[REPORT] 共 {total_count} 条")
+    print(f"[REPORT] 共 {total_count} 条（其中 {review_count} 条待复核）")
     return str(LATEST_REPORT)
 
 

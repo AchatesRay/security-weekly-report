@@ -163,16 +163,16 @@ def _print_scoring_comparison():
 
     if not prev:
         print(f"[MAIN] 评分质量: accepted={cur['total_accepted']}, "
-              f"review={cur['total_review']}, discarded={cur['total_discarded']} "
+              f"discarded={cur['total_discarded']} "
               f"（首次运行，无历史对比）")
         return
 
     # 对比决策分布
-    cur_total = cur["total_accepted"] + cur["total_review"] + cur["total_discarded"]
-    prev_total = prev["total_accepted"] + prev["total_review"] + prev["total_discarded"]
+    cur_total = cur["total_accepted"] + cur["total_discarded"]
+    prev_total = prev["total_accepted"] + prev["total_discarded"]
 
     changes = []
-    for key, label in [("total_accepted", "高置信"), ("total_review", "待复核"), ("total_discarded", "丢弃")]:
+    for key, label in [("total_accepted", "收录"), ("total_discarded", "丢弃")]:
         cur_pct = cur[key] / cur_total * 100 if cur_total else 0
         prev_pct = prev[key] / prev_total * 100 if prev_total else 0
         diff = cur_pct - prev_pct

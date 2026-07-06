@@ -112,14 +112,11 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .list-card.active { background:var(--accent-active); border-left-color:var(--accent); }
 .list-card+.list-card { border-top:1px solid var(--border-light); }
 .list-card-source { font-size:11px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px; }
-.list-card-source.S { color:#2563eb; }
-.list-card-source.A { color:#059669; }
-.list-card-source.B { color:#b45309; }
-.list-card-source.C { color:#dc2626; }
 .list-card-title { font-size:14px; font-weight:600; line-height:1.45; margin-bottom:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--text); }
 .list-card.active .list-card-title { color:var(--accent); }
 .list-card-meta { font-size:12px; color:#059669; display:flex; align-items:center; gap:8px; }
 .list-card-ai { font-size:10px; font-weight:600; color:var(--accent); background:var(--accent-soft); padding:1px 6px; border-radius:3px; letter-spacing:.3px; }
+.list-card-review { border-left-color:#f59e0b !important; }
 
 /* Detail */
 .detail-panel { flex:1; background:var(--surface); display:flex; flex-direction:column; height:100vh; overflow-y:auto; }
@@ -130,10 +127,6 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .detail-meta { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px; font-size:12px; }
 .detail-meta > span:not(.detail-source-tag) { color:#059669; }
 .detail-source-tag { padding:3px 10px; border-radius:4px; font-size:11px; font-weight:600; letter-spacing:.3px; }
-.detail-source-tag.S { background:rgba(37,99,235,0.08); color:#2563eb; }
-.detail-source-tag.A { background:rgba(16,185,129,0.08); color:#059669; }
-.detail-source-tag.B { background:rgba(245,158,11,0.08); color:#b45309; }
-.detail-source-tag.C { background:rgba(239,68,68,0.08); color:#dc2626; }
 .detail-title { font-family:"Microsoft YaHei","微软雅黑",sans-serif; font-size:26px; font-weight:800; letter-spacing:-0.3px; line-height:1.35; margin-bottom:16px; }
 .detail-title a { color:var(--text); text-decoration:none; }
 .detail-title a:hover { color:var(--accent); }
@@ -152,6 +145,17 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .detail-summary a {
   color:var(--accent); text-underline-offset:2px;
 }
+.detail-matched-kw { margin-top:24px; padding:16px 20px; background:var(--bg); border-radius:var(--radius-md); }
+.detail-matched-kw-header { font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
+.detail-matched-kw-group { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:6px; }
+.detail-matched-kw-group:last-child { margin-bottom:0; }
+.detail-matched-kw-label { font-size:11px; color:var(--text-muted); min-width:36px; }
+.kw-tag { display:inline-block; padding:2px 10px; border-radius:4px; font-size:11px; font-weight:500; font-family:monospace; }
+.kw-tag-strong { background:rgba(37,99,235,0.12); color:#2563eb; }
+.kw-tag-medium { background:rgba(16,185,129,0.12); color:#059669; }
+.kw-tag-weak { background:rgba(107,114,128,0.12); color:#6b7280; }
+.kw-empty { font-size:11px; color:var(--text-dim); font-style:italic; }
+.detail-kw-scoreline { margin-top:10px; padding-top:10px; border-top:1px solid var(--border-light); font-size:11px; font-weight:600; color:#d97706; }
 .detail-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:32px; padding-top:20px; border-top:1px solid var(--border-light); }
 .detail-tag { padding:4px 12px; border-radius:4px; font-size:12px; background:var(--accent-soft); color:var(--accent); }
 .detail-original-link { display:inline-flex; align-items:center; gap:8px; margin-top:28px; padding:10px 22px; border-radius:var(--radius-md); font-size:14px; font-weight:600; color:#fff; background:var(--accent); text-decoration:none; transition:background .15s,transform .12s,box-shadow .15s; box-shadow:var(--shadow-sm); }
@@ -265,6 +269,11 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
         <span class="nav-count" id="catCount{{ loop.index0 }}">{{ groups[cat] | length }}</span>
       </div>
       {% endfor %}
+      <div class="nav-item" data-idx="-2">
+        <span class="nav-dot" style="background:#f59e0b"></span>
+        <span class="nav-label">待复核</span>
+        <span class="nav-count" id="navReviewCount">{{ review_count }}</span>
+      </div>
     </nav>
     {% if source_alerts %}
     <div class="source-alerts-bar{% if source_alerts | selectattr('severity', 'equalto', 'high') | list %} has-high{% endif %}" id="sourceAlertsBar" onclick="toggleSourceAlerts()">
@@ -323,6 +332,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
         <div class="detail-ai-summary-text" id="detailAiSummaryText"></div>
       </div>
       <div class="detail-summary" id="detailSummary"></div>
+      <div class="detail-matched-kw" id="detailMatchedKw"></div>
       <div class="detail-tags" id="detailTags"></div>
       <a class="detail-original-link" id="detailLink" href="#" target="_blank">阅读原文</a>
       <div class="detail-footer">
@@ -342,11 +352,13 @@ var _catNames = [{% for cat in groups %}{{ (cat.split(" ", 1)[1] if " " in cat e
 var _catPrefixes = [{% for cat in groups %}{% set first = cat.split(" ", 1)[0] %}{% if first|length == 1 and first in prefix_chars %}{{ first | tojson }}{% else %}{{ "" | tojson }}{% endif %}{% if not loop.last %},{% endif %}{% endfor %}];
 
 // Register current week's data
+var _reviewCount = ({{ json_items | tojson }}).filter(function(i) { return i.filter_decision === 'review'; }).length;
 _allData['{{ week_str }}'] = {
   items: {{ json_items | tojson }},
   catNames: _catNames,
   catCounts: [{% for cat in groups %}{{ groups[cat] | length }}{% if not loop.last %},{% endif %}{% endfor %}],
-  totalCount: {{ total_count }}
+  totalCount: {{ total_count }},
+  reviewCount: _reviewCount
 };
 
 // ── State ──
@@ -367,6 +379,7 @@ var dSummary = document.getElementById('detailSummary');
 var dAiSummary = document.getElementById('detailAiSummary');
 var dAiSummaryText = document.getElementById('detailAiSummaryText');
 var dTags = document.getElementById('detailTags');
+var dMatchedKw = document.getElementById('detailMatchedKw');
 var dLink = document.getElementById('detailLink');
 var loading = document.getElementById('loading');
 var navAllCount = document.getElementById('navAllCount');
@@ -413,11 +426,18 @@ function rebuildCatIdx(data) {
 function renderList() {
   var catIdx = _currentCat;
   var data = _currentData;
-  var items = catIdx === -1 ? data.items : data.items.filter(function(d) { return d._catIdx === catIdx; });
+  var items;
+  if (catIdx === -1) {
+    items = data.items.filter(function(d) { return d.filter_decision !== 'review'; });
+  } else if (catIdx === -2) {
+    items = data.items.filter(function(d) { return d.filter_decision === 'review'; });
+  } else {
+    items = data.items.filter(function(d) { return d._catIdx === catIdx && d.filter_decision !== 'review'; });
+  }
   _currentItems = items;
   _currentSel = -1;
 
-  listTitle.textContent = catIdx === -1 ? '全部分类' : data.catNames[catIdx];
+  listTitle.textContent = catIdx === -1 ? '全部分类' : (catIdx === -2 ? '待复核' : data.catNames[catIdx]);
   listSub.textContent = items.length + ' 条情报';
 
   if (!items.length) {
@@ -428,13 +448,12 @@ function renderList() {
 
   var html = '';
   items.forEach(function(item, i) {
-    html += '<div class="list-card" data-idx="' + i + '">';
-    var lvl = item.source_level || 'C'; html += '<div class="list-card-source ' + lvl + '">' + esc(item.source_name) + '</div>';
+    html += '<div class="list-card' + (item.filter_decision === 'review' ? ' list-card-review' : '') + '" data-idx="' + i + '">';
+    html += '<div class="list-card-source" style="color:hsl(' + item.source_hue + ',55%,40%)">' + esc(item.source_name) + '</div>';
     html += '<div class="list-card-title">' + esc(item.title) + '</div>';
     html += '<div class="list-card-meta"><span>' + esc(item.published_date) + '</span>';
     if (item.content_type) html += '<span>·</span><span>' + esc(item.content_type) + '</span>';
     if (item.source_type) html += '<span>·</span><span>' + esc(item.source_type) + '</span>';
-    if (item.ai_summary || item.summary) html += '<span class="list-card-ai">摘要</span>';
     html += '</div></div>';
   });
   listEl.innerHTML = html;
@@ -458,12 +477,10 @@ function selectItem(idx) {
   dContent.style.animation = 'none'; void dContent.offsetHeight;
   dContent.style.animation = 'fadeIn 0.3s ease';
 
-  var lvl = item.source_level || 'C';
-  dMeta.innerHTML = '<span class="detail-source-tag ' + lvl + '">' + esc(item.source_name) + '</span>' +
+  dMeta.innerHTML = '<span class="detail-source-tag" style="color:hsl(' + item.source_hue + ',55%,35%);background:hsla(' + item.source_hue + ',55%,40%,0.1)">' + esc(item.source_name) + '</span>' +
     '<span>' + esc(item.published_date) + '</span>' +
     (item.content_type ? '<span>·</span><span>' + esc(item.content_type) + '</span>' : '') +
-    (item.source_type ? '<span>·</span><span>' + esc(item.source_type) + '</span>' : '') +
-    (item.region ? '<span>·</span><span>' + esc(item.region) + '</span>' : '');
+    (item.source_type ? '<span>·</span><span>' + esc(item.source_type) + '</span>' : '');
 
   dTitle.innerHTML = '<a href="' + escAttr(item.url) + '" target="_blank">' + esc(item.title) + '</a>';
   // AI 摘要：ai_summary 优先；原文获取失败则提示无摘要
@@ -490,14 +507,38 @@ function selectItem(idx) {
     dAiSummaryText.textContent = '未获取到原文内容，暂无 AI 摘要';
     dAiSummary.className = 'detail-ai-summary detail-ai-summary-na';
   }
-  dSummary.innerHTML = formatSummary(item.summary);
+  dSummary.innerHTML = formatSummary(item.full_body || item.summary);
   dLink.href = item.url;
 
   var tags = '';
   if (item.content_type) tags += '<span class="detail-tag">' + esc(item.content_type) + '</span>';
   if (item.source_type) tags += '<span class="detail-tag">' + esc(item.source_type) + '</span>';
-  if (item.region) tags += '<span class="detail-tag">' + esc(item.region) + '</span>';
   dTags.innerHTML = tags;
+
+  // 匹配关键词展示
+  var matched = item.scoring_matched || {};
+  var mHtml = '<div class="detail-matched-kw-header">匹配关键词</div>';
+  var hasKw = false;
+  if (matched.strong && matched.strong.length) {
+    hasKw = true;
+    mHtml += '<div class="detail-matched-kw-group"><span class="detail-matched-kw-label">强</span>';
+    matched.strong.forEach(function(kw) { mHtml += '<span class="kw-tag kw-tag-strong">' + esc(kw) + '</span>'; });
+    mHtml += '</div>';
+  }
+  if (matched.medium && matched.medium.length) {
+    hasKw = true;
+    mHtml += '<div class="detail-matched-kw-group"><span class="detail-matched-kw-label">中</span>';
+    matched.medium.forEach(function(kw) { mHtml += '<span class="kw-tag kw-tag-medium">' + esc(kw) + '</span>'; });
+    mHtml += '</div>';
+  }
+  if (matched.weak && matched.weak.length) {
+    hasKw = true;
+    mHtml += '<div class="detail-matched-kw-group"><span class="detail-matched-kw-label">弱</span>';
+    matched.weak.forEach(function(kw) { mHtml += '<span class="kw-tag kw-tag-weak">' + esc(kw) + '</span>'; });
+    mHtml += '</div>';
+  }
+  dMatchedKw.innerHTML = (hasKw ? mHtml : '<div class="detail-matched-kw-header">匹配关键词</div><span class="kw-empty">无匹配</span>') +
+    (item.filter_decision === 'review' && item.confidence_score ? '<div class="detail-kw-scoreline">评分: ' + item.confidence_score + '分</div>' : '');
 }
 
 function loadNav(data) {
@@ -511,7 +552,14 @@ function loadNav(data) {
       if (countEl) countEl.textContent = data.catCounts[idx];
     }
   });
-  sidebarFooter.textContent = data.totalCount + ' 条 · ' + data.catNames.length + ' 个分类';
+  // Review nav
+  var reviewNav = document.querySelector('.nav-item[data-idx="-2"]');
+  var reviewCountEl = reviewNav && reviewNav.querySelector('.nav-count');
+  if (reviewCountEl) {
+    reviewCountEl.textContent = data.reviewCount || 0;
+    reviewNav.style.display = (data.reviewCount > 0) ? '' : 'none';
+  }
+  sidebarFooter.textContent = data.totalCount + ' 条 · ' + data.catNames.length + ' 个分类' + (data.reviewCount > 0 ? ' · ' + data.reviewCount + ' 待复核' : '');
 }
 
 function applyWeekData(week) {
@@ -556,11 +604,13 @@ function switchWeek(week) {
       return r.json();
     })
     .then(function(items) {
+      var rcount = items.filter(function(i) { return i.filter_decision === 'review'; }).length;
       _allData[week] = {
         items: items,
         catNames: _catNames,
         catCounts: [],
-        totalCount: items.length
+        totalCount: items.length - rcount,
+        reviewCount: rcount
       };
       // Calculate catCounts from items
       var counts = [];

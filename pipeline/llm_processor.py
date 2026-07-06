@@ -175,6 +175,14 @@ def _count_chinese(text: str) -> int:
     return len(re.findall(r"[一-鿿]", text))
 
 
+def _is_chinese_text(text: str) -> bool:
+    """检测文本是否主要是中文（>30% 字符为中文）"""
+    if not text:
+        return False
+    chinese_chars = _count_chinese(text[:200])
+    return chinese_chars > len(text[:200]) * 0.3 if text[:200] else False
+
+
 def process(items: list[dict], config: dict) -> list[dict]:
     """为每条内容生成中文摘要
 
@@ -213,7 +221,7 @@ def process(items: list[dict], config: dict) -> list[dict]:
 
         # 情况 A: 摘要曾被全文替换 → 从全文中抽取关键句
         if original_summary:
-            if language == "en":
+            if language == "en" and not _is_chinese_text(summary):
                 raw = generate_extractive_summary(summary)
                 ai_summary = translate_text(raw) if raw else ""
             else:
@@ -221,10 +229,24 @@ def process(items: list[dict], config: dict) -> list[dict]:
 
         # 情况 B: RSS 摘要性内容可直接使用
         else:
-            if language == "en":
+            if language == "en" and not _is_chinese_text(summary):
                 ai_summary = translate_text(summary[:800])
+            elif language == "en":
+                # 语言标记为英语但实际是中文（如 AI Hot 部分内容）
+                body_text = item.get("full_body", "")
+                if body_text and len(body_text) > len(summary) * 2:
+                    extracted = generate_extractive_summary(body_text)
+                    ai_summary = extracted if extracted else summary[:300]
+                else:
+                    ai_summary = summary[:500]
             else:
-                ai_summary = summary[:500]
+                # 优先从 full_body 做抽取式摘要
+                body_text = item.get("full_body", "")
+                if body_text and len(body_text) > len(summary) * 2:
+                    extracted = generate_extractive_summary(body_text)
+                    ai_summary = extracted if extracted else summary[:300]
+                else:
+                    ai_summary = summary[:500]
 
         item["ai_summary"] = ai_summary
 

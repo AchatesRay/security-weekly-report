@@ -106,8 +106,6 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
                 if resp.text.strip():
                     return {
                         "source_name": name,
-                        "source_level": source["source_level"],
-                        "region": source["region"],
                         "language": source["language"],
                         "url": feed_url,
                         "type": source.get("type", "rss"),
@@ -118,8 +116,6 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
         except Exception as e:
             return {
                 "source_name": name,
-                "source_level": source["source_level"],
-                "region": source["region"],
                 "language": source["language"],
                 "url": feed_url,
                 "type": source.get("type", "rss"),
@@ -138,8 +134,6 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
         if resp.text.strip():
             return {
                 "source_name": name,
-                "source_level": source["source_level"],
-                "region": source["region"],
                 "language": source["language"],
                 "url": feed_url,
                 "type": source.get("type", "rss"),
@@ -163,8 +157,6 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
         resp2.raise_for_status()
         return {
             "source_name": name,
-            "source_level": source["source_level"],
-            "region": source["region"],
             "language": source["language"],
             "url": feed_url,
             "type": source.get("type", "rss"),
@@ -177,8 +169,6 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
         print(f"  [FETCH ERROR] {name}: {msg}")
         return {
             "source_name": name,
-            "source_level": source["source_level"],
-            "region": source["region"],
             "language": source["language"],
             "url": feed_url,
             "type": source.get("type", "rss"),
@@ -192,8 +182,6 @@ def _make_api_result(source: dict, url: str, text: str, platform: str, error: st
     """构造统一的 API 采集结果字典，减少五个 _fetch_* 函数中的样板代码"""
     return {
         "source_name": source["name"],
-        "source_level": source["source_level"],
-        "region": source["region"],
         "language": source["language"],
         "url": url,
         "type": "api",
@@ -334,8 +322,6 @@ async def fetch_all() -> list[dict]:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         results = [r if isinstance(r, dict) else {
             "source_name": "",
-            "source_level": "",
-            "region": "",
             "language": "",
             "url": "",
             "type": "",
@@ -350,8 +336,6 @@ async def fetch_all() -> list[dict]:
         fail_count = h.get("consecutive_failures", 0)
         results.append({
             "source_name": s["name"],
-            "source_level": s["source_level"],
-            "region": s["region"],
             "language": s["language"],
             "url": s["url"],
             "type": s.get("type", "rss"),

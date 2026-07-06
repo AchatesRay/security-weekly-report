@@ -13,13 +13,13 @@
     #     "decision": "accepted",
     #     "category": "③ 漏洞态势与供应链安全",
     #     "content_type": "漏洞披露",
-    #     "region": "cn",
     #     "matched": {...},
     #     "reason": "..."
     # }
 """
 
 import json
+import re
 from pathlib import Path
 
 SCORING_CONFIG_PATH = Path("config/scoring_keywords.json")
@@ -68,14 +68,18 @@ class SecurityScorer:
 
         self.medium_kw_list = []
         self.medium_index = {}
+        self.medium_type_index = {}
         for entry in c["medium"]["keywords"]:
             text = entry["text"]
+            kw_type = entry.get("type", "normal")
             self.medium_kw_list.append(text)
             self.medium_index[text.lower()] = {
                 "text": text,
+                "type": kw_type,
                 "categories": entry.get("categories", []),
                 "content_types": entry.get("content_types", []),
             }
+            self.medium_type_index[text.lower()] = kw_type
 
         self.weak_kw_list = []
         self.weak_index = {}
@@ -98,31 +102,32 @@ class SecurityScorer:
         # 内容类型元数据
         self.content_types_meta = c.get("content_types", {})
 
-        # 地域推断关键词
-        self.region_map = {
-            "cn": [
-                "中国", "国家网信办", "工信部", "cncert", "中国信通院",
-                "全国信安标委", "公安三所", "等保", "网信办",
-            ],
-            "us": [
-                "美国", "CISA", "FBI", "NSA", "白宫", "Biden", "Trump",
-                "美国政府", "US government",
-            ],
-            "eu": [
-                "欧盟", "ENISA", "GDPR", "欧洲", "EU", "European Union",
-            ],
-        }
+        # 预编译词边界 regex：纯 ASCII 关键词用词边界匹配防误报
+        self._ascii_patterns = {}
+        for kw_text in self.strong_kw_list + self.medium_kw_list + self.weak_kw_list:
+            if kw_text and self._is_ascii_only(kw_text):
+                self._ascii_patterns[kw_text.lower()] = re.compile(
+                    r'\b' + re.escape(kw_text) + r'\b', re.IGNORECASE
+                )
+
 
     # ── 文本分段 ──
+
+    @staticmethod
+    def _is_ascii_only(text: str) -> bool:
+        """判断关键词是否纯ASCII（纯ASCII关键词需用词边界匹配防误报）"""
+        return bool(text) and all(ord(c) < 128 for c in text)
 
     def _segment_text(self, item: dict) -> dict[str, str]:
         """将条目文本分割为 title / lead / body / tail"""
         title = item.get("title") or ""
 
         body_text = item.get("summary") or ""
-        orig = item.get("original_summary") or ""
-        if orig and orig != body_text and len(orig) > len(body_text):
-            body_text = orig
+        # full_body（content:encoded）> original_summary（fulltext_extractor 备份）> summary
+        for field in ("full_body", "original_summary"):
+            val = item.get(field) or ""
+            if len(val) > len(body_text):
+                body_text = val
 
         if not body_text.strip():
             return {"title": title, "lead": "", "body": "", "tail": ""}
@@ -165,6 +170,17 @@ class SecurityScorer:
         """检查关键词是否实际贡献分数（standalone_score=false 不计分，仅用于分类）"""
         rule = self.ambiguity_lookup.get(kw_text.lower())
         return not (rule and rule.get("standalone_score") is False)
+
+    # ── 词边界感知匹配 ──
+
+    def _kw_matches(self, kw_text: str, text: str) -> bool:
+        """检查关键词是否匹配文本——纯ASCII用词边界regex，含CJK用子串匹配"""
+        if not kw_text.strip() or not text:
+            return False
+        pattern = self._ascii_patterns.get(kw_text.lower())
+        if pattern:
+            return bool(pattern.search(text))
+        return kw_text.lower() in text.lower()
 
     # ── 负向过滤 ──
 
@@ -227,7 +243,15 @@ class SecurityScorer:
         }
         broad_scores = {}
         for ct, patterns in broad_map.items():
-            score = sum(1 for p in patterns if p.lower() in text_lower)
+            score = 0
+            for p in patterns:
+                if self._is_ascii_only(p):
+                    # 纯 ASCII 模式：词边界匹配
+                    if re.search(r'\b' + re.escape(p) + r'\b', text, re.IGNORECASE):
+                        score += 1
+                else:
+                    if p.lower() in text_lower:
+                        score += 1
             if score > 0:
                 broad_scores[ct] = score
 
@@ -237,15 +261,112 @@ class SecurityScorer:
 
         return max(ct_scores, key=ct_scores.get) if ct_scores else "综合"
 
-    # ── 地域推断 ──
+    # ── 三级梯度计分（pairing_rules） ──
 
-    def _infer_region(self, text: str) -> str:
-        """从全文扫描推断地域"""
-        text_lower = text.lower()
-        for region, kws in self.region_map.items():
-            if any(kw.lower() in text_lower for kw in kws):
-                return region
-        return ""
+    def _score_with_pairing_rules(
+        self,
+        strong_matched: dict,
+        medium_matched: dict,
+        weak_matched: dict,
+    ) -> tuple[float, dict]:
+        """基于 pairing_rules 四级梯度计分，按分类独立判定层级。
+
+        返回:
+            (total_score, per_category_detail)
+        """
+        pairing = self.config.get("pairing_rules", {})
+
+        # -- 第1步：按分类聚合所有关键词 --
+        cat_groups: dict[str, dict] = {}
+        # 全局 uncategorized 中/弱词（categories=[]）
+        global_medium = []
+        global_weak = []
+
+        for kw_text, info in strong_matched.items():
+            entry = {"text": kw_text, "mult": info["mult"]}
+            cats = info.get("categories", [])
+            if cats:
+                for cat in cats:
+                    g = cat_groups.setdefault(cat, {"strong": [], "medium": [], "weak": []})
+                    g["strong"].append(entry)
+            # strong 没有空分类的情况，无需处理
+
+        for kw_text, info in medium_matched.items():
+            kw_type = self.medium_type_index.get(kw_text.lower(), "normal")
+            entry = {"text": kw_text, "mult": info["mult"], "type": kw_type}
+            cats = info.get("categories", [])
+            if cats:
+                for cat in cats:
+                    g = cat_groups.setdefault(cat, {"strong": [], "medium": [], "weak": []})
+                    g["medium"].append(entry)
+            else:
+                global_medium.append(entry)
+
+        for kw_text, info in weak_matched.items():
+            entry = {"text": kw_text, "mult": info["mult"]}
+            cats = info.get("categories", [])
+            if cats:
+                for cat in cats:
+                    g = cat_groups.setdefault(cat, {"strong": [], "medium": [], "weak": []})
+                    g["weak"].append(entry)
+            else:
+                global_weak.append(entry)
+
+        # -- 第2步：各分类独立计算 --
+        total = 0.0
+        cat_details = {}
+
+        for cat, group in cat_groups.items():
+            has_strong = any(self._should_score(k["text"]) for k in group["strong"])
+            core_medium_count = sum(
+                1 for m in group["medium"]
+                if m["type"] == "core" and self._should_score(m["text"])
+            )
+            normal_medium_count = sum(
+                1 for m in group["medium"]
+                if m["type"] == "normal" and self._should_score(m["text"])
+            )
+
+            if has_strong:
+                medium_ratio = float(pairing.get("tier_a", {}).get("medium_score_ratio", 1))
+                weak_ratio = float(pairing.get("tier_a", {}).get("weak_score_ratio", 1))
+                tier = "tier_a"
+            elif core_medium_count >= 1:
+                medium_ratio = float(pairing.get("tier_b", {}).get("medium_score_ratio", 0.6))
+                weak_ratio = float(pairing.get("tier_b", {}).get("weak_score_ratio", 0.3))
+                tier = "tier_b"
+            elif normal_medium_count >= 2:
+                medium_ratio = float(pairing.get("tier_c", {}).get("medium_score_ratio", 0.5))
+                weak_ratio = float(pairing.get("tier_c", {}).get("weak_score_ratio", 0.2))
+                tier = "tier_c"
+            else:
+                medium_ratio = float(pairing.get("tier_d", {}).get("medium_score_ratio", 0))
+                weak_ratio = float(pairing.get("tier_d", {}).get("weak_score_ratio", 0))
+                tier = "tier_d"
+
+            cat_total = 0.0
+            for kw in group["strong"]:
+                if self._should_score(kw["text"]):
+                    cat_total += self.strong_weight * kw["mult"]
+            for m in group["medium"]:
+                if self._should_score(m["text"]):
+                    cat_total += self.medium_weight * m["mult"] * medium_ratio
+            for w in group["weak"]:
+                if self._should_score(w["text"]):
+                    cat_total += self.weak_weight * w["mult"] * weak_ratio
+
+            total += cat_total
+            cat_details[cat] = {"tier": tier, "score": round(cat_total, 1)}
+
+        # -- 第3步：全局 uncategorized 词全额计分 --
+        for m in global_medium:
+            if self._should_score(m["text"]):
+                total += self.medium_weight * m["mult"]
+        for w in global_weak:
+            if self._should_score(w["text"]):
+                total += self.weak_weight * w["mult"]
+
+        return total, cat_details
 
     # ── 综合评分 ──
 
@@ -258,7 +379,6 @@ class SecurityScorer:
             decision: "accepted" / "review" / "filtered"
             category: 安全领域分类字符串
             content_type: 内容类型
-            region: 地域
             matched: {strong: [...], medium: [...], weak: [...]}
             reason: 判定理由简述
         """
@@ -276,12 +396,11 @@ class SecurityScorer:
             if not seg_text:
                 continue
             mult = self.position_mult.get(seg_name, 1.0)
-            seg_lower = seg_text.lower()
 
             for kw_text in self.strong_kw_list:
                 if not kw_text.strip():
                     continue
-                if kw_text.lower() in seg_lower:
+                if self._kw_matches(kw_text, seg_text):
                     if kw_text not in strong_matched or mult > strong_matched[kw_text]["mult"]:
                         idx = self.strong_index.get(kw_text.lower(), {})
                         strong_matched[kw_text] = {
@@ -293,7 +412,7 @@ class SecurityScorer:
             for kw_text in self.medium_kw_list:
                 if not kw_text.strip():
                     continue
-                if kw_text.lower() in seg_lower:
+                if self._kw_matches(kw_text, seg_text):
                     if kw_text not in medium_matched or mult > medium_matched[kw_text]["mult"]:
                         idx = self.medium_index.get(kw_text.lower(), {})
                         medium_matched[kw_text] = {
@@ -305,7 +424,7 @@ class SecurityScorer:
             for kw_text in self.weak_kw_list:
                 if not kw_text.strip():
                     continue
-                if kw_text.lower() in seg_lower:
+                if self._kw_matches(kw_text, seg_text):
                     if kw_text not in weak_matched or mult > weak_matched[kw_text]["mult"]:
                         idx = self.weak_index.get(kw_text.lower(), {})
                         weak_matched[kw_text] = {
@@ -327,22 +446,27 @@ class SecurityScorer:
         weak_matched = filter_ambiguity(weak_matched)
 
         # 4. 计算总分（skip standalone_score=false keywords）
-        total = 0.0
         has_strong = any(self._should_score(k) for k in strong_matched)
 
-        for kw_text, info in strong_matched.items():
-            if self._should_score(kw_text):
-                total += self.strong_weight * info["mult"]
-
-        medium_requires_context = self.config["medium"].get("requires_strong_or_medium", False)
-        if not medium_requires_context or has_strong:
-            for kw_text, info in medium_matched.items():
+        has_pairing_rules = "pairing_rules" in self.config
+        if has_pairing_rules:
+            total, cat_details = self._score_with_pairing_rules(
+                strong_matched, medium_matched, weak_matched,
+            )
+        else:
+            # 旧版兼容：简单累加
+            total = 0.0
+            for kw_text, info in strong_matched.items():
                 if self._should_score(kw_text):
-                    total += self.medium_weight * info["mult"]
-
-        for kw_text, info in weak_matched.items():
-            if self._should_score(kw_text):
-                total += self.weak_weight * info["mult"]
+                    total += self.strong_weight * info["mult"]
+            medium_requires_context = self.config["medium"].get("requires_strong_or_medium", False)
+            if not medium_requires_context or has_strong:
+                for kw_text, info in medium_matched.items():
+                    if self._should_score(kw_text):
+                        total += self.medium_weight * info["mult"]
+            for kw_text, info in weak_matched.items():
+                if self._should_score(kw_text):
+                    total += self.weak_weight * info["mult"]
 
         # 5. 负向过滤
         source = item.get("source") or ""
@@ -359,20 +483,20 @@ class SecurityScorer:
         # 6. 封顶
         total = max(0, min(100, total))
 
-        # 7. 阈值判定
+        # 7. 阈值判定（三档：≥accept_threshold 收录，≥review_threshold 待复核，<threshold 丢弃）
         score_int = round(total)
-        if score_int >= self.thresholds["direct_accept"]:
+        accept_threshold = self.thresholds.get("accept_threshold",
+                           self.thresholds.get("direct_accept", 50))
+        review_threshold = self.thresholds.get("review_threshold", 45)
+        if score_int >= accept_threshold:
             decision = "accepted"
             level = "high"
-        elif score_int >= self.thresholds["review_lower"]:
+        elif score_int >= review_threshold:
             decision = "review"
             level = "medium"
         else:
             decision = "filtered"
-            if score_int < 30:
-                level = "non-security"
-            else:
-                level = "low"
+            level = "non-security"
 
         # 8. 分类与元数据（合并所有匹配关键词）
         all_matched = {}
@@ -382,7 +506,6 @@ class SecurityScorer:
 
         category = self._classify(all_matched)
         content_type = self._infer_content_type(all_matched, all_text)
-        region = self._infer_region(all_text)
 
         # 9. 判定理由
         reason_parts = []
@@ -390,6 +513,10 @@ class SecurityScorer:
             reason_parts.append(f"命中{len(strong_matched)}个强特征词")
         if medium_matched:
             reason_parts.append(f"命中{len(medium_matched)}个中特征词")
+        if has_pairing_rules and cat_details:
+            tiers_used = set(d["tier"] for d in cat_details.values())
+            tier_labels = ", ".join(sorted(tiers_used))
+            reason_parts.append(f"梯度: {tier_labels}")
         if has_negative and not has_strong:
             reason_parts.append("负向过滤规则命中")
         reason_parts.append(f"最终得分{score_int}")
@@ -401,12 +528,12 @@ class SecurityScorer:
             "decision": decision,
             "category": category,
             "content_type": content_type,
-            "region": region,
             "matched": {
                 "strong": sorted(strong_matched.keys()),
                 "medium": sorted(medium_matched.keys()),
                 "weak": sorted(weak_matched.keys()),
             },
+            "cat_details": cat_details if has_pairing_rules else {},
             "reason": reason,
         }
 
@@ -429,12 +556,11 @@ class SecurityScorer:
             if not seg_text:
                 continue
             mult = self.position_mult.get(seg_name, 1.0)
-            text_lower = seg_text.lower()
 
             for kw_text in self.strong_kw_list:
                 if not kw_text.strip():
                     continue
-                if kw_text.lower() in text_lower:
+                if self._kw_matches(kw_text, seg_text):
                     if self._check_ambiguity(kw_text, seg_text) and self._should_score(kw_text):
                         total += self.strong_weight * mult
                         has_strong = True
@@ -443,14 +569,14 @@ class SecurityScorer:
                 for kw_text in self.medium_kw_list:
                     if not kw_text.strip():
                         continue
-                    if kw_text.lower() in text_lower:
+                    if self._kw_matches(kw_text, seg_text):
                         if self._check_ambiguity(kw_text, seg_text) and self._should_score(kw_text):
                             total += self.medium_weight * mult
 
             for kw_text in self.weak_kw_list:
                 if not kw_text.strip():
                     continue
-                if kw_text.lower() in text_lower:
+                if self._kw_matches(kw_text, seg_text):
                     if self._check_ambiguity(kw_text, seg_text) and self._should_score(kw_text):
                         total += self.weak_weight * mult
 

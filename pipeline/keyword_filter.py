@@ -136,7 +136,6 @@ def run_stage2():
         item["filter_decision"] = result["decision"]
         item["category"] = result["category"]
         item["content_type"] = result["content_type"]
-        item["region"] = result["region"]
         item["scoring_reason"] = result["reason"]
         item["scoring_matched"] = result["matched"]
 
@@ -147,17 +146,17 @@ def run_stage2():
         else:
             discarded.append(item)
 
-    # 写回：保留 accepted + review（review 进入人工审核池）
+    # 写回：accepted + review 都保留继续走管道
     final = accepted + review
 
     from . import atomic_write
     atomic_write(PARSED_ITEMS_PATH, final, indent=2)
 
     print(f"[KEYWORD] 阶段2过滤: {total_before} → {len(final)} 条保留"
-          f" ({len(accepted)} 高置信, {len(review)} 待复核, {len(discarded)} 丢弃)")
+          f" ({len(accepted)} 收录, {len(review)} 待复核, {len(discarded)} 丢弃)")
 
     # ── 评分质量仪表盘 ──
-    all_scored = accepted + review + discarded
+    all_scored = accepted + discarded
 
     # 分数段分布
     buckets = [0] * 11  # 0-9, 10-19, ..., 90-100
