@@ -172,21 +172,6 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
 ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
 
 /* Misc */
-.badge { display:inline-block; padding:1px 6px; border-radius:3px; font-size:10px; font-weight:600; }
-.badge-S { background:var(--accent-soft); color:var(--accent); }
-.badge-A { background:var(--success-soft); color:var(--success); }
-.badge-B { background:rgba(217,119,6,0.1); color:#92400e; }
-.badge-C { background:var(--danger-soft); color:var(--danger); }
-.trace-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:3px; font-size:11px; font-weight:500; white-space:nowrap; }
-.trace-badge::before { content:""; width:5px; height:5px; border-radius:50%; }
-.trace-ok { background:var(--success-soft); color:var(--success); }
-.trace-ok::before { background:var(--success); }
-.trace-fail { background:var(--danger-soft); color:var(--danger); }
-.trace-fail::before { background:var(--danger); }
-.trace-flt { background:rgba(217,119,6,0.1); color:#92400e; }
-.trace-flt::before { background:#f59e0b; }
-.trace-emp { background:var(--accent-soft); color:var(--accent); }
-.trace-emp::before { background:var(--accent); }
 .flex { display:flex; align-items:center; gap:8px; }
 .gap { gap:12px; }
 .mt { margin-top:12px; }
@@ -211,7 +196,6 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
       <div class="nav-item" data-tab="llm"><span class="nav-icon">🧠</span> LLM 配置</div>
       <div class="nav-item" data-tab="translate"><span class="nav-icon">🌐</span> 翻译配置</div>
       <div class="nav-item" data-tab="pipeline"><span class="nav-icon">⚡</span> 管道控制</div>
-      <div class="nav-item" data-tab="trace"><span class="nav-icon">📋</span> 管道溯源</div>
     </nav>
   </aside>
 
@@ -485,36 +469,6 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
       </div>
     </div>
 
-    <!-- Tab: 管道溯源 -->
-    <div class="tab-content" id="tab-trace">
-      <div class="page-title">📋 管道溯源</div>
-      <div class="page-desc">追踪每个信源在管道各阶段的数据流动，快速定位抓取失败、解析异常或评分过滤的原因</div>
-      <div id="traceSummary" style="font-size:12px;color:var(--text-muted);margin-bottom:12px"></div>
-      <div class="card" style="padding:0;overflow:hidden">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border-light)">
-          <span style="font-size:13px;font-weight:600">共 <span id="traceCount">0</span> 个信源</span>
-          <div class="flex gap">
-            <span class="text-muted" id="traceStats" style="font-size:12px"></span>
-            <button class="btn btn-outline btn-sm" onclick="loadTrace()">刷新</button>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table id="traceTable">
-            <thead>
-              <tr>
-                <th style="width:16%">信源</th>
-                <th style="width:38%">处理链路</th>
-                <th style="width:38%">原因 / 说明</th>
-                <th style="width:8%">状态</th>
-              </tr>
-            </thead>
-            <tbody id="traceBody"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="text-muted">数据来源：各阶段中间文件（parsed_items.json / deduped_items.json / enhanced_items.json），最近一次管道运行后的快照。</div>
-    </div>
-
   </div>
 </div>
 
@@ -564,8 +518,6 @@ document.querySelectorAll('.nav-item').forEach(function(el) {
     document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
     el.classList.add('active');
     document.getElementById('tab-' + el.dataset.tab).classList.add('active');
-    // 切换到管道溯源 tab 时自动刷新
-    if (el.dataset.tab === 'trace') loadTrace();
   });
 });
 
@@ -1104,63 +1056,6 @@ function clearLog() {
   document.getElementById('logBox').innerHTML = '<span class="text-muted">日志已清空</span>';
 }
 
-// -- Pipeline Trace --
-
-var TRACE_GROUP_ORDER = ['政府与CERT','安全厂商','安全媒体','国内信源','AI厂商','开发者社区','其他'];
-
-function loadTrace() {
-  api('GET', '/api/config/pipeline_trace').then(function(r) {
-    if (!r.ok || !r.sources) { toast('加载溯源数据失败', 'error'); return; }
-    renderTrace(r.sources);
-  });
-}
-
-function renderTrace(sources) {
-  document.getElementById('traceCount').textContent = sources.length;
-
-  var stats = {ok: 0, failed: 0, filtered: 0, empty: 0};
-  sources.forEach(function(s) { if (stats[s.status] !== undefined) stats[s.status]++; });
-  document.getElementById('traceStats').textContent =
-    '正常 ' + stats.ok + ' | 失败 ' + stats.failed + ' | 部分过滤 ' + stats.filtered + ' | 空 ' + stats.empty;
-
-  var groups = {};
-  sources.forEach(function(s) {
-    var g = s.group || '其他';
-    if (!groups[g]) groups[g] = [];
-    groups[g].push(s);
-  });
-
-  var sortedGroups = Object.keys(groups).sort(function(a,b) {
-    var ai = TRACE_GROUP_ORDER.indexOf(a);
-    var bi = TRACE_GROUP_ORDER.indexOf(b);
-    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-  });
-
-  var STATUS_LABEL = { ok: '正常', failed: '失败', filtered: '部分过滤', empty: '空' };
-  var STATUS_CLASS = { ok: 'trace-ok', failed: 'trace-fail', filtered: 'trace-flt', empty: 'trace-emp' };
-
-  var html = '';
-  sortedGroups.forEach(function(gName) {
-    var items = groups[gName].slice().sort(function(a,b) { return b.final - a.final; });
-    html += '<tr class="group-header"><td colspan="4">' + esc(gName) + ' <span class="text-muted">(' + items.length + ' 个信源)</span></td></tr>';
-    items.forEach(function(s) {
-      var st = s.status || 'ok';
-      html += '<tr>' +
-        '<td class="source-name" title="' + escAttr(s.name) + '">' + esc(s.name) + '</td>' +
-        '<td style="font-size:12px;font-family:monospace">' + esc(s.chain) + '</td>' +
-        '<td style="font-size:12px;color:var(--text-secondary)">' + esc(s.reason) + '</td>' +
-        '<td><span class="trace-badge ' + (STATUS_CLASS[st] || '') + '">' + (STATUS_LABEL[st] || st) + '</span></td>' +
-        '</tr>';
-    });
-  });
-
-  if (!sources.length) {
-    html = '<tr><td colspan="4" style="padding:24px;text-align:center;color:var(--text-muted)">暂无数据，请先运行管道</td></tr>';
-  }
-
-  document.getElementById('traceBody').innerHTML = html;
-}
-
 // -- Load all configs --
 
 function loadAll() {
@@ -1170,7 +1065,6 @@ function loadAll() {
     api('GET', '/api/config/llm').then(function(r) { if (r.yaml) _llm = parseLlm(r.yaml); renderLlm(); }),
     api('GET', '/api/config/source_status').then(function(r) { if (r.ok) _sourceStatus = r.status || {}; renderSources(); }),
     api('GET', '/api/config/scoring_keywords').then(function(r) { if (r.ok) { _scoringConfig = r.config; var editor = document.getElementById('scoringEditor'); if (editor) editor.value = JSON.stringify(r.config, null, 2); renderKeywordManager(); } }),
-    loadTrace(),
   ]).catch(function(e) {
     toast('无法加载配置，请确认 config_server.py 已启动', 'error');
     console.error(e);
