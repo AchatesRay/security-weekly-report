@@ -5,6 +5,13 @@ import sys
 import subprocess
 from pathlib import Path
 
+# 从 .env 文件加载环境变量（如果存在）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 PROJECT_DIR = Path(__file__).resolve().parent
 
 
@@ -29,9 +36,9 @@ def main():
         args = [sys.executable, str(server_script), "--project-dir", str(PROJECT_DIR)]
         if len(sys.argv) > 2:
             args.append(sys.argv[2])
-        print(f"[SERVER] 启动配置服务器 (端口 {sys.argv[2] if len(sys.argv) > 2 else '8081'})")
+        print(f"[SERVER] 启动配置服务器 (端口 {sys.argv[2] if len(sys.argv) > 2 else '8090'})")
         subprocess.Popen(args)
-        print(f"[SERVER] 服务器已启动，访问 http://localhost:{sys.argv[2] if len(sys.argv) > 2 else '8081'}")
+        print(f"[SERVER] 服务器已启动，访问 http://localhost:{sys.argv[2] if len(sys.argv) > 2 else '8090'}")
 
     else:
         print(f"未知命令: {cmd}")

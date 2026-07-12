@@ -35,6 +35,13 @@
     "weight": 30,
     "keywords": [
       {
+        "text": "AI models",
+        "type": "core",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
         "text": "AI agent",
         "categories": [
           "① AI/LLM 安全"
@@ -469,6 +476,13 @@
         "text": "QKD",
         "categories": [
           "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "Prompt Injection",
+        "type": "core",
+        "categories": [
+          "① AI/LLM 安全"
         ]
       },
       {
@@ -3233,12 +3247,6 @@
         "text": "PQC",
         "categories": [
           "⑥ 数据安全与隐私保护"
-        ]
-      },
-      {
-        "text": "Prompt Injection",
-        "categories": [
-          "① AI/LLM 安全"
         ]
       },
       {

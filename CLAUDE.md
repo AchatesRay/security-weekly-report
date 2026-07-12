@@ -7,7 +7,7 @@
 ```bash
 python app.py --run              # 完整运行
 python app.py --run --skip-fetch # 跳过抓取，重新生成
-python app.py server [port]      # 启动管理后台 (默认 8081)
+python app.py server [port]      # 启动管理后台 (默认 8090)
 ```
 
 ## 目录结构
@@ -60,11 +60,14 @@ data/                     中间数据（gitignored）
 ## 红线
 
 - 不要直接运行 `pipeline/scraper.py` 或 `pipeline/main.py` — 始终通过 `app.py` 入口
-- 不要在信源配置中硬编码 API 密钥 — 使用环境变量 `TMT_SECRET_ID` / `TMT_SECRET_KEY`
+- 不要在信源配置中硬编码 API 密钥 — 使用 `.env` 文件或环境变量
 - 评分阈值（stage1: 30, stage2: 80）改动需谨慎，影响报告条数质量
 - `config/source_config.yaml` 中 `enabled: false` 的信源不要删除，留作记录
 
 ## 环境变量
+
+支持从项目根目录的 `.env` 文件加载，也支持直接设置环境变量。
+参考 `.env.example` 创建你自己的 `.env` 文件（已 gitignored）。
 
 | 变量 | 用途 |
 |------|------|

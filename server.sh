@@ -4,7 +4,7 @@
 
 cd "$(dirname "$0")"
 PID_FILE="/tmp/config_server.pid"
-PORT=${2:-8081}
+PORT=${2:-8090}
 SERVER_SCRIPT="server/config_server.py"
 LOG_FILE="/tmp/config_server_${PORT}.log"
 
