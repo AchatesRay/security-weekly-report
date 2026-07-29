@@ -123,6 +123,7 @@ def translate_all() -> list[dict]:
         summary = item.get("original_summary") or item.get("summary", "")
 
         item["title_zh"] = translate_text(title)
+        time.sleep(0.22)
         if len(summary) > 500:
             item["summary_zh"] = translate_text(summary[:500])
         else:
@@ -135,13 +136,14 @@ def translate_all() -> list[dict]:
             elapsed = (dt.now() - start).total_seconds()
             print(f"  [TRANSLATOR] 进度: {idx+1}/{total} ({elapsed:.0f}s)")
 
-        time.sleep(0.5)
+        time.sleep(0.22)
 
-    # 检查所有条目的 ai_summary，英文则翻译
+    # 检查所有条目的 ai_summary，英文则翻译（已按 4 QPS 限速）
     for item in items:
         ai_summary = item.get("ai_summary", "")
         if ai_summary and not _is_chinese(ai_summary):
             translated = translate_text(ai_summary)
+            time.sleep(0.22)
             if translated and translated != ai_summary:
                 item["ai_summary_zh"] = translated
                 ai_translated += 1

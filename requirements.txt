@@ -7,8 +7,12 @@ beautifulsoup4>=4.12.0
 lxml>=5.0.0
 python-dotenv>=1.0.0
 
-# 翻译模块依赖（腾讯云 TMT）
-tencentcloud-sdk-python>=3.0.0
+# 文本处理（LLM 处理器依赖）
+jieba>=0.42.1
+numpy>=1.24.0
+
+# 翻译模块依赖（腾讯云 TMT，使用 3.0.x 兼容 TextTranslate API）
+tencentcloud-sdk-python>=3.0.0,<3.1
 
 # LLM 摘要（预留功能，默认关闭 — 仅在 LLM 模式启用时需要）
 # openai>=1.0.0
