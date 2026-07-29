@@ -196,8 +196,21 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         "application/json", "text/plain", "application/xml",
     ])
 
+    @staticmethod
+    def _is_report_path(path: Path) -> bool:
+        """判断是否为周报文件，用于添加缓存头"""
+        name = path.name
+        return name.startswith("Security_Reports") or name.startswith("data_")
+
+    def _gz_path(self, path: Path) -> Path | None:
+        """如果存在预压缩文件且客户端接受 gzip，返回 .gz 路径"""
+        gz = path.with_name(path.name + ".gz")
+        if gz.exists() and "gzip" in self.headers.get("Accept-Encoding", ""):
+            return gz
+        return None
+
     def _serve_file(self, file_path: Path, ctype: str = None):
-        """直接返回文件内容（支持 gzip 压缩）"""
+        """直接返回文件内容（优先预压缩，回退实时压缩或原始）"""
         if not file_path.exists():
             return False
         if ctype is None:
@@ -207,6 +220,22 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
                 ".json": "application/json; charset=utf-8",
             }.get(ext, "text/html; charset=utf-8")
 
+        # 优先返回预压缩文件
+        pre_gz = self._gz_path(file_path)
+        if pre_gz is not None:
+            data = pre_gz.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Vary", "Accept-Encoding")
+            if self._is_report_path(file_path):
+                self.send_header("Cache-Control", "public, max-age=3600")
+            self.end_headers()
+            self.wfile.write(data)
+            return True
+
+        # 回退：读取原始文件
         accept_gzip = "gzip" in self.headers.get("Accept-Encoding", "")
         try:
             raw = file_path.read_bytes()
@@ -215,7 +244,7 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
 
         if accept_gzip and len(raw) > 512:
             buf = BytesIO()
-            with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6) as gz:
+            with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=1) as gz:
                 gz.write(raw)
             compressed = buf.getvalue()
             if len(compressed) < len(raw):
@@ -224,6 +253,8 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Content-Encoding", "gzip")
                 self.send_header("Content-Length", str(len(compressed)))
                 self.send_header("Vary", "Accept-Encoding")
+                if self._is_report_path(file_path):
+                    self.send_header("Cache-Control", "public, max-age=3600")
                 self.end_headers()
                 self.wfile.write(compressed)
                 return True
@@ -231,6 +262,8 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(raw)))
+        if self._is_report_path(file_path):
+            self.send_header("Cache-Control", "public, max-age=3600")
         self.end_headers()
         self.wfile.write(raw)
         return True
@@ -254,11 +287,26 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         return super().send_head()
 
     def _send_compressed(self, path: str, ctype: str):
+        file_path = Path(path)
+        cache_header = "public, max-age=3600" if self._is_report_path(file_path) else "no-cache"
+        # 优先返回预压缩文件
+        pre_gz = self._gz_path(file_path)
+        if pre_gz is not None:
+            data = pre_gz.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", ctype + "; charset=utf-8" if "text/html" in ctype else ctype)
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", cache_header)
+            self.send_header("Vary", "Accept-Encoding")
+            self.end_headers()
+            return BytesIO(data)
+
         try:
             with open(path, "rb") as f:
                 raw = f.read()
             buf = BytesIO()
-            with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6) as gz:
+            with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=1) as gz:
                 gz.write(raw)
             compressed = buf.getvalue()
         except OSError:
@@ -272,7 +320,7 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Type", ctype + "; charset=utf-8" if ctype == "text/html" else ctype)
         self.send_header("Content-Encoding", "gzip")
         self.send_header("Content-Length", str(len(compressed)))
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", cache_header)
         self.send_header("Vary", "Accept-Encoding")
         self.end_headers()
         return BytesIO(compressed)
@@ -545,7 +593,8 @@ def main():
         print("[CONFIG] 警告: 认证未启用，请设置 CONFIG_USERNAME/CONFIG_PASSWORD 环境变量")
         print("[CONFIG] 当前配置: 任何可访问此端口的人均可完全控制配置")
 
-    server = http.server.HTTPServer(("0.0.0.0", port), ConfigHandler)
+    server = http.server.ThreadingHTTPServer(("0.0.0.0", port), ConfigHandler)
+    server.timeout = 30  # 防止残留线程阻塞
     print(f"[CONFIG] 管理后台: http://localhost:{port}/config.html")
     print(f"[CONFIG] 项目目录: {_PROJECT_DIR}")
     print(f"[CONFIG] API:       http://localhost:{port}/api/config/sources")

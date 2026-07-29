@@ -18,49 +18,48 @@
    * ================================================================= */
   var _detailCache = {};  // idx (in _currentItems) => full item object
   var _currentWeekData = null;  // full items array for current week
+  var _fetchP = null;  // 复用进行中的 fetch
 
   function loadDetailData(idx, callback) {
     if (_detailCache[idx]) {
       callback(_detailCache[idx]);
       return;
     }
+    function afterLoad() {
+      callback(_detailCache[idx] || window._currentItems[idx] || null);
+    }
     // 首次加载：fetch 当前周的完整数据
     if (!_currentWeekData) {
-      var week = window._currentWeek;
-      var url = '/reports/data_' + week + '.json';
-      fetch(url)
-        .then(function(r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        })
-        .then(function(items) {
-          _currentWeekData = items;
-          // 建立 idx 到完整数据的映射
-          var filtered = window._currentItems || [];
-          var catIdx = window._currentCat;
-          items.forEach(function(item) {
-            // 用 url 作为唯一标识匹配
-            for (var i = 0; i < filtered.length; i++) {
-              var li = window._currentData.items[i] || {};
-              if (li.url === item.url) {
-                _detailCache[i] = item;
-                break;
+      if (!_fetchP) {
+        var week = window._currentWeek;
+        var url = '/reports/data_' + week + '.json';
+        _fetchP = fetch(url)
+          .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function(items) {
+            _currentWeekData = items;
+            // 建立 idx 到完整数据的映射
+            var filtered = window._currentItems || [];
+            items.forEach(function(item) {
+              for (var i = 0; i < filtered.length; i++) {
+                var li = window._currentData.items[i] || {};
+                if (li.url === item.url) {
+                  _detailCache[i] = item;
+                  break;
+                }
               }
-            }
+            });
+            _fetchP = null;
+          })
+          .catch(function() {
+            _fetchP = null;
           });
-          if (_detailCache[idx]) {
-            callback(_detailCache[idx]);
-          } else {
-            // fallback: 用 inline 数据
-            callback(window._currentItems[idx] || null);
-          }
-        })
-        .catch(function() {
-          // fallback: 网络失败时用 inline 数据（已剥离，无 detail 字段）
-          callback(window._currentItems[idx] || null);
-        });
+      }
+      _fetchP.then(afterLoad, afterLoad);
     } else {
-      callback(_detailCache[idx] || window._currentItems[idx] || null);
+      afterLoad();
     }
   }
 

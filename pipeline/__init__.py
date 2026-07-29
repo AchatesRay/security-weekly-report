@@ -16,6 +16,7 @@
 Web 管理:  app.py server [port]
 """
 
+import gzip
 import json
 import os
 import tempfile
@@ -60,6 +61,21 @@ def atomic_write(path: str | Path, data: Any, **json_kwargs):
         raise
 
 
+def precompress(path: Path, level: int = 6, remove_original: bool = False) -> Path | None:
+    """为文件生成预压缩 .gz 版本，返回压缩文件路径（压缩后更大则跳过）"""
+    if not path.exists():
+        return None
+    gz_path = path.with_name(path.name + ".gz")
+    raw = path.read_bytes()
+    compressed = gzip.compress(raw, compresslevel=level)
+    if len(compressed) >= len(raw):
+        return None  # 压缩后更大，跳过
+    gz_path.write_bytes(compressed)
+    if remove_original:
+        path.unlink()
+    return gz_path
+
+
 from .fetcher import fetch_all
 from .parser import parse_all
 from .keyword_filter import run_stage1, run_stage2, init_default_keywords
@@ -72,7 +88,7 @@ from .mobile_converter import run as convert_mobile
 from .main import run_pipeline
 
 __all__ = [
-    "atomic_write",
+    "atomic_write", "precompress",
     "fetch_all",
     "parse_all",
     "init_default_keywords", "run_stage1", "run_stage2",
