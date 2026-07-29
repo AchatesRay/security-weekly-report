@@ -216,6 +216,18 @@ def generate_source_alerts() -> list[dict]:
     return alerts
 
 
+def _precompress_reports(week_str: str):
+    """预压缩周报数据 JSON 文件"""
+    from . import precompress
+    for f in [
+        REPORTS_DIR / f"data_{week_str}.json",
+        REPORTS_DIR / f"data_{week_str}_review.json",
+    ]:
+        gz = precompress(f)
+        if gz:
+            print(f"[COMPRESS] {gz.name} ({gz.stat().st_size:,} bytes)")
+
+
 def generate_report():
     # 优先使用翻译后的最终数据（含 AI 摘要+翻译），否则回退到增强数据或分类数据
     if TRANSLATED_ITEMS_PATH.exists():
@@ -310,6 +322,10 @@ def generate_report():
 
     print(f"[REPORT] 周报生成完成: {LATEST_REPORT}")
     print(f"[REPORT] 共 {total_count} 条（其中 {review_count} 条待复核）")
+
+    # 预压缩所有输出文件
+    _precompress_reports(week_str)
+
     return str(LATEST_REPORT)
 
 

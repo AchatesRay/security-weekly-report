@@ -14,8 +14,10 @@ REPORTS_DIR = PROJECT_DIR / "reports"
 MOBILE_CSS_PATH = PROJECT_DIR / "mobile.css"
 MOBILE_JS_PATH = PROJECT_DIR / "mobile.js"
 
-# 桌面端仅剔除 full_body（正文是体积大头）
-DESKTOP_SKIP_FIELDS = frozenset({'full_body'})
+# 桌面端剔除全部详情字段（按需加载）
+DESKTOP_SKIP_FIELDS = frozenset({
+    'full_body', 'summary', 'ai_summary', 'scoring_matched',
+})
 
 # 移动端剔除全部详情字段
 MOBILE_SKIP_FIELDS = frozenset({
@@ -77,36 +79,52 @@ def _strip_fields(items: list, skip_fields: set) -> list:
 
 
 def _inject_detail_loader(html: str) -> str:
-    """注入桌面端按需加载 full_body 的 JS"""
+    """注入桌面端按需加载全部详情字段的 JS"""
     loader_js = """
 (function(){
   var _fullData = null;
+  var _fetchP = null;
+  var _reqId = 0;
   var _origSI = window.selectItem;
   window.selectItem = function(idx) {
-    if (typeof _origSI === 'function') _origSI(idx);
+    _currentSel = idx;
+    /* 高亮卡片（立即响应） */
+    var cards = document.querySelectorAll('.list-card');
+    cards.forEach(function(el) { el.classList.remove('active'); });
+    var card = document.querySelector('.list-card[data-idx="' + idx + '"]');
+    if (card) card.classList.add('active');
     loadBody(idx);
   };
   function loadBody(idx) {
     var item = window._currentItems && window._currentItems[idx];
     if (!item) return;
-    if (item.full_body && item.full_body.length > 100) return;
-    var week = window._currentWeek;
-    if (!_fullData) {
-      fetch('/reports/data_' + week + '.json')
-        .then(function(r) { return r.json(); })
-        .then(function(items) { _fullData = items; matchAndRender(idx, item); })
-        .catch(function(){});
-    } else {
-      matchAndRender(idx, item);
+    /* 数据已在内存中（之前加载过） */
+    if (item.full_body && item.full_body.length > 100) {
+      if (typeof _origSI === 'function') _origSI(idx);
+      return;
     }
+    var localReq = ++_reqId;
+    function doRender() { matchAndRender(idx, item, localReq); }
+    if (_fullData) { doRender(); return; }
+    /* 复用进行中的 fetch，避免重复下载 */
+    if (!_fetchP) {
+      var week = window._currentWeek;
+      _fetchP = fetch('/reports/data_' + week + '.json')
+        .then(function(r) { return r.json(); })
+        .then(function(items) { _fullData = items; _fetchP = null; })
+        .catch(function() { _fetchP = null; });
+    }
+    _fetchP.then(doRender, doRender);
   }
-  function matchAndRender(idx, item) {
+  function matchAndRender(idx, item, reqId) {
+    if (reqId && reqId !== _reqId) return;
     for (var i = 0; i < _fullData.length; i++) {
       if (_fullData[i].url === item.url) {
-        if (_fullData[i].full_body) item.full_body = _fullData[i].full_body;
-        if (_fullData[i].summary) item.summary = _fullData[i].summary;
-        if (_fullData[i].ai_summary) item.ai_summary = _fullData[i].ai_summary;
-        if (window._currentSel === idx && typeof window._renderDetail === 'function') {
+        item.full_body = _fullData[i].full_body;
+        item.summary = _fullData[i].summary;
+        item.ai_summary = _fullData[i].ai_summary;
+        item.scoring_matched = _fullData[i].scoring_matched;
+        if (_currentSel === idx && typeof window._renderDetail === 'function') {
           window._renderDetail(item);
         }
         break;
@@ -169,3 +187,10 @@ def run():
     mobile_path = REPORTS_DIR / "Security_Reports_mobile.html"
     mobile_path.write_text(mobile_html, encoding="utf-8")
     print(f"[CONVERT] 移动版: {before_mobile:,} → {len(mobile_html):,} bytes")
+
+    # ── 3. 预压缩 HTML 文件 ──
+    from . import precompress
+    for f in [html_path, mobile_path]:
+        gz = precompress(f)
+        if gz:
+            print(f"[COMPRESS] {gz.name} ({gz.stat().st_size:,} bytes)")
