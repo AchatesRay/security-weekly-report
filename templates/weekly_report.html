@@ -31,20 +31,6 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .sidebar-header h2 { font-family:"Microsoft YaHei","微软雅黑",sans-serif; font-size:15px; font-weight:600; letter-spacing:-0.2px; color:var(--text-sidebar-active); }
 .sidebar-header h2 span { color:var(--accent-sidebar); }
 
-/* Week selector */
-.week-selector { padding:4px 12px 8px; }
-.week-selector select {
-  width:100%; padding:7px 10px; border-radius:var(--radius-sm);
-  border:1px solid var(--border); background:var(--surface);
-  font-family:"Microsoft YaHei","微软雅黑",sans-serif; font-size:12px; color:var(--text);
-  cursor:pointer; outline:none; transition:border-color .15s,background .15s;
-  -webkit-appearance:none; appearance:none;
-  background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239ca3b4' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-repeat:no-repeat; background-position:right 8px center; padding-right:28px;
-}
-.week-selector option { background:var(--surface); color:var(--text); }
-.week-selector select:hover { border-color:var(--accent-sidebar); background:var(--surface-hover); }
-
 .nav { flex:1; padding:4px 8px 0; overflow-y:auto; }
 .nav-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--radius-sm); cursor:pointer; transition:background .15s; margin-bottom:2px; }
 .nav-item:hover { background:var(--sidebar-hover); }
@@ -237,16 +223,6 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
       <h2>安全态势<span>周报</span></h2>
     </div>
 
-    <div class="week-selector">
-      <select id="weekSelect" onchange="switchWeek(this.value)">
-        {% for entry in manifest %}
-        <option value="{{ entry.week }}" data-range="{{ entry.date_range }}"{% if entry.week == week_str %} selected{% endif %}>
-          {{ entry.week }} · {{ entry.date_range }}
-        </option>
-        {% endfor %}
-      </select>
-    </div>
-
     <nav class="nav" id="nav">
       <div class="nav-item active" data-idx="-1">
         <span class="nav-dot slate"></span>
@@ -352,9 +328,10 @@ var _catNames = [{% for cat in groups %}{{ (cat.split(" ", 1)[1] if " " in cat e
 var _catPrefixes = [{% for cat in groups %}{% set first = cat.split(" ", 1)[0] %}{% if first|length == 1 and first in prefix_chars %}{{ first | tojson }}{% else %}{{ "" | tojson }}{% endif %}{% if not loop.last %},{% endif %}{% endfor %}];
 
 // Register current week's data
-var _reviewCount = ({{ json_items | tojson }}).filter(function(i) { return i.filter_decision === 'review'; }).length;
+var _allItems = {{ json_items | tojson }};
+var _reviewCount = _allItems.filter(function(i) { return i.filter_decision === 'review'; }).length;
 _allData['{{ week_str }}'] = {
-  items: {{ json_items | tojson }},
+  items: _allItems,
   catNames: _catNames,
   catCounts: [{% for cat in groups %}{{ groups[cat] | length }}{% if not loop.last %},{% endif %}{% endfor %}],
   totalCount: {{ total_count }},
@@ -464,15 +441,8 @@ function renderList() {
   selectItem(0);
 }
 
-function selectItem(idx) {
-  _currentSel = idx;
-  listEl.querySelectorAll('.list-card').forEach(function(el) { el.classList.remove('active'); });
-  var card = listEl.querySelector('.list-card[data-idx="' + idx + '"]');
-  if (card) card.classList.add('active');
-
-  var item = _currentItems[idx];
+function _renderDetail(item) {
   if (!item) return;
-
   dEmpty.style.display = 'none'; dContent.style.display = 'block';
   dContent.style.animation = 'none'; void dContent.offsetHeight;
   dContent.style.animation = 'fadeIn 0.3s ease';
@@ -537,8 +507,25 @@ function selectItem(idx) {
     matched.weak.forEach(function(kw) { mHtml += '<span class="kw-tag kw-tag-weak">' + esc(kw) + '</span>'; });
     mHtml += '</div>';
   }
-  dMatchedKw.innerHTML = (hasKw ? mHtml : '<div class="detail-matched-kw-header">匹配关键词</div><span class="kw-empty">无匹配</span>') +
-    (item.filter_decision === 'review' && item.confidence_score ? '<div class="detail-kw-scoreline">评分: ' + item.confidence_score + '分</div>' : '');
+  if (!hasKw) {
+    mHtml += '<div class="kw-empty">无匹配关键词</div>';
+  }
+  mHtml += '<div class="detail-kw-scoreline">综合评分: ' + (item.confidence_score || 0) + '</div>';
+  dMatchedKw.innerHTML = mHtml;
+}
+
+function selectItem(idx) {
+  _currentSel = idx;
+  listEl.querySelectorAll('.list-card').forEach(function(el) { el.classList.remove('active'); });
+  var card = listEl.querySelector('.list-card[data-idx="' + idx + '"]');
+  if (card) card.classList.add('active');
+
+  var item = _currentItems[idx];
+  _renderDetail(item);
+}
+
+function selectItemByData(item) {
+  _renderDetail(item);
 }
 
 function loadNav(data) {
@@ -581,58 +568,6 @@ function toggleSourceAlerts() {
   if (!bar || !detail) return;
   bar.classList.toggle('open');
   detail.classList.toggle('open');
-}
-
-function switchWeek(week) {
-  if (week === _currentWeek) {
-    document.getElementById('weekSelect').value = _currentWeek;
-    return;
-  }
-
-  if (_allData[week]) {
-    _currentWeek = week;
-    applyWeekData(week);
-    document.title = '网络安全周报 · ' + week;
-    return;
-  }
-
-  // Fetch from server
-  loading.classList.add('show');
-  fetch('data_' + week + '.json')
-    .then(function(r) {
-      if (!r.ok) throw new Error('Not found');
-      return r.json();
-    })
-    .then(function(items) {
-      var rcount = items.filter(function(i) { return i.filter_decision === 'review'; }).length;
-      _allData[week] = {
-        items: items,
-        catNames: _catNames,
-        catCounts: [],
-        totalCount: items.length - rcount,
-        reviewCount: rcount
-      };
-      // Calculate catCounts from items
-      var counts = [];
-      _catNames.forEach(function() { counts.push(0); });
-      items.forEach(function(item) {
-        _catNames.forEach(function(name, ci) {
-          var fullName = (_catPrefixes[ci] || '') + ' ' + name;
-          if (item.category === fullName || item.category === name) counts[ci]++;
-        });
-      });
-      _allData[week].catCounts = counts;
-
-      _currentWeek = week;
-      applyWeekData(week);
-      document.title = '网络安全周报 · ' + week;
-      loading.classList.remove('show');
-    })
-    .catch(function() {
-      loading.classList.remove('show');
-      document.getElementById('weekSelect').value = _currentWeek;
-      alert('无法加载周报数据: ' + week);
-    });
 }
 
 // ── Draggable dividers ──
