@@ -27,7 +27,7 @@
     // 首次加载：fetch 当前周的完整数据
     if (!_currentWeekData) {
       var week = window._currentWeek;
-      var url = 'data/data_' + week + '.json';
+      var url = '/reports/data_' + week + '.json';
       fetch(url)
         .then(function(r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);

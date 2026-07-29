@@ -16,11 +16,13 @@
 import json
 import os
 import sys
+import gzip
 import subprocess
 import http.server
 import urllib.parse
 from pathlib import Path
 from datetime import datetime
+from io import BytesIO
 
 # 从 .env 文件加载环境变量（如果存在）
 try:
@@ -188,6 +190,93 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
             except OSError:
                 pass  # 客户端已断开，忽略
 
+    # ── Gzip 压缩 ──
+    _COMPRESS_TYPES = frozenset([
+        "text/html", "text/css", "text/javascript", "application/javascript",
+        "application/json", "text/plain", "application/xml",
+    ])
+
+    def _serve_file(self, file_path: Path, ctype: str = None):
+        """直接返回文件内容（支持 gzip 压缩）"""
+        if not file_path.exists():
+            return False
+        if ctype is None:
+            ext = file_path.suffix.lower()
+            ctype = {
+                ".html": "text/html; charset=utf-8",
+                ".json": "application/json; charset=utf-8",
+            }.get(ext, "text/html; charset=utf-8")
+
+        accept_gzip = "gzip" in self.headers.get("Accept-Encoding", "")
+        try:
+            raw = file_path.read_bytes()
+        except OSError:
+            return False
+
+        if accept_gzip and len(raw) > 512:
+            buf = BytesIO()
+            with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6) as gz:
+                gz.write(raw)
+            compressed = buf.getvalue()
+            if len(compressed) < len(raw):
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Content-Length", str(len(compressed)))
+                self.send_header("Vary", "Accept-Encoding")
+                self.end_headers()
+                self.wfile.write(compressed)
+                return True
+
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+        return True
+
+    # ── UA 检测 ──
+    @staticmethod
+    def _is_mobile_ua(ua: str) -> bool:
+        """检查 User-Agent 是否为移动端"""
+        keywords = ("mobile", "android", "iphone", "ipad", "phone",
+                    "ipod", "opera mini", "blackberry", "webos", "iemobile")
+        return any(k in ua.lower() for k in keywords)
+
+    def send_head(self):
+        path = self.translate_path(self.path)
+        # 只对实际存在的文件启用压缩
+        if os.path.isfile(path):
+            ctype = self.guess_type(path)
+            accept_encoding = self.headers.get("Accept-Encoding", "")
+            if ctype in self._COMPRESS_TYPES and "gzip" in accept_encoding:
+                return self._send_compressed(path, ctype)
+        return super().send_head()
+
+    def _send_compressed(self, path: str, ctype: str):
+        try:
+            with open(path, "rb") as f:
+                raw = f.read()
+            buf = BytesIO()
+            with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6) as gz:
+                gz.write(raw)
+            compressed = buf.getvalue()
+        except OSError:
+            return super().send_head()
+
+        # 如果压缩后反而更大，不压缩
+        if len(compressed) >= len(raw):
+            return super().send_head()
+
+        self.send_response(200)
+        self.send_header("Content-Type", ctype + "; charset=utf-8" if ctype == "text/html" else ctype)
+        self.send_header("Content-Encoding", "gzip")
+        self.send_header("Content-Length", str(len(compressed)))
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Vary", "Accept-Encoding")
+        self.end_headers()
+        return BytesIO(compressed)
+
     def do_GET(self):
         self._safe_call(self._do_get_impl)
 
@@ -201,6 +290,25 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/")
 
+        # 根路径：根据 UA 直接返回对应版本
+        if path == "" or path == "/":
+            ua = self.headers.get("User-Agent", "")
+            is_mobile = self._is_mobile_ua(ua)
+            report_path = (_PROJECT_DIR / "reports" / "Security_Reports_mobile.html"
+                           if is_mobile else _PROJECT_DIR / "reports" / "Security_Reports.html")
+            if report_path.exists():
+                self._serve_file(report_path)
+                return
+            # 回退到桌面版
+            desktop = _PROJECT_DIR / "reports" / "Security_Reports.html"
+            if desktop.exists():
+                self._serve_file(desktop)
+                return
+            self.send_response(302)
+            self.send_header("Location", "/templates/config.html")
+            self.end_headers()
+            return
+
         # /config.html 快捷路径
         if path == "/config.html":
             self.send_response(302)
@@ -208,14 +316,18 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
 
-        # 根路径：有周报则跳转，否则跳到配置页
-        if path == "" or path == "/":
-            report_path = _PROJECT_DIR / "reports" / "Security_Reports.html"
-            target = "/reports/Security_Reports.html" if report_path.exists() else "/templates/config.html"
-            self.send_response(302)
-            self.send_header("Location", target)
-            self.end_headers()
-            return
+        # UA 检测：直接返回对应版本内容（不重定向）
+        if path in ("/reports/Security_Reports.html", "/reports/Security_Reports_mobile.html"):
+            ua = self.headers.get("User-Agent", "")
+            want_mobile = self._is_mobile_ua(ua)
+            is_on_mobile = path.endswith("_mobile.html")
+            if want_mobile != is_on_mobile:
+                correct = (_PROJECT_DIR / "reports" / "Security_Reports_mobile.html"
+                           if want_mobile else _PROJECT_DIR / "reports" / "Security_Reports.html")
+                if correct.exists():
+                    self._serve_file(correct)
+                    return
+            # UA 匹配 → 正常走静态文件服务
 
         # ── API routes ──
         if path == "/api/config/sources":
@@ -236,6 +348,12 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
             return self._get_scoring_keywords()
         elif path == "/api/config/scoring_keywords/save":
             return self._put_scoring_keywords()
+
+        # ── favicon.ico ──
+        if path == "/favicon.ico":
+            self.send_response(204)
+            self.end_headers()
+            return
 
         # ── Static files ──
         return super().do_GET()

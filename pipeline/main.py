@@ -64,7 +64,7 @@ def run_pipeline(skip_fetch: bool = False):
 
     print()
 
-    steps_total = 9
+    steps_total = 10
 
     # 初始化关键字过滤（如无配置则写入默认列表）
     from .keyword_filter import init_default_keywords
@@ -113,6 +113,10 @@ def run_pipeline(skip_fetch: bool = False):
         report_path = "reports/Security_Reports.html"
     except Exception as e:
         print(f"  [ERROR] 生成报告失败: {e}")
+
+    # Step 10: 移动版转换
+    from .mobile_converter import run as run_mobile
+    run_step(10, steps_total, "生成移动版页面", run_mobile, skip_ok=True)
 
     # ── 评分质量周对比 ──
     _print_scoring_comparison()

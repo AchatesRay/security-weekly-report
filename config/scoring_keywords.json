@@ -656,12 +656,6 @@
         ]
       },
       {
-        "text": "bypass",
-        "categories": [
-          "② 威胁情报与攻防对抗"
-        ]
-      },
-      {
         "text": "certificate",
         "categories": [
           "⑥ 数据安全与隐私保护"
@@ -3213,7 +3207,6 @@
       {"text": "phishing", "type": "core", "categories": ["② 威胁情报与攻防对抗"]},
       {"text": "exploit", "type": "core", "categories": ["③ 漏洞态势与供应链安全"]},
       {"text": "zero-day", "type": "core", "categories": ["③ 漏洞态势与供应链安全"]},
-      {"text": "CVE", "type": "core", "categories": ["③ 漏洞态势与供应链安全"]},
       {"text": "breach", "type": "normal", "categories": ["② 威胁情报与攻防对抗", "⑥ 数据安全与隐私保护"]},
       {"text": "patch", "type": "normal", "categories": ["③ 漏洞态势与供应链安全"]},
       {"text": "cyber", "type": "normal", "categories": ["② 威胁情报与攻防对抗", "⑤ 产业动态与技术趋势"]},

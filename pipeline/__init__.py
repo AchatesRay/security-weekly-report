@@ -1,6 +1,6 @@
 """网络安全周报系统 — 数据处理管道
 
-9 步流水线:
+10 步流水线:
   1.  fetcher              RSS/API 信源并发抓取
   2.  parser               解析为统一数据结构
   3.  deduplicator         URL 精确去重 + 标题模糊去重
@@ -10,6 +10,7 @@
   7.  llm_processor        AI 摘要（抽取式 / LLM API）
   8.  translator           英文摘要→中文翻译（腾讯云 TMT）
   9.  report_generator     Jinja2 HTML 报告生成
+  10. mobile_converter     桌面→移动端转换（剥离详情 + 注入 CSS/JS）
 
 主要入口: app.py --run
 Web 管理:  app.py server [port]
@@ -67,6 +68,7 @@ from .deduplicator import run as deduplicate
 from .translator import run as translate
 from .llm_processor import run as enhance
 from .report_generator import generate_report
+from .mobile_converter import run as convert_mobile
 from .main import run_pipeline
 
 __all__ = [
@@ -79,5 +81,6 @@ __all__ = [
     "translate",
     "enhance",
     "generate_report",
+    "convert_mobile",
     "run_pipeline",
 ]

@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 import hashlib
 import yaml
 from pathlib import Path
@@ -70,15 +69,6 @@ def group_by_category(items: list[dict]) -> dict:
     return {k: v for k, v in groups.items() if v}
 
 
-def archive_previous_report():
-    """将现有 Security_Reports.html 重命名为带周号的归档文件"""
-    if LATEST_REPORT.exists():
-        # 读取旧文件 mtime 所在周
-        mtime = datetime.fromtimestamp(LATEST_REPORT.stat().st_mtime)
-        week_str = get_week_number(mtime)
-        archive_name = REPORTS_DIR / f"Security_Reports_{week_str}.html"
-        shutil.move(str(LATEST_REPORT), str(archive_name))
-        print(f"[REPORT] 归档旧报告: {archive_name.name}")
 
 
 def _source_color(source_name: str) -> int:
@@ -123,51 +113,6 @@ def save_weekly_data(items: list[dict], week_str: str):
     atomic_write(path, items)
 
 
-def update_manifest(week_str: str, date_range: str, total_count: int):
-    """更新周报清单 manifest.json"""
-    manifest_path = REPORTS_DIR / "manifest.json"
-    manifest = []
-    if manifest_path.exists():
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            manifest = json.load(f)
-
-    # 移除旧条目（如果有）
-    manifest = [e for e in manifest if e["week"] != week_str]
-    manifest.append({
-        "week": week_str,
-        "date_range": date_range,
-        "total_count": total_count,
-    })
-    manifest.sort(key=lambda x: x["week"], reverse=True)
-
-    from . import atomic_write
-    atomic_write(manifest_path, manifest, indent=2)
-
-
-def rebuild_manifest_from_archives():
-    """从归档的 JSON 数据文件重建 manifest（用于首次迁移）"""
-    manifest_path = REPORTS_DIR / "manifest.json"
-    if manifest_path.exists():
-        return  # 已存在，不做覆盖
-
-    manifest = []
-    for fpath in sorted(REPORTS_DIR.glob("data_*.json")):
-        week = fpath.stem.replace("data_", "")
-        try:
-            with open(fpath, encoding="utf-8") as f:
-                items = json.load(f)
-            manifest.append({
-                "week": week,
-                "date_range": "",
-                "total_count": len(items),
-            })
-        except Exception:
-            pass
-
-    if manifest:
-        manifest.sort(key=lambda x: x["week"], reverse=True)
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
 
 
 def generate_source_alerts() -> list[dict]:
@@ -321,18 +266,10 @@ def generate_report():
         except Exception:
             pass
 
-    # 保存当前周数据 + 更新清单
+    # 保存当前周数据（供移动端按需加载）
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     save_weekly_data(build_json_items(accepted_items), week_str)
     save_weekly_data(build_json_items(review_items), f"{week_str}_review")
-    update_manifest(week_str, date_range, total_count)
-
-    # 读取 manifest 供模板使用
-    manifest_path = REPORTS_DIR / "manifest.json"
-    manifest = []
-    if manifest_path.exists():
-        with open(manifest_path, encoding="utf-8") as f:
-            manifest = json.load(f)
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("weekly_report.html")
@@ -355,17 +292,13 @@ def generate_report():
         review_count=review_count,
         groups=groups,
         json_items=json_items,
-        manifest=manifest,
         source_alerts=source_alerts,
         translation_warning=translation_warning,
         cat_names=cat_names,
         cat_counts=cat_counts,
     )
 
-    # 归档旧 HTML
-    archive_previous_report()
-
-    # 写新报告（原子写入，避免中断导致 HTML 损坏）
+    # 写新报告（原子写入，覆盖旧文件）
     import tempfile
     tmp = LATEST_REPORT.with_suffix(".tmp")
     try:
