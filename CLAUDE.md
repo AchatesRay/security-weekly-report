@@ -1,6 +1,6 @@
 # SecurityInfo — 网络安全周报系统
 
-从 80+ 信源自动抓取网络安全资讯，经 9 步流水线处理后生成 HTML 周报。
+从 80+ 信源自动抓取网络安全资讯，经 10 步流水线处理后生成 HTML 周报（桌面端 + 移动端）。
 
 ## 入口
 
@@ -15,7 +15,7 @@ python app.py server [port]      # 启动管理后台 (默认 8090)
 ```
 app.py                    统一入口
 CLAUDE.md                 本文件
-pipeline/                 9 步数据处理管道
+pipeline/                 10 步数据处理管道
   main.py                 主入口（串联所有步骤）
   __init__.py             模块导出
   fetcher.py              并发 RSS/API 信源抓取
@@ -28,6 +28,9 @@ pipeline/                 9 步数据处理管道
   llm_processor.py        摘要翻译与 LLM 增强（预留）
   report_generator.py     Jinja2 HTML 报告生成
   scraper.py              静态页面抓取辅助工具
+  mobile_converter.py     桌面→移动端转换（移动端按需加载详情）
+  mobile.css               移动端样式
+  mobile.js                移动端交互
 config/                   配置文件
   source_config.yaml      信源配置（~80 个信源）
   scoring_keywords.json   评分关键词配置
@@ -43,7 +46,7 @@ docs/                     文档
 data/                     中间数据（gitignored）
 ```
 
-## 9 步管道
+## 10 步管道
 
 | # | 模块 | 职责 |
 |---|------|------|
@@ -55,7 +58,14 @@ data/                     中间数据（gitignored）
 | 6 | keyword_filter (stage2) | 完整评分+分类+内容类型+地域推断（≥80收录，50-79待复核） |
 | 7 | llm_processor | TextRank 抽取式摘要 → ai_summary，英文摘要→中文翻译 |
 | 8 | translator | 剩余英文摘要→中文翻译（腾讯云 TMT） |
-| 9 | report_generator | Jinja2 → HTML 报告 |
+| 9 | report_generator | Jinja2 → HTML 报告（桌面版） |
+| 10 | mobile_converter | 桌面→移动端转换（剥离详情数据，注入 CSS/JS） |
+
+### 移动端适配
+
+- 服务端根据 `User-Agent` 自动判断：移动端返回 `Security_Reports_mobile.html`，桌面端返回 `Security_Reports.html`
+- 移动版 HTML 仅内联列表字段（~70KB），详情内容从 `reports/data_<week>.json` 按需 fetch
+- 三层交互：文章列表 → 左侧分类导航 → 右侧详情面板（卡片式覆盖层）
 
 ## 红线
 
