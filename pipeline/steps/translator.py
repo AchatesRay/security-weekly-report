@@ -3,7 +3,7 @@ import time
 import os
 from pathlib import Path
 
-from . import atomic_write, load_secrets
+from ..utils import atomic_write, load_secrets
 
 DATA_DIR = Path("data")
 CONFIG_PATH = Path("config/settings.json")

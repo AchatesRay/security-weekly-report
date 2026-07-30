@@ -9,10 +9,10 @@ import json
 import os
 from pathlib import Path
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
+PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 REPORTS_DIR = PROJECT_DIR / "reports"
-MOBILE_CSS_PATH = PROJECT_DIR / "mobile.css"
-MOBILE_JS_PATH = PROJECT_DIR / "mobile.js"
+MOBILE_CSS_PATH = PROJECT_DIR / "pipeline" / "assets" / "mobile.css"
+MOBILE_JS_PATH = PROJECT_DIR / "pipeline" / "assets" / "mobile.js"
 
 # 桌面端剔除全部详情字段（按需加载）
 DESKTOP_SKIP_FIELDS = frozenset({
@@ -220,7 +220,7 @@ def run():
 
     # ── 3. 预压缩 HTML 文件 ──
     try:
-        from . import precompress
+        from ..utils import precompress
         for f in [html_path, mobile_path]:
             gz = precompress(f)
             if gz:

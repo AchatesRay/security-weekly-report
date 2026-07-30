@@ -26,7 +26,7 @@ def main():
 
     if cmd == "--run":
         sys.path.insert(0, str(PROJECT_DIR))
-        from pipeline.main import run_pipeline
+        from pipeline.orchestrator import run_pipeline
 
         skip_fetch = "--skip-fetch" in sys.argv
         run_pipeline(skip_fetch=skip_fetch)

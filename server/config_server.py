@@ -353,14 +353,14 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
                 self._serve_file(desktop)
                 return
             self.send_response(302)
-            self.send_header("Location", "/templates/config.html")
+            self.send_header("Location", "/server/config.html")
             self.end_headers()
             return
 
         # /config.html 快捷路径
         if path == "/config.html":
             self.send_response(302)
-            self.send_header("Location", "/templates/config.html")
+            self.send_header("Location", "/server/config.html")
             self.end_headers()
             return
 
@@ -486,7 +486,7 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
 
     def _get_security_keywords(self):
         """读取关键字列表"""
-        from pipeline.keyword_filter import load_keywords, init_default_keywords
+        from pipeline.steps.keyword_filter import load_keywords, init_default_keywords
         init_default_keywords()  # 首次自动初始化默认值
         keywords = load_keywords()
         send_json(self, {"ok": True, "keywords": keywords})
@@ -495,7 +495,7 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         """替换关键字列表"""
         body = read_body(self)
         data = json.loads(body)
-        from pipeline.keyword_filter import save_keywords, DEFAULT_KEYWORDS, load_keywords
+        from pipeline.steps.keyword_filter import save_keywords, DEFAULT_KEYWORDS, load_keywords
         kws = data.get("keywords", [])
         if not kws:
             # 空列表 = 恢复默认

@@ -109,7 +109,7 @@ def run():
     result = deduplicate(items)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    from . import atomic_write
+    from ..utils import atomic_write
     atomic_write(DEDUPED_ITEMS_PATH, result, indent=2)
 
     return result

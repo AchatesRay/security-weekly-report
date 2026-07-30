@@ -2,7 +2,7 @@
 # 安全管理后台服务器管理脚本
 # 用法: ./server.sh {start|stop|restart|status}
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 PID_FILE="/tmp/config_server.pid"
 PORT=${2:-8090}
 SERVER_SCRIPT="server/config_server.py"

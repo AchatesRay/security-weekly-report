@@ -72,7 +72,7 @@ def init_default_keywords():
     if not SCORING_CONFIG_PATH.exists():
         # 复制默认配置
         from shutil import copy2
-        default = Path(__file__).resolve().parent.parent / "config" / "scoring_keywords.json"
+        default = Path(__file__).resolve().parent.parent.parent / "config" / "scoring_keywords.json"
         if default.exists():
             copy2(default, SCORING_CONFIG_PATH)
             print(f"[KEYWORD] 已初始化评分配置: {SCORING_CONFIG_PATH}")
@@ -105,7 +105,7 @@ def run_stage1():
         else:
             kept.append(item)
 
-    from . import atomic_write
+    from ..utils import atomic_write
     atomic_write(PARSED_ITEMS_PATH, kept, indent=2)
 
     print(f"[KEYWORD] 阶段1过滤: {total_before} → {len(kept)} 条保留"
@@ -149,7 +149,7 @@ def run_stage2():
     # 写回：accepted + review 都保留继续走管道
     final = accepted + review
 
-    from . import atomic_write
+    from ..utils import atomic_write
     atomic_write(PARSED_ITEMS_PATH, final, indent=2)
 
     print(f"[KEYWORD] 阶段2过滤: {total_before} → {len(final)} 条保留"
@@ -196,7 +196,7 @@ def run_stage2():
         "score_buckets": buckets,
         "category_distribution": cat_dist,
     }
-    from . import atomic_write
+    from ..utils import atomic_write
     atomic_write(DATA_DIR / "scoring_stats.json", stats, indent=2)
 
 
