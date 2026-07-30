@@ -118,25 +118,22 @@
   .is-mobile .list-item-meta { font-size: 11px; flex-wrap: wrap; }
   .is-mobile .list-item-summary { font-size: 12px; -webkit-line-clamp: 2; }
 
-  /* ── 详情视图（内缩 10px 卡片式覆盖层） ── */
+  /* ── 详情视图（全屏覆盖层） ── */
   .is-mobile .detail-panel {
     position: fixed;
-    top: 10px; left: 10px; right: 10px; bottom: 10px;
+    top: 0; left: 0; right: 0; bottom: 0;
     min-width: 0; max-width: 100%;
     height: auto;
     z-index: 3000;
     background: var(--surface);
     overflow-y: auto;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
-    transform: translateX(100%);
+    transform: translateX(calc(100% + 20px));
     transition: transform .25s ease;
   }
   .is-mobile .detail-panel.m-show { transform: translateX(0); }
   .is-mobile .detail-back-btn {
     position: fixed;
-    top: 22px; right: 22px;
+    bottom: 36px; right: 20px;
     z-index: 3100;
     display: inline-flex; align-items: center; justify-content: center;
     width: 40px; height: 40px; border-radius: 8px;
@@ -183,7 +180,7 @@
 
 /* ── 极小屏（<360px）适配 ── */
 @media (max-width: 359px) {
-  .is-mobile .detail-panel { top: 4px; left: 4px; right: 4px; bottom: 4px; border-radius: 8px; }
+  .is-mobile .detail-panel { top: 0; left: 0; right: 0; bottom: 0; }
   .is-mobile .detail-content { padding: 10px; }
-  .is-mobile .detail-back-btn { top: 14px; right: 14px; width: 34px; height: 34px; font-size: 15px; }
+  .is-mobile .detail-back-btn { bottom: 24px; right: 14px; width: 34px; height: 34px; font-size: 15px; }
 }

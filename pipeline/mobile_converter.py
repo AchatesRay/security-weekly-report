@@ -82,13 +82,11 @@ def _inject_detail_loader(html: str) -> str:
     """注入桌面端按需加载全部详情字段的 JS"""
     loader_js = """
 (function(){
-  var _fullData = null;
-  var _fetchP = null;
+  var _fullData = {};   /* catIdx => {url: fullItem} */
+  var _fetchP = {};     /* catIdx => Promise */
   var _reqId = 0;
-  var _origSI = window.selectItem;
   window.selectItem = function(idx) {
     _currentSel = idx;
-    /* 高亮卡片（立即响应） */
     var cards = document.querySelectorAll('.list-card');
     cards.forEach(function(el) { el.classList.remove('active'); });
     var card = document.querySelector('.list-card[data-idx="' + idx + '"]');
@@ -98,38 +96,47 @@ def _inject_detail_loader(html: str) -> str:
   function loadBody(idx) {
     var item = window._currentItems && window._currentItems[idx];
     if (!item) return;
-    /* 数据已在内存中（之前加载过） */
     if (item.full_body && item.full_body.length > 100) {
-      if (typeof _origSI === 'function') _origSI(idx);
+      if (typeof window._renderDetail === 'function') {
+        try { window._renderDetail(item); } catch(e) { console.error('[Loader] render error:', e); }
+      }
       return;
     }
     var localReq = ++_reqId;
-    function doRender() { matchAndRender(idx, item, localReq); }
-    if (_fullData) { doRender(); return; }
-    /* 复用进行中的 fetch，避免重复下载 */
-    if (!_fetchP) {
-      var week = window._currentWeek;
-      _fetchP = fetch('/reports/data_' + week + '.json')
-        .then(function(r) { return r.json(); })
-        .then(function(items) { _fullData = items; _fetchP = null; })
-        .catch(function() { _fetchP = null; });
-    }
-    _fetchP.then(doRender, doRender);
-  }
-  function matchAndRender(idx, item, reqId) {
-    if (reqId && reqId !== _reqId) return;
-    for (var i = 0; i < _fullData.length; i++) {
-      if (_fullData[i].url === item.url) {
-        item.full_body = _fullData[i].full_body;
-        item.summary = _fullData[i].summary;
-        item.ai_summary = _fullData[i].ai_summary;
-        item.scoring_matched = _fullData[i].scoring_matched;
-        if (_currentSel === idx && typeof window._renderDetail === 'function') {
-          window._renderDetail(item);
-        }
-        break;
+    /* 确定分类索引：待复核走 review 文件，正常走 cat 文件 */
+    var catIdx = item.filter_decision === 'review' ? 'review'
+               : (item._catIdx >= 0 ? String(item._catIdx) : '0');
+    console.log('[Loader] idx=' + idx + ' catIdx=' + catIdx + ' url=' + (item.url || '').slice(-30));
+    function doRender() {
+      if (localReq !== _reqId) return;
+      var catData = _fullData[catIdx];
+      if (!catData) return;
+      var fullItem = catData[item.url];
+      if (!fullItem) return;
+      item.full_body = fullItem.full_body;
+      item.summary = fullItem.summary;
+      item.ai_summary = fullItem.ai_summary;
+      item.scoring_matched = fullItem.scoring_matched;
+      if (_currentSel === idx && typeof window._renderDetail === 'function') {
+        try { window._renderDetail(item); }
+        catch(e) { console.error('[Loader] _renderDetail error:', e); }
       }
     }
+    if (_fullData[catIdx]) { doRender(); return; }
+    if (!_fetchP[catIdx]) {
+      var week = window._currentWeek;
+      var suffix = catIdx === 'review' ? '_review' : '_cat_' + catIdx;
+      _fetchP[catIdx] = fetch('/reports/data_' + week + suffix + '.json')
+        .then(function(r) { return r.json(); })
+        .then(function(items) {
+          var byUrl = {};
+          items.forEach(function(it) { byUrl[it.url] = it; });
+          _fullData[catIdx] = byUrl;
+          _fetchP[catIdx] = null;
+        })
+        .catch(function() { _fetchP[catIdx] = null; });
+    }
+    _fetchP[catIdx].then(doRender, doRender);
   }
 })();
 """
@@ -137,6 +144,26 @@ def _inject_detail_loader(html: str) -> str:
     if last_script > 0:
         html = html[:last_script] + loader_js + html[last_script:]
     return html
+
+
+def _remove_detail_panel(html: str) -> str:
+    """移除 .detail-panel 元素（移动端在列表页不应包含详情 DOM）"""
+    marker = '<div class="detail-panel" id="detailPanel">'
+    start = html.find(marker)
+    if start < 0:
+        return html
+    i = start + len(marker)
+    depth = 1
+    while i < len(html) and depth > 0:
+        if html[i:i+4] == '<div' and not html[i+4].isalpha():
+            depth += 1
+            i += 4
+        elif html[i:i+6] == '</div>':
+            depth -= 1
+            i += 6
+        else:
+            i += 1
+    return html[:start] + html[i:]
 
 
 def run():
@@ -184,13 +211,23 @@ def run():
         if last_se > 0:
             mobile_html = mobile_html[:last_se] + '\n' + mobile_js + '\n' + mobile_html[last_se:]
 
+    # 移除详情面板 DOM（点击文章时再动态创建，减少初始 HTML 体积）
+    mobile_html = _remove_detail_panel(mobile_html)
+
     mobile_path = REPORTS_DIR / "Security_Reports_mobile.html"
     mobile_path.write_text(mobile_html, encoding="utf-8")
     print(f"[CONVERT] 移动版: {before_mobile:,} → {len(mobile_html):,} bytes")
 
     # ── 3. 预压缩 HTML 文件 ──
-    from . import precompress
-    for f in [html_path, mobile_path]:
-        gz = precompress(f)
-        if gz:
-            print(f"[COMPRESS] {gz.name} ({gz.stat().st_size:,} bytes)")
+    try:
+        from . import precompress
+        for f in [html_path, mobile_path]:
+            gz = precompress(f)
+            if gz:
+                print(f"[COMPRESS] {gz.name} ({gz.stat().st_size:,} bytes)")
+    except ImportError:
+        pass
+
+
+if __name__ == '__main__':
+    run()
