@@ -217,12 +217,9 @@ def generate_source_alerts() -> list[dict]:
 
 
 def _precompress_reports(week_str: str):
-    """预压缩周报数据 JSON 文件"""
+    """预压缩周报数据 JSON 文件（含全量 + 按分类拆分的文件）"""
     from . import precompress
-    for f in [
-        REPORTS_DIR / f"data_{week_str}.json",
-        REPORTS_DIR / f"data_{week_str}_review.json",
-    ]:
+    for f in REPORTS_DIR.glob(f"data_{week_str}*.json"):
         gz = precompress(f)
         if gz:
             print(f"[COMPRESS] {gz.name} ({gz.stat().st_size:,} bytes)")
@@ -282,6 +279,10 @@ def generate_report():
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     save_weekly_data(build_json_items(accepted_items), week_str)
     save_weekly_data(build_json_items(review_items), f"{week_str}_review")
+
+    # 按分类拆分保存（前端按需加载，避免一次下载全部数据）
+    for cat_idx, (cat_name, cat_items) in enumerate(groups.items()):
+        save_weekly_data(build_json_items(cat_items), f"{week_str}_cat_{cat_idx}")
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("weekly_report.html")

@@ -91,4 +91,4 @@ data/                     中间数据（gitignored）
 ## 深入文档
 
 - [设计文档](docs/superpowers/specs/2026-06-22-security-weekly-report-design.md) — 分类体系、标签维度、布局规范
-- [信源清单](docs/source_inventory.txt) — 完整信源全景
+- [API 采集设计](docs/superpowers/specs/2026-06-30-api-collector-design.md) — API 采集通道设计

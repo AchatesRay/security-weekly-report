@@ -16,51 +16,46 @@
   /* =================================================================
    * 详情数据缓存（按需加载）
    * ================================================================= */
-  var _detailCache = {};  // idx (in _currentItems) => full item object
-  var _currentWeekData = null;  // full items array for current week
-  var _fetchP = null;  // 复用进行中的 fetch
+  var _detailCache = {};  /* url => fullItem */
+  var _fullData = {};     /* catIdx => {url: fullItem} */
+  var _fetchP = {};       /* catIdx => Promise */
+
+  /* 独立跟踪移动端分类选择，与桌面端 _currentCat 隔离 */
+  var _mobileCat = window._currentCat !== undefined ? window._currentCat : 0;
+
+  function _fetchCatData(catIdx) {
+    if (_fullData[catIdx] || _fetchP[catIdx]) return;
+    var week = window._currentWeek;
+    var suffix = catIdx === 'review' ? '_review' : '_cat_' + catIdx;
+    _fetchP[catIdx] = fetch('/reports/data_' + week + suffix + '.json')
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(items) {
+        var byUrl = {};
+        items.forEach(function(fullItem) {
+          byUrl[fullItem.url] = fullItem;
+          _detailCache[fullItem.url] = fullItem;
+        });
+        _fullData[catIdx] = byUrl;
+        _fetchP[catIdx] = null;
+      })
+      .catch(function() {
+        _fetchP[catIdx] = null;
+      });
+  }
 
   function loadDetailData(idx, callback) {
-    if (_detailCache[idx]) {
-      callback(_detailCache[idx]);
-      return;
-    }
-    function afterLoad() {
-      callback(_detailCache[idx] || window._currentItems[idx] || null);
-    }
-    // 首次加载：fetch 当前周的完整数据
-    if (!_currentWeekData) {
-      if (!_fetchP) {
-        var week = window._currentWeek;
-        var url = '/reports/data_' + week + '.json';
-        _fetchP = fetch(url)
-          .then(function(r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
-          })
-          .then(function(items) {
-            _currentWeekData = items;
-            // 建立 idx 到完整数据的映射
-            var filtered = window._currentItems || [];
-            items.forEach(function(item) {
-              for (var i = 0; i < filtered.length; i++) {
-                var li = window._currentData.items[i] || {};
-                if (li.url === item.url) {
-                  _detailCache[i] = item;
-                  break;
-                }
-              }
-            });
-            _fetchP = null;
-          })
-          .catch(function() {
-            _fetchP = null;
-          });
-      }
-      _fetchP.then(afterLoad, afterLoad);
-    } else {
-      afterLoad();
-    }
+    var item = window._currentItems && window._currentItems[idx];
+    if (!item) { callback(null); return; }
+    if (_detailCache[item.url]) { callback(_detailCache[item.url]); return; }
+    var catIdx = item.filter_decision === 'review' ? 'review'
+               : (item._catIdx >= 0 ? String(item._catIdx) : '0');
+    function afterLoad() { callback(_detailCache[item.url] || item); }
+    if (_fullData[catIdx]) { afterLoad(); return; }
+    _fetchCatData(catIdx);
+    _fetchP[catIdx].then(afterLoad, afterLoad);
   }
 
   function renderDetail(item) {
@@ -94,20 +89,65 @@
   overlay.id = OVERLAY_ID;
   document.body.appendChild(overlay);
 
-  (function injectBackBtn() {
-    var detailPanel = document.querySelector('.detail-panel');
-    if (!detailPanel || document.getElementById(BACK_BTN_ID)) return;
-    var btn = document.createElement('button');
-    btn.className = 'detail-back-btn';
-    btn.id = BACK_BTN_ID;
-    btn.innerHTML = '\u2190';
-    btn.style.display = 'none';
-    btn.addEventListener('click', function() {
-      detailPanel.classList.remove('m-show');
+  /* =================================================================
+   * 详情面板懒加载（首次点击文章时动态创建 DOM）
+   * ================================================================= */
+  function ensureDetailPanel() {
+    var panel = document.querySelector('.detail-panel');
+    if (panel) return panel;
+
+    var html = '<div class="detail-panel" id="detailPanel">'
+      + '<div class="detail-empty" id="detailEmpty">'
+        + '<div class="detail-empty-icon">◆ ◆ ◆</div>'
+        + '<p>选择一条情报查看详情</p>'
+      + '</div>'
+      + '<div class="detail-content" id="detailContent" style="display:none">'
+        + '<div class="detail-meta" id="detailMeta"></div>'
+        + '<h1 class="detail-title" id="detailTitle"></h1>'
+        + '<div class="detail-divider"></div>'
+        + '<div class="detail-ai-summary" id="detailAiSummary" style="display:none">'
+          + '<div class="detail-ai-summary-header">摘要</div>'
+          + '<div class="detail-ai-summary-text" id="detailAiSummaryText"></div>'
+        + '</div>'
+        + '<div class="detail-summary" id="detailSummary"></div>'
+        + '<div class="detail-matched-kw" id="detailMatchedKw"></div>'
+        + '<div class="detail-tags" id="detailTags"></div>'
+        + '<a class="detail-original-link" id="detailLink" href="#" target="_blank">阅读原文</a>'
+        + '<div class="detail-footer">'
+          + '<p>本报告由安全态势感知系统自动生成 · 信息仅供参考</p>'
+        + '</div>'
+      + '</div>'
+    + '</div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    // 重新挂载全局 DOM 引用，使桌面版 _renderDetail 能操作新面板
+    window.dEmpty = document.getElementById('detailEmpty');
+    window.dContent = document.getElementById('detailContent');
+    window.dMeta = document.getElementById('detailMeta');
+    window.dTitle = document.getElementById('detailTitle');
+    window.dSummary = document.getElementById('detailSummary');
+    window.dAiSummary = document.getElementById('detailAiSummary');
+    window.dAiSummaryText = document.getElementById('detailAiSummaryText');
+    window.dTags = document.getElementById('detailTags');
+    window.dMatchedKw = document.getElementById('detailMatchedKw');
+    window.dLink = document.getElementById('detailLink');
+
+    // 创建返回按钮
+    if (!document.getElementById(BACK_BTN_ID)) {
+      var btn = document.createElement('button');
+      btn.className = 'detail-back-btn';
+      btn.id = BACK_BTN_ID;
+      btn.innerHTML = '←';
       btn.style.display = 'none';
-    });
-    document.body.appendChild(btn);
-  })();
+      btn.addEventListener('click', function() {
+        document.querySelector('.detail-panel').classList.remove('m-show');
+        btn.style.display = 'none';
+      });
+      document.body.appendChild(btn);
+    }
+
+    return document.querySelector('.detail-panel');
+  }
 
   /* =================================================================
    * 辅助函数
@@ -118,7 +158,7 @@
       .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  function openPanel() { catPanel.classList.add('m-show'); overlay.classList.add('m-show'); }
+  function openPanel() { buildCatList(); catPanel.classList.add('m-show'); overlay.classList.add('m-show'); }
   function closePanel() { catPanel.classList.remove('m-show'); overlay.classList.remove('m-show'); }
 
   function buildCatList() {
@@ -129,19 +169,20 @@
     var catCounts  = data ? (data.catCounts || []) : [];
     var reviewCount = data ? (data.reviewCount || 0) : 0;
 
-    var html = '<div class="mobile-cat-item active" data-idx="-1">'
+    var cur = _mobileCat;
+    var html = '<div class="mobile-cat-item' + (cur === -1 ? ' active' : '') + '" data-idx="-1">'
       + '<span class="mobile-cat-label">全部</span>'
       + '<span class="mobile-cat-count">' + allCount + '</span></div>';
     for (var i = 0; i < catNames.length; i++) {
       var count  = (catCounts[i] !== undefined) ? catCounts[i] : 0;
       var prefix = catPrefixes[i] || '';
       var label  = prefix ? prefix + ' ' + catNames[i] : catNames[i];
-      html += '<div class="mobile-cat-item" data-idx="' + i + '">'
+      html += '<div class="mobile-cat-item' + (i === cur ? ' active' : '') + '" data-idx="' + i + '">'
         + '<span class="mobile-cat-label">' + esc(label) + '</span>'
         + '<span class="mobile-cat-count">' + count + '</span></div>';
     }
     if (reviewCount > 0) {
-      html += '<div class="mobile-cat-item" data-idx="-2">'
+      html += '<div class="mobile-cat-item' + (cur === -2 ? ' active' : '') + '" data-idx="-2">'
         + '<span class="mobile-cat-label">待复核</span>'
         + '<span class="mobile-cat-count">' + reviewCount + '</span></div>';
     }
@@ -158,6 +199,7 @@
     if (!item) return;
     var idx = parseInt(item.dataset.idx);
     if (isNaN(idx)) return;
+    _mobileCat = idx;
     window._currentCat = idx;
     this.querySelectorAll('.mobile-cat-item').forEach(function(t) { t.classList.remove('active'); });
     item.classList.add('active');
@@ -183,8 +225,11 @@
     var idx = parseInt(card.dataset.idx);
     if (isNaN(idx)) return;
 
-    var dp = document.querySelector('.detail-panel');
-    if (!dp) return;
+    // 首次点击时动态创建详情面板
+    var dp = ensureDetailPanel();
+
+    // 强制重排，确保 CSS 过渡能捕捉到初始状态（translateX(100%)）
+    void dp.offsetHeight;
 
     // 高亮当前卡片
     this.querySelectorAll('.list-card, .list-item').forEach(function(el) { el.classList.remove('active'); });
@@ -218,17 +263,32 @@
 
   buildCatList();
 
+  // 禁用桌面端 selectItem（它触发冗余 JSON 下载），移动端通过 delegation 自行处理
+  window.selectItem = function() {};
+
+  function prefetchCurrentCat() {
+    var items = window._currentItems;
+    if (!items || !items.length) return;
+    var first = items[0];
+    var catIdx = first.filter_decision === 'review' ? 'review'
+               : (first._catIdx >= 0 ? String(first._catIdx) : '0');
+    _fetchCatData(catIdx);
+  }
+
   var _origRL = window.renderList;
   window.renderList = function() {
+    window._currentCat = _mobileCat;
     if (typeof _origRL === 'function') _origRL();
     buildCatList();
+    prefetchCurrentCat();
   };
 
   var _origAWD = window.applyWeekData;
   window.applyWeekData = function(week) {
     if (typeof _origAWD === 'function') _origAWD(week);
     buildCatList();
-    _currentWeekData = null;
+    _fullData = {};
+    _fetchP = {};
     _detailCache = {};
   };
 
@@ -249,5 +309,4 @@
     }, 300);
   });
 
-  console.log('[Mobile] 优化版已激活（按需加载 + transitionend）');
 })();

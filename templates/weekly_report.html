@@ -224,7 +224,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
     </div>
 
     <nav class="nav" id="nav">
-      <div class="nav-item active" data-idx="-1">
+      <div class="nav-item" data-idx="-1">
         <span class="nav-dot slate"></span>
         <span class="nav-label">全部分类</span>
         <span class="nav-count" id="navAllCount">{{ total_count }}</span>
@@ -239,7 +239,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
       {% elif cat.startswith("⑥") %}{% set dot = "blue" %}
       {% else %}{% set dot = "slate" %}
       {% endif %}
-      <div class="nav-item" data-idx="{{ loop.index0 }}">
+      <div class="nav-item{% if loop.index0 == 0 %} active{% endif %}" data-idx="{{ loop.index0 }}">
         <span class="nav-dot {{ dot }}"></span>
         <span class="nav-label">{{ short }}</span>
         <span class="nav-count" id="catCount{{ loop.index0 }}">{{ groups[cat] | length }}</span>
@@ -340,7 +340,7 @@ _allData['{{ week_str }}'] = {
 
 // ── State ──
 var _currentData = _allData['{{ week_str }}'];
-var _currentCat = -1;
+var _currentCat = 0;
 var _currentItems = [];
 var _currentSel = -1;
 
@@ -555,10 +555,10 @@ function applyWeekData(week) {
   _currentData = data;
   rebuildCatIdx(data);
   loadNav(data);
-  // Reset to "all categories" view
-  _currentCat = -1;
+  // Reset to "AI/LLM 安全" view
+  _currentCat = 0;
   document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
-  document.querySelector('.nav-item[data-idx="-1"]').classList.add('active');
+  document.querySelector('.nav-item[data-idx="0"]').classList.add('active');
   renderList();
 }
 
