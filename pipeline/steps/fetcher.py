@@ -7,7 +7,7 @@ import asyncio
 import random
 import os
 
-from . import atomic_write, load_secrets
+from ..utils import atomic_write, load_secrets
 
 CONFIG_PATH = Path("config/source_config.yaml")
 DATA_DIR = Path("data")

@@ -16,32 +16,39 @@ python app.py server [port]      # 启动管理后台 (默认 8090)
 app.py                    统一入口
 CLAUDE.md                 本文件
 pipeline/                 10 步数据处理管道
-  main.py                 主入口（串联所有步骤）
   __init__.py             模块导出
-  fetcher.py              并发 RSS/API 信源抓取
-  parser.py               解析为统一数据结构
-  keyword_filter.py       两阶段评分过滤（替代旧 classifier.py）
-  scorer.py               评分逻辑（被 keyword_filter 调用）
-  fulltext_extractor.py   短摘要文章原文抓取（右栏正文）
-  deduplicator.py         URL 去重 + 标题模糊去重
-  translator.py           英文→中文翻译（腾讯云 TMT API）
-  llm_processor.py        摘要翻译与 LLM 增强（预留）
-  report_generator.py     Jinja2 HTML 报告生成
-  scraper.py              静态页面抓取辅助工具
-  mobile_converter.py     桌面→移动端转换（移动端按需加载详情）
-  mobile.css               移动端样式
-  mobile.js                移动端交互
+  orchestrator.py         管道编排器（串联所有步骤）
+  steps/                  各步骤模块
+    fetcher.py            并发 RSS/API 信源抓取
+    parser.py             解析为统一数据结构
+    keyword_filter.py     两阶段评分过滤（替代旧 classifier.py）
+    scorer.py             评分逻辑（被 keyword_filter 调用）
+    fulltext_extractor.py 短摘要文章原文抓取（右栏正文）
+    deduplicator.py       URL 去重 + 标题模糊去重
+    translator.py         英文→中文翻译（腾讯云 TMT API）
+    llm_processor.py      摘要翻译与 LLM 增强（预留）
+    report_generator.py   Jinja2 HTML 报告生成
+    mobile_converter.py   桌面→移动端转换（移动端按需加载详情）
+  utils/                  工具函数
+    __init__.py           原子写入、预压缩、密钥加载
+    scraper.py            静态页面抓取辅助工具
+  assets/                 静态资产
+    mobile.css            移动端样式
+    mobile.js             移动端交互
 config/                   配置文件
   source_config.yaml      信源配置（~80 个信源）
   scoring_keywords.json   评分关键词配置
   keywords.json           关键词别名映射
   llm_config.yaml         LLM 配置（预留）
   settings.json           管理后台配置
+server/                   管理后台
+  config_server.py        配置服务器
+  config.html             管理后台页面
+scripts/                  运维脚本
+  server.sh               Server 管理脚本
 templates/                模板
   weekly_report.html      周报模板
-  config.html             管理后台模板
 reports/                  生成的 HTML 周报
-server/                   管理后台
 docs/                     文档
 data/                     中间数据（gitignored）
 ```
@@ -69,7 +76,7 @@ data/                     中间数据（gitignored）
 
 ## 红线
 
-- 不要直接运行 `pipeline/scraper.py` 或 `pipeline/main.py` — 始终通过 `app.py` 入口
+- 不要直接运行 `pipeline/utils/scraper.py` 或 `pipeline/orchestrator.py` — 始终通过 `app.py` 入口
 - 不要在信源配置中硬编码 API 密钥 — 使用 `.env` 文件或环境变量
 - 评分阈值（stage1: 30, stage2: 80）改动需谨慎，影响报告条数质量
 - `config/source_config.yaml` 中 `enabled: false` 的信源不要删除，留作记录

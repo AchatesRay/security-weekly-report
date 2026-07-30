@@ -326,7 +326,7 @@ def parse_all() -> list[dict]:
 
         # HTTP 爬虫类型
         if source_type == "scraper":
-            from .scraper import extract_articles
+            from ..utils.scraper import extract_articles
             try:
                 items = extract_articles(source, source["xml_text"])
                 all_items.extend(items)
@@ -360,7 +360,7 @@ def parse_all() -> list[dict]:
     print(f"[PARSER] 解析完成: {len(all_items)} 条")
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    from . import atomic_write
+    from ..utils import atomic_write
     atomic_write(PARSED_ITEMS_PATH, all_items, indent=2)
 
     return all_items

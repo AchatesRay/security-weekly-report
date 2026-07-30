@@ -109,7 +109,7 @@ def build_json_items(items: list[dict]) -> list[dict]:
 def save_weekly_data(items: list[dict], week_str: str):
     """将本周数据保存为独立 JSON 文件"""
     path = REPORTS_DIR / f"data_{week_str}.json"
-    from . import atomic_write
+    from ..utils import atomic_write
     atomic_write(path, items)
 
 
@@ -218,7 +218,7 @@ def generate_source_alerts() -> list[dict]:
 
 def _precompress_reports(week_str: str):
     """预压缩周报数据 JSON 文件（含全量 + 按分类拆分的文件）"""
-    from . import precompress
+    from ..utils import precompress
     for f in REPORTS_DIR.glob(f"data_{week_str}*.json"):
         gz = precompress(f)
         if gz:

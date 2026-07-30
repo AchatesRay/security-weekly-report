@@ -67,46 +67,46 @@ def run_pipeline(skip_fetch: bool = False):
     steps_total = 10
 
     # 初始化关键字过滤（如无配置则写入默认列表）
-    from .keyword_filter import init_default_keywords
+    from .steps.keyword_filter import init_default_keywords
     init_default_keywords()
 
     # Step 1: 抓取
     if skip_fetch:
         print(f"[SKIP] 跳过抓取阶段，使用已有数据\n")
     else:
-        from .fetcher import fetch_all
+        from .steps.fetcher import fetch_all
         run_step(1, steps_total, "抓取 RSS 信源", lambda: asyncio.run(fetch_all()))
 
     # Step 2: 解析
-    from .parser import parse_all
+    from .steps.parser import parse_all
     run_step(2, steps_total, "解析 RSS 数据", parse_all, skip_ok=True)
 
     # Step 3: 去重
-    from .deduplicator import run as run_dedup
+    from .steps.deduplicator import run as run_dedup
     run_step(3, steps_total, "去重", run_dedup, skip_ok=True)
 
     # Step 4: 评分过滤阶段1（快速预筛，<30 分提前丢弃）
-    from .keyword_filter import run_stage1 as kw_stage1
+    from .steps.keyword_filter import run_stage1 as kw_stage1
     run_step(4, steps_total, "评分过滤（阶段1：快速预筛）", kw_stage1, skip_ok=True)
 
     # Step 5: 全文提取
-    from .fulltext_extractor import run as run_fulltext
+    from .steps.fulltext_extractor import run as run_fulltext
     run_step(5, steps_total, "提取全文（摘要过短的文章）", run_fulltext, skip_ok=True)
 
     # Step 6: 评分过滤阶段2（完整评分 + 分类 + 内容类型 + 地域推断）
-    from .keyword_filter import run_stage2 as kw_stage2
+    from .steps.keyword_filter import run_stage2 as kw_stage2
     run_step(6, steps_total, "评分过滤（阶段2：完整评分与分类）", kw_stage2, skip_ok=True)
 
     # Step 7: AI 摘要生成
-    from .llm_processor import run as run_llm
+    from .steps.llm_processor import run as run_llm
     run_step(7, steps_total, "生成 AI 摘要", run_llm, skip_ok=True)
 
     # Step 8: 翻译摘要
-    from .translator import run as run_translate
+    from .steps.translator import run as run_translate
     run_step(8, steps_total, "翻译英文摘要为中文", run_translate, skip_ok=True)
 
     # Step 9: 生成报告
-    from .report_generator import generate_report
+    from .steps.report_generator import generate_report
     report_path = None
     try:
         run_step(9, steps_total, "生成 HTML 周报", generate_report)
@@ -115,7 +115,7 @@ def run_pipeline(skip_fetch: bool = False):
         print(f"  [ERROR] 生成报告失败: {e}")
 
     # Step 10: 移动版转换
-    from .mobile_converter import run as run_mobile
+    from .steps.mobile_converter import run as run_mobile
     run_step(10, steps_total, "生成移动版页面", run_mobile, skip_ok=True)
 
     # ── 评分质量周对比 ──
@@ -162,7 +162,7 @@ def _print_scoring_comparison():
     archive_dir.mkdir(parents=True, exist_ok=True)
     week_str = datetime.now().strftime("%Y%m%d")
     archive_path = archive_dir / f"stats_{week_str}.json"
-    from . import atomic_write
+    from .utils import atomic_write
     atomic_write(archive_path, cur, indent=2)
 
     if not prev:

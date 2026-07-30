@@ -4,9 +4,9 @@
   1.  fetcher              RSS/API 信源并发抓取
   2.  parser               解析为统一数据结构
   3.  deduplicator         URL 精确去重 + 标题模糊去重
-  4.  scorer (stg1)       标题+前200字快速评分，<30 分提前丢弃
+  4.  keyword_filter (stg1) 标题+前200字快速评分，<30 分提前丢弃
   5.  fulltext_extractor   短摘要文章全文抓取
-  6.  scorer (stg2)        完整评分+分类+内容类型+地域推断（≥80收录，50-79待复核）
+  6.  keyword_filter (stg2) 完整评分+分类+内容类型+地域推断（≥80收录，50-79待复核）
   7.  llm_processor        AI 摘要（抽取式 / LLM API）
   8.  translator           英文摘要→中文翻译（腾讯云 TMT）
   9.  report_generator     Jinja2 HTML 报告生成
@@ -16,79 +16,21 @@
 Web 管理:  app.py server [port]
 """
 
-import gzip
-import json
-import os
-import tempfile
-from pathlib import Path
-from typing import Any
+from .utils import atomic_write, precompress, load_secrets
+from .orchestrator import run_pipeline
 
-
-SECRETS_PATH = Path("config/secrets.json")
-
-
-def load_secrets() -> dict:
-    """从 config/secrets.json 加载 API 密钥，文件不存在则返回空字典"""
-    if SECRETS_PATH.exists():
-        try:
-            with open(SECRETS_PATH, encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
-
-
-def atomic_write(path: str | Path, data: Any, **json_kwargs):
-    """原子写入 JSON 文件：先写临时文件，再 rename 覆盖目标路径。
-
-    管道各阶段共享 parsed_items.json 作为中间数据，普通写入若在
-    写入中途崩溃会导致 JSON 截断/损坏。本函数确保写入要么完全
-    成功，要么完全不改变目标文件。
-    """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, **json_kwargs)
-        os.replace(tmp, path)
-    except Exception:
-        # 清理临时文件
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-
-
-def precompress(path: Path, level: int = 6, remove_original: bool = False) -> Path | None:
-    """为文件生成预压缩 .gz 版本，返回压缩文件路径（压缩后更大则跳过）"""
-    if not path.exists():
-        return None
-    gz_path = path.with_name(path.name + ".gz")
-    raw = path.read_bytes()
-    compressed = gzip.compress(raw, compresslevel=level)
-    if len(compressed) >= len(raw):
-        return None  # 压缩后更大，跳过
-    gz_path.write_bytes(compressed)
-    if remove_original:
-        path.unlink()
-    return gz_path
-
-
-from .fetcher import fetch_all
-from .parser import parse_all
-from .keyword_filter import run_stage1, run_stage2, init_default_keywords
-from .fulltext_extractor import run as extract_fulltext
-from .deduplicator import run as deduplicate
-from .translator import run as translate
-from .llm_processor import run as enhance
-from .report_generator import generate_report
-from .mobile_converter import run as convert_mobile
-from .main import run_pipeline
+from .steps.fetcher import fetch_all
+from .steps.parser import parse_all
+from .steps.keyword_filter import run_stage1, run_stage2, init_default_keywords
+from .steps.fulltext_extractor import run as extract_fulltext
+from .steps.deduplicator import run as deduplicate
+from .steps.translator import run as translate
+from .steps.llm_processor import run as enhance
+from .steps.report_generator import generate_report
+from .steps.mobile_converter import run as convert_mobile
 
 __all__ = [
-    "atomic_write", "precompress",
+    "atomic_write", "precompress", "load_secrets",
     "fetch_all",
     "parse_all",
     "init_default_keywords", "run_stage1", "run_stage2",
