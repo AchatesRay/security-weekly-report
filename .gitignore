@@ -5,3 +5,4 @@ reports/
 .env
 .worktrees/
 config/secrets.json
+docs/server_deployment.md
