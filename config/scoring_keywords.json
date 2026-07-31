@@ -2304,6 +2304,159 @@
         "categories": [
           "⑥ 数据安全与隐私保护"
         ]
+      },
+      {
+        "text": "AI red teaming",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI red team",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI fuzzing",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI penetration testing",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "LLM scanning",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "LLM fuzzing",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "LLM security testing",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI渗透测试",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI红队",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI靶场",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "红队自动化",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "LLM基准测试",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "模型红队",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "GenAI安全",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "Copilot安全",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "Agent红队",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "MCP安全",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "SLM安全",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "CoT攻击",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "后门攻击",
+        "categories": [
+          "② 威胁情报与攻防对抗"
+        ]
+      },
+      {
+        "text": "供应链投毒",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "代码生成安全",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI代码审计",
+        "categories": [
+          "① AI/LLM 安全",
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "AI漏洞挖掘",
+        "categories": [
+          "① AI/LLM 安全",
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "大模型供应链",
+        "categories": [
+          "① AI/LLM 安全",
+          "③ 漏洞态势与供应链安全"
+        ]
       }
     ]
   },
@@ -3212,7 +3365,19 @@
       {"text": "cyber", "type": "normal", "categories": ["② 威胁情报与攻防对抗", "⑤ 产业动态与技术趋势"]},
       {"text": "vulnérabilité", "type": "normal", "categories": ["③ 漏洞态势与供应链安全"]},
       {"text": "vulnérabilités", "type": "normal", "categories": ["③ 漏洞态势与供应链安全"]},
-      {"text": "Kubernetes", "type": "core", "categories": ["⑤ 产业动态与技术趋势"]}
+      {"text": "Kubernetes", "type": "core", "categories": ["⑤ 产业动态与技术趋势"]},
+      {"text": "prompt injection", "type": "core", "categories": ["① AI/LLM 安全"]},
+      {"text": "jailbreak", "type": "core", "categories": ["① AI/LLM 安全"]},
+      {"text": "red teaming", "type": "core", "categories": ["① AI/LLM 安全"]},
+      {"text": "LLM guardrails", "type": "core", "categories": ["① AI/LLM 安全"]},
+      {"text": "model alignment", "type": "core", "categories": ["① AI/LLM 安全"]},
+      {"text": "AI vulnerability", "type": "core", "categories": ["① AI/LLM 安全", "③ 漏洞态势与供应链安全"]},
+      {"text": "runtime security", "type": "core", "categories": ["⑤ 产业动态与技术趋势"]},
+      {"text": "AI risk", "type": "core", "categories": ["① AI/LLM 安全"]},
+      {"text": "agent security", "type": "core", "categories": ["① AI/LLM 安全"]},
+      {"text": "model hacking", "type": "normal", "categories": ["① AI/LLM 安全"]},
+      {"text": "benchmark安全", "type": "normal", "categories": ["① AI/LLM 安全"]},
+      {"text": "security benchmark", "type": "normal", "categories": ["⑤ 产业动态与技术趋势"]}
     ]
   },
   "weak": {
@@ -3420,6 +3585,86 @@
         "text": "应急体系",
         "categories": [
           "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "AI评测",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "模型评估",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI安全框架",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI安全标准",
+        "categories": [
+          "① AI/LLM 安全",
+          "④ 政策法规与标准框架"
+        ]
+      },
+      {
+        "text": "LLM安全",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "对抗样本",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "越狱",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI合规",
+        "categories": [
+          "① AI/LLM 安全",
+          "④ 政策法规与标准框架"
+        ]
+      },
+      {
+        "text": "AI治理框架",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "红队测试",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "提示词攻击",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI安全评测",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "模型安全评估",
+        "categories": [
+          "① AI/LLM 安全"
         ]
       }
     ]

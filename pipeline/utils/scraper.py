@@ -67,6 +67,14 @@ def extract_articles(source: dict, html_text: str) -> list[dict]:
             link_el = art.select_one(link_selector)
         else:
             link_el = title_el if title_el.name == "a" else title_el.find("a")
+        # 回退：如果 article 本身就是 <a> 且未找到内部链接
+        if not (link_el and link_el.name == "a" and link_el.get("href")):
+            link_el = art if art.name == "a" and art.get("href") else link_el
+        # 回退：如果 article 的父节点是 <a>
+        if not (link_el and link_el.name == "a" and link_el.get("href")):
+            parent = art.parent
+            if parent and parent.name == "a" and parent.get("href"):
+                link_el = parent
         if link_el and link_el.name == "a" and link_el.get("href"):
             link = link_el["href"]
             if link.startswith("/") and link_base:
@@ -98,7 +106,7 @@ def extract_articles(source: dict, html_text: str) -> list[dict]:
             "url": link,
             "summary": summary[:2000] if summary else "",
             "published_date": published_date,
-            "source_name": source["name"],
+            "source_name": source.get("source_name") or source["name"],
             "language": source.get("language", "en"),
             "parse_time": datetime.now().isoformat(),
         })

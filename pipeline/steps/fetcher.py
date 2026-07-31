@@ -95,6 +95,7 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
     name = source["name"]
     feed_url = source["url"]
     ssl_verify = source.get("ssl_verify", True)
+    scraper_config = source.get("scraper_config", {})
     print(f"  [FETCH] {name} <- {feed_url}")
 
     # 对需要跳过 SSL 验证的信源使用独立客户端
@@ -109,6 +110,7 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
                         "language": source["language"],
                         "url": feed_url,
                         "type": source.get("type", "rss"),
+                        "scraper_config": scraper_config,
                         "xml_text": resp.text,
                         "fetch_time": datetime.now().isoformat(),
                         "error": None,
@@ -119,6 +121,7 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
                 "language": source["language"],
                 "url": feed_url,
                 "type": source.get("type", "rss"),
+                "scraper_config": scraper_config,
                 "xml_text": "",
                 "fetch_time": datetime.now().isoformat(),
                 "error": str(e),
@@ -137,6 +140,7 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
                 "language": source["language"],
                 "url": feed_url,
                 "type": source.get("type", "rss"),
+                "scraper_config": scraper_config,
                 "xml_text": resp.text,
                 "fetch_time": datetime.now().isoformat(),
                 "error": None,
@@ -160,6 +164,7 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
             "language": source["language"],
             "url": feed_url,
             "type": source.get("type", "rss"),
+            "scraper_config": scraper_config,
             "xml_text": resp2.text,
             "fetch_time": datetime.now().isoformat(),
             "error": None,
@@ -172,6 +177,7 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
             "language": source["language"],
             "url": feed_url,
             "type": source.get("type", "rss"),
+            "scraper_config": scraper_config,
             "xml_text": "",
             "fetch_time": datetime.now().isoformat(),
             "error": msg,
@@ -206,6 +212,7 @@ async def fetch_api(client: httpx.AsyncClient, source: dict) -> dict:
         "ietf": _fetch_ietf,
         "mitre_attack": _fetch_mitre_attack,
         "github": _fetch_github,
+        "github_repo": _fetch_github_repo,
         "secrss": _fetch_secrss,
     }
 
@@ -275,6 +282,17 @@ async def _fetch_github(client: httpx.AsyncClient, source: dict) -> dict:
     resp = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
     resp.raise_for_status()
     return _make_api_result(source, url, resp.text, "github", None)
+
+
+async def _fetch_github_repo(client: httpx.AsyncClient, source: dict) -> dict:
+    """GitHub API: 获取特定仓库的 Releases 或 repo 信息"""
+    url = source["url"]
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    resp = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
+    resp.raise_for_status()
+    return _make_api_result(source, url, resp.text, "github_repo", None)
 
 
 async def _fetch_secrss(client: httpx.AsyncClient, source: dict) -> dict:

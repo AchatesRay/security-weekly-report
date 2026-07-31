@@ -29,6 +29,7 @@ sources:
   type: rss
   language: en
   enabled: false
+  note: feed.xml 返回 404（Anthropic 已移除公共 RSS）
 - name: Anthropic Engineering
   group: AI厂商
   url: https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_engineering.xml
@@ -52,7 +53,7 @@ sources:
   url: https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/anthropic-research.xml
   type: rss
   language: en
-  enabled: false
+  enabled: true
 - name: Aqua Security Blog
   group: 安全厂商
   url: https://www.aquasec.com/feed/
@@ -244,7 +245,8 @@ sources:
   url: https://intezer.com/blog/feed
   type: rss
   language: en
-  enabled: true
+  enabled: false
+  note: feed 返回 404（Intezer 可能移除了 RSS）
 - name: JPCERT/CC Blog
   group: 政府与CERT
   url: https://blogs.jpcert.or.jp/en/atom.xml
@@ -425,6 +427,7 @@ sources:
   type: rss
   language: zh
   enabled: true
+  ssl_verify: false
 - name: Sekoia Blog
   group: 安全厂商
   url: https://blog.sekoia.io/feed
@@ -677,3 +680,286 @@ sources:
   type: rss
   language: en
   enabled: true
+
+# ════════════════════════════════════════════════
+# 新增强 AI 安全信源（2026-07 批量补充）
+# ════════════════════════════════════════════════
+
+# ── AI 自身安全 ──
+
+- name: Promptfoo (GitHub Release)
+  group: AI厂商
+  url: https://api.github.com/repos/promptfoo/promptfoo/releases?per_page=10
+  type: api
+  api_platform: github_repo
+  language: en
+  enabled: true
+
+- name: PyRIT (GitHub Release)
+  group: AI厂商
+  url: https://api.github.com/repos/microsoft/PyRIT/releases?per_page=10
+  type: api
+  api_platform: github_repo
+  language: en
+  enabled: true
+
+- name: NVIDIA Garak (GitHub Release)
+  group: AI厂商
+  url: https://api.github.com/repos/NVIDIA/garak/releases?per_page=10
+  type: api
+  api_platform: github_repo
+  language: en
+  enabled: true
+
+- name: Meta AI Security (GitHub Search)
+  group: AI厂商
+  url: https://api.github.com/search/repositories?q=org:facebookresearch+topic:security&sort=updated&order=desc&per_page=10
+  type: api
+  api_platform: github
+  language: en
+  enabled: true
+
+- name: Google DeepMind
+  group: AI厂商
+  url: https://deepmind.google/blog/rss.xml
+  type: rss
+  language: en
+  enabled: true
+
+# ── AI 赋能安全 ──
+
+- name: AISLE Blog
+  group: 安全厂商
+  url: https://aisle.com/api/posts
+  type: api
+  api_platform: github_repo
+  language: en
+  enabled: true
+
+- name: ZeroPath Blog
+  group: 安全厂商
+  url: https://zeropath.com/blog
+  type: scraper
+  language: en
+  enabled: true
+  scraper_config:
+    article_selector: "a[href^='/blog/'].group"
+    title_selector: "h2"
+    summary_selector: "p.psmall"
+    date_selector: "p.psmall"
+    link_selector: ""
+    link_base: "https://zeropath.com"
+
+- name: RunSybil Blog
+  group: 安全厂商
+  url: https://www.runsybil.com/blog
+  type: scraper
+  language: en
+  enabled: true
+  scraper_config:
+    article_selector: "div.featured-blog_list-item.w-dyn-item"
+    title_selector: "h2.blog-heading.heading-style-h3"
+    link_selector: "a.global-link"
+    link_base: "https://www.runsybil.com"
+
+- name: PentestGPT (GitHub Release)
+  group: 开发者社区
+  url: https://api.github.com/repos/GreyDGL/PentestGPT/releases?per_page=10
+  type: api
+  api_platform: github_repo
+  language: en
+  enabled: true
+
+- name: Cairn (GitHub Release)
+  group: 开发者社区
+  url: https://api.github.com/repos/oritera/Cairn/releases?per_page=10
+  type: api
+  api_platform: github_repo
+  language: en
+  enabled: true
+
+# ── 一线实战博客 / 个人研究者 ──
+
+- name: Simon Willison
+  group: 开发者社区
+  url: https://simonwillison.net/atom/everything/
+  type: rss
+  language: en
+  enabled: true
+
+- name: Embrace The Red
+  group: 开发者社区
+  url: https://embracethered.com/blog/index.xml
+  type: rss
+  language: en
+  enabled: true
+
+- name: Daniel Miessler
+  group: 开发者社区
+  url: https://danielmiessler.com/feed/
+  type: rss
+  language: en
+  enabled: true
+
+- name: Jack Clark
+  group: 开发者社区
+  url: https://jack-clark.net/feed/
+  type: rss
+  language: en
+  enabled: true
+
+- name: Joseph Thacker
+  group: 开发者社区
+  url: https://josephthacker.com/feed.xml
+  type: rss
+  language: en
+  enabled: true
+
+- name: AI Village
+  group: 开发者社区
+  url: https://aivillage.org/feed.xml
+  type: rss
+  language: en
+  enabled: true
+
+- name: AISI Research
+  group: 政府与CERT
+  url: https://www.aisi.gov.uk/research
+  type: scraper
+  language: en
+  enabled: true
+  scraper_config:
+    article_selector: "div.work-card-wrapper.w-dyn-item"
+    title_selector: "h3[fs-list-field='title']"
+    summary_selector: "p[fs-list-field='category']"
+    date_selector: "p[fs-list-field='date']"
+    link_selector: "a.text-link-hover"
+    link_base: "https://www.aisi.gov.uk"
+
+- name: AISI Blog
+  group: 政府与CERT
+  url: https://www.aisi.gov.uk/blog
+  type: scraper
+  language: en
+  enabled: true
+  scraper_config:
+    article_selector: "div.w-dyn-item"
+    title_selector: "h3[fs-list-field='title']"
+    link_selector: "a[href^='/blog/']"
+    link_base: "https://www.aisi.gov.uk"
+
+- name: Pliny L1B3RT4S (GitHub Release)
+  group: 开发者社区
+  url: https://api.github.com/repos/elder-plinius/L1B3RT4S/releases?per_page=10
+  type: api
+  api_platform: github_repo
+  language: en
+  enabled: true
+
+- name: LLM-Attacks (GitHub Release)
+  group: 开发者社区
+  url: https://api.github.com/repos/llm-attacks/llm-attacks/releases?per_page=10
+  type: api
+  api_platform: github_repo
+  language: en
+  enabled: true
+
+# ── AI 自身安全 Scraper ──
+
+- name: Invariant Labs
+  group: AI厂商
+  url: https://invariantlabs.ai/blog.html
+  type: scraper
+  language: en
+  enabled: true
+  scraper_config:
+    article_selector: "article.preview"
+    title_selector: "h3.entry-title"
+    summary_selector: ".entry-content"
+    date_selector: "h4.date"
+    summary_selector: "div.entry-content"
+    date_selector: "h4.date"
+    link_selector: "a[rel='bookmark']"
+
+- name: Zenity Blog
+  group: AI厂商
+  url: https://zenity.io/blog
+  type: scraper
+  language: en
+  enabled: true
+  scraper_config:
+    article_selector: "a[href^='/blog/'].group"
+    title_selector: "h2, h3"
+    summary_selector: "p"
+    link_selector: ""
+    link_base: "https://zenity.io"
+
+- name: HiddenLayer Reports
+  group: AI厂商
+  url: https://www.hiddenlayer.com/innovation-hub/reports-and-guides
+  type: scraper
+  language: en
+  enabled: false
+  scraper_config:
+    article_selector: ".cms-posts"
+    title_selector: "[fs-list-field='title']"
+    summary_selector: ".u-text-regular.blog-subtitle"
+    link_selector: ".card_link"
+
+- name: 腾讯朱雀实验室
+  group: 国内信源
+  url: https://matrix.tencent.com/zh/
+  type: scraper
+  language: zh
+  enabled: true
+  scraper_config:
+    article_selector: "article.group"
+    title_selector: "h2 a, h3"
+    summary_selector: "p.font-body-reading, p.text-slate-500"
+    date_selector: "span.text-slate-400"
+    link_selector: "a[href^='/zh/']"
+    link_base: "https://matrix.tencent.com"
+
+- name: Nicholas Carlini
+  group: 开发者社区
+  url: https://nicholas.carlini.com/writing
+  type: scraper
+  language: en
+  enabled: true
+  scraper_config:
+    article_selector: "div.inner"
+    title_selector: "a"
+    link_selector: "a"
+    link_selector: "a[href*='writing']"
+
+# ── 标准 / 基准 / 社区 ──
+
+- name: Google Project Zero
+  group: 开发者社区
+  url: https://googleprojectzero.blogspot.com/feeds/posts/default
+  type: rss
+  language: en
+  enabled: true
+  note: blogspot.com 在此环境无法连接，暂不可用
+
+# ── 国内信源 ──
+
+- name: 补天社区 AI 安全
+  group: 国内信源
+  url: https://forum.butian.net/Rss/ai-security
+  type: rss
+  language: zh
+  enabled: true
+
+- name: 看雪论坛 AI 安全
+  group: 国内信源
+  url: https://bbs.kanxue.com/forum-170.htm
+  type: scraper
+  language: zh
+  enabled: true
+  scraper_config:
+    article_selector: "tr.thread"
+    title_selector: "td.td-subject div.subject > a:nth-of-type(2)"
+    summary_selector: "td.td-subject div.subject > a:nth-of-type(2)"
+    link_selector: "td.td-subject div.subject > a:nth-of-type(2)"
+    link_base: "https://bbs.kanxue.com/"

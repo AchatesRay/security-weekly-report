@@ -291,6 +291,115 @@ def parse_api_github(source_info: dict, raw_text: str) -> list[dict]:
     return items
 
 
+def parse_api_github_repo(source_info: dict, raw_text: str) -> list[dict]:
+    """解析 GitHub Releases API 或 Repo API 返回的 JSON"""
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return []
+    items = []
+
+    # Releases API: 返回列表 [{tag_name, name, body, html_url, published_at}]
+    if isinstance(data, list):
+        for rel in data:
+            tag = rel.get("tag_name", "")
+            name = rel.get("name", "") or tag
+            if not name:
+                continue
+            body = rel.get("body", "") or ""
+            summary = body[:500] if body else f"Release {name}"
+            # 从 html_url 推断仓库名
+            html_url = rel.get("html_url", "")
+            repo_hint = ""
+            if html_url and "github.com" in html_url:
+                parts = html_url.split("/")
+                if len(parts) >= 5:
+                    repo_hint = f"{parts[3]}/{parts[4]}"
+            title = f"[{repo_hint}] {name}" if repo_hint else name
+            items.append({
+                "title": title,
+                "url": html_url,
+                "summary": summary,
+                "published_date": rel.get("published_at", ""),
+                "source_name": source_info["source_name"],
+                "language": source_info["language"],
+                "source_type": "GitHub Release",
+                "authors": [rel.get("author", {}).get("login", "")] if rel.get("author") else [],
+                "categories": ["工具发布", "GitHub"],
+                "parse_time": datetime.now().isoformat(),
+            })
+        return items
+
+    # Repo API: 返回单个仓库对象 {full_name, description, html_url, created_at, topics}
+    if isinstance(data, dict):
+        full_name = data.get("full_name", "")
+        if full_name:
+            description = data.get("description", "") or ""
+            topics = data.get("topics", [])
+            summary = description[:500] if description else full_name
+            if topics:
+                summary += f" | 标签: {', '.join(topics[:5])}"
+            items.append({
+                "title": full_name,
+                "url": data.get("html_url", f"https://github.com/{full_name}"),
+                "summary": summary,
+                "published_date": data.get("created_at", ""),
+                "source_name": source_info["source_name"],
+                "language": source_info["language"],
+                "source_type": "GitHub Repo",
+                "authors": [data.get("owner", {}).get("login", "")] if data.get("owner") else [],
+                "categories": topics[:5],
+                "parse_time": datetime.now().isoformat(),
+            })
+        return items
+
+    # 搜索/组织/通用 API: 返回 {items: [...]} 或 {data: [...]} 或 {docs: [...]}
+    data_key = "items" if "items" in data else ("data" if "data" in data else ("docs" if "docs" in data else None))
+    if data_key is not None:
+        items_data = data[data_key]
+        if not isinstance(items_data, list):
+            items_data = [items_data]
+        for repo in items_data:
+            # GitHub repo 格式
+            if "full_name" in repo:
+                full_name = repo.get("full_name", "").strip()
+                if not full_name:
+                    continue
+                description = repo.get("description", "") or ""
+                topics = repo.get("topics", [])
+                stars = repo.get("stargazers_count", 0)
+                language = repo.get("language") or "未知"
+                summary = description[:500] if description else full_name
+                summary += f" | stars: {stars} | 语言: {language}"
+                if topics:
+                    summary += f" | 标签: {', '.join(topics[:5])}"
+                items.append({
+                    "title": full_name,
+                    "url": repo.get("html_url", f"https://github.com/{full_name}"),
+                    "summary": summary,
+                    "published_date": repo.get("created_at", "") or repo.get("updated_at", ""),
+                    "source_name": source_info["source_name"],
+                    "language": source_info["language"],
+                    "source_type": "GitHub Repo",
+                    "authors": [repo.get("owner", {}).get("login", "")] if repo.get("owner") else [],
+                    "categories": topics[:5],
+                    "parse_time": datetime.now().isoformat(),
+                })
+            # 通用 JSON API 格式：{title, slug, publishedAt, content}
+            elif "title" in repo and "slug" in repo:
+                items.append({
+                    "title": repo["title"],
+                    "url": f"https://aisle.com/blog/{repo['slug']}",
+                    "summary": repo.get("content", "")[:500] if repo.get("content") else "",
+                    "published_date": repo.get("publishedAt", ""),
+                    "source_name": source_info["source_name"],
+                    "language": source_info["language"],
+                    "source_type": "API",
+                    "parse_time": datetime.now().isoformat(),
+                })
+    return items
+
+
 # API 解析器注册表: source_name -> parse function
 API_PARSERS = {
     "安全内参": parse_api_secrss,
@@ -299,6 +408,11 @@ API_PARSERS = {
     "IETF Datatracker": parse_api_ietf,
     "MITRE ATT&CK": parse_api_mitre_attack,
     "GitHub Security Trending": parse_api_github,
+}
+
+# api_platform -> parser 映射（用于 github_repo 等平台级分发）
+API_PLATFORM_PARSERS = {
+    "github_repo": parse_api_github_repo,
 }
 
 
@@ -314,14 +428,21 @@ def parse_all() -> list[dict]:
 
         source_type = source.get("type", "rss")
 
-        # API 类型信源
-        if source_type == "api" and source["source_name"] in API_PARSERS:
-            parser_fn = API_PARSERS[source["source_name"]]
-            try:
-                items = parser_fn(source, source["xml_text"])
-                all_items.extend(items)
-            except Exception as e:
-                print(f"  [PARSE ERROR] {source['source_name']} API: {e}")
+        # API 类型信源：先用 api_platform 查找，再 fallback 到 source_name
+        if source_type == "api":
+            parser_fn = None
+            api_platform = source.get("api_platform", "")
+            if api_platform and api_platform in API_PLATFORM_PARSERS:
+                parser_fn = API_PLATFORM_PARSERS[api_platform]
+            elif source["source_name"] in API_PARSERS:
+                parser_fn = API_PARSERS[source["source_name"]]
+        if source_type == "api":
+            if parser_fn is not None:
+                try:
+                    items = parser_fn(source, source["xml_text"])
+                    all_items.extend(items)
+                except Exception as e:
+                    print(f"  [PARSE ERROR] {source['source_name']} API: {e}")
             continue
 
         # HTTP 爬虫类型
