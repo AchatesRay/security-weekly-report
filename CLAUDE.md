@@ -95,6 +95,24 @@ data/                     中间数据（gitignored）
 | `SCHOLAR_API_KEY` | Semantic Scholar API 密钥（可选，无 key 有频率限制） |
 | `GITHUB_TOKEN` | GitHub Personal Access Token（可选，无 token 有频率限制） |
 
+## 远端部署（Hermes 服务器）
+
+- 部署信息（含 SSH 凭据）见 [docs/server_deployment.md](docs/server_deployment.md)（已 gitignore，不提交）
+- 项目路径: `/home/ubuntu/.hermes/profiles/zhuanjia/workspace/hub/cybersec/`
+- 入口: `venv/bin/python app.py --run`（Python 3.11 venv，已装全部依赖）
+- 报告输出: `reports/Security_Reports.html`（桌面版）+ `Security_Reports_mobile.html`（移动版）
+- 管理后台: `scripts/server.sh {start|stop|restart|status}`，默认端口 8090
+- Hermes 定时任务: `网络安全周报自动更新`，每周一 08:00（cron: `0 8 * * 1`），AI Agent 模式，结果推送微信
+- 部署方式: 本地打包 `tar`（排除 `.git/.claude/data/reports/.env`）→ scp → 解压到 `cybersec/`；`data/`、`reports/` 由远端运行生成，`.env`、`venv` 保留远端版本
+
+### 部署注意事项
+
+- 远端 `scripts/server.sh` 使用系统 `python3`（3.12），若未装依赖需改为 `venv/bin/python3`
+- `hub/` 下遗留孤儿文件 `server_with_ua.py`（旧版，不再使用）
+- 远端 `.env` 中管理后台密码仍为默认 `you_should_change_this`，建议修改
+- Hermes Agent 运行后会在项目根生成 `cybersec_weekly_<日期>.html` 冗余副本
+- 不要修改 Hermes 服务器自身配置（`~/.hermes/` 下的配置由 Hermes 管理）
+
 ## 深入文档
 
 - [设计文档](docs/superpowers/specs/2026-06-22-security-weekly-report-design.md) — 分类体系、标签维度、布局规范
