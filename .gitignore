@@ -4,5 +4,6 @@ data/
 reports/
 .env
 .worktrees/
+.claude/
 config/secrets.json
 docs/server_deployment.md
