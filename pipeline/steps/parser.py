@@ -4,6 +4,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urljoin
 
 from ..utils import DATA_DIR, atomic_write, parse_datetime_utc
 
@@ -470,6 +471,23 @@ def parse_all() -> list[dict]:
             from ..utils.scraper import extract_articles
             try:
                 items = extract_articles(source, source["xml_text"])
+                # 兜底：把仍未补全的相对链接按页面地址解析为绝对地址，并如实报告。
+                # 此前 scraper 只处理以 "/" 开头的相对链接，形如 "thread-1.htm"
+                # 的链接会被原样保留，最终在周报里变成点不开的死链。
+                still_relative = 0
+                for it in items:
+                    url = it.get("url", "") or ""
+                    if url.startswith(("http://", "https://")) or not url:
+                        continue
+                    try:
+                        it["url"] = urljoin(source.get("url", ""), url)
+                    except ValueError:
+                        pass
+                    if not it["url"].startswith(("http://", "https://")):
+                        still_relative += 1
+                if still_relative:
+                    print(f"  [PARSE] {source['source_name']}: "
+                          f"{still_relative} 条链接无法补全为绝对地址，报告中将不可点击")
                 all_items.extend(items)
             except Exception as e:
                 print(f"  [PARSE ERROR] {source['source_name']} scraper: {e}")

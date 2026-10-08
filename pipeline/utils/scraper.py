@@ -11,6 +11,7 @@ HTTP 爬虫 — 用于解析不支持 RSS/API 的信源的 HTML 页面
 
 import re
 from datetime import datetime
+from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 
@@ -21,6 +22,34 @@ USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
+
+
+def _resolve_link(href: str, base: str) -> str:
+    """把页面里的链接补全为绝对地址。
+
+    2026-09-29 修复：此前只在链接以 "/" 开头时才拼接 link_base，
+    形如 "thread-293107.htm" 这种**不带斜杠的相对链接**被原样保留，
+    结果周报里出现点不开的死链（实测看雪论坛 10 条全部如此）。
+    现改用 urljoin 统一处理全部相对形式：
+      绝对地址 / 协议相对 "//host/x" / 站根相对 "/x" / 普通相对 "x" / "./x" / "../x"
+
+    返回空串表示链接不可用（页内锚点、javascript:/mailto: 等非 http 链接）。
+    """
+    if not href:
+        return ""
+    href = href.strip()
+    if not href or href.startswith("#"):
+        return ""
+    scheme = urlsplit(href).scheme.lower()
+    if scheme and scheme not in ("http", "https"):
+        return ""
+    try:
+        absolute = urljoin(base, href) if base else href
+    except ValueError:
+        return ""
+    if not absolute.lower().startswith(("http://", "https://")):
+        return ""
+    return absolute
 
 
 def extract_articles(source: dict, html_text: str) -> list[dict]:
@@ -46,6 +75,8 @@ def extract_articles(source: dict, html_text: str) -> list[dict]:
     date_selector = cfg.get("date_selector", "time, .date, .published, .post-date")
     link_selector = cfg.get("link_selector", "")
     link_base = cfg.get("link_base", "")
+    # 链接补全基准：显式配置的 link_base 优先，否则用被抓取页面的地址
+    base_url = link_base or source.get("url", "") or ""
 
     items = []
     articles = soup.select(article_selector) if article_selector else [soup]
@@ -78,9 +109,7 @@ def extract_articles(source: dict, html_text: str) -> list[dict]:
             if parent and parent.name == "a" and parent.get("href"):
                 link_el = parent
         if link_el and link_el.name == "a" and link_el.get("href"):
-            link = link_el["href"]
-            if link.startswith("/") and link_base:
-                link = link_base.rstrip("/") + link
+            link = _resolve_link(link_el["href"], base_url)
 
         # 提取摘要
         summary = ""
