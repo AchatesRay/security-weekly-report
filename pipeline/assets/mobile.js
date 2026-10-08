@@ -106,7 +106,7 @@
         + '<h1 class="detail-title" id="detailTitle"></h1>'
         + '<div class="detail-divider"></div>'
         + '<div class="detail-ai-summary" id="detailAiSummary" style="display:none">'
-          + '<div class="detail-ai-summary-header">摘要</div>'
+          + '<div class="detail-ai-summary-header">摘要<span class="detail-ai-summary-tag" id="detailAiSummaryTag"></span></div>'
           + '<div class="detail-ai-summary-text" id="detailAiSummaryText"></div>'
         + '</div>'
         + '<div class="detail-summary" id="detailSummary"></div>'
@@ -128,6 +128,7 @@
     window.dSummary = document.getElementById('detailSummary');
     window.dAiSummary = document.getElementById('detailAiSummary');
     window.dAiSummaryText = document.getElementById('detailAiSummaryText');
+    window.dAiSummaryTag = document.getElementById('detailAiSummaryTag');
     window.dTags = document.getElementById('detailTags');
     window.dMatchedKw = document.getElementById('detailMatchedKw');
     window.dLink = document.getElementById('detailLink');

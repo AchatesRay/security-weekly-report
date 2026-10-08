@@ -172,6 +172,13 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
   -webkit-mask-size:contain; flex-shrink:0;
 }
 .detail-ai-summary-text { color:var(--text-secondary); }
+/* 摘要来源标记：自动提炼 / 原文节选，避免把兜底截断误当摘要 */
+.detail-ai-summary-tag {
+  margin-left:auto; font-size:10px; font-weight:500; letter-spacing:0;
+  text-transform:none; color:var(--text-muted);
+  border:1px solid var(--border); border-radius:10px; padding:1px 8px;
+  white-space:nowrap;
+}
 .detail-ai-summary-na { background:var(--bg); border-left-color:var(--text-dim); }
 .detail-ai-summary-na .detail-ai-summary-text { color:var(--text-muted); font-size:13px; }
 .detail-ai-summary-empty { display:none; }
@@ -305,7 +312,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
       <h1 class="detail-title" id="detailTitle"></h1>
       <div class="detail-divider"></div>
       <div class="detail-ai-summary" id="detailAiSummary" style="display:none">
-        <div class="detail-ai-summary-header">摘要</div>
+        <div class="detail-ai-summary-header">摘要<span class="detail-ai-summary-tag" id="detailAiSummaryTag"></span></div>
         <div class="detail-ai-summary-text" id="detailAiSummaryText"></div>
       </div>
       <div class="detail-summary" id="detailSummary"></div>
@@ -357,6 +364,7 @@ var dTitle = document.getElementById('detailTitle');
 var dSummary = document.getElementById('detailSummary');
 var dAiSummary = document.getElementById('detailAiSummary');
 var dAiSummaryText = document.getElementById('detailAiSummaryText');
+var dAiSummaryTag = document.getElementById('detailAiSummaryTag');
 var dTags = document.getElementById('detailTags');
 var dMatchedKw = document.getElementById('detailMatchedKw');
 var dLink = document.getElementById('detailLink');
@@ -478,6 +486,12 @@ function _renderDetail(item) {
     dAiSummary.style.display = 'block';
     dAiSummaryText.textContent = '未获取到原文内容，暂无 AI 摘要';
     dAiSummary.className = 'detail-ai-summary detail-ai-summary-na';
+  }
+  // 摘要来源标记：正常提炼 vs 兜底（原文节选），不让读者把截断当摘要
+  if (dAiSummaryTag) {
+    dAiSummaryTag.textContent = aiText
+      ? (item.ai_summary_kind === 'fallback' ? '原文节选' : '自动提炼')
+      : '';
   }
   dSummary.innerHTML = formatSummary(item.full_body || item.summary);
   dLink.href = item.url;

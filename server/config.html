@@ -866,6 +866,8 @@ function saveSettings() {
     },
     category_order: _catNames.concat(['未分类']),
   };
+  // 保留本页没有控件的设置项（摘要长度），否则保存设置会把它抹掉
+  if (_settings.summary) settings.summary = _settings.summary;
   api('PUT', '/api/config/settings', { settings: settings }).then(function(r) {
     if (r.ok) toast('设置已保存', 'success');
     else toast(r.error || '保存失败', 'error');

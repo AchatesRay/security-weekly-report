@@ -213,6 +213,10 @@ def validate_sources_yaml(text: str) -> list[dict]:
 _ALLOWED_SETTINGS_SPEC = {
     "dedup": {"similarity_threshold": int, "max_days": int},
     "translate": {"timeout": (int, float), "fields": list},
+    # 摘要长度（报告「摘要」栏）。short_categories 里的分类用 short_max_chars，
+    # 其余用 max_chars；min_chars 低于则退化为"原文节选"。
+    "summary": {"max_chars": int, "short_max_chars": int, "min_chars": int,
+                "short_categories": list},
     "category_order": list,
 }
 
@@ -268,6 +272,18 @@ def sanitize_settings(raw: dict) -> dict:
             raise ConfigValidationError(
                 f"translate.fields 含不支持的字段 {bad}，"
                 f"可选: {list(_TRANSLATE_FIELDS)}")
+
+    summary = out.get("summary", {})
+    for skey, lo, hi in (("max_chars", 100, 2000),
+                         ("short_max_chars", 100, 2000),
+                         ("min_chars", 20, 500)):
+        sval = summary.get(skey)
+        if sval is not None and not (lo <= sval <= hi):
+            raise ConfigValidationError(f"summary.{skey} 必须在 {lo}-{hi} 之间")
+    short_cats = summary.get("short_categories")
+    if short_cats is not None and not all(
+            isinstance(x, str) and x.strip() for x in short_cats):
+        raise ConfigValidationError("summary.short_categories 必须是字符串数组")
     return out
 
 

@@ -58,7 +58,7 @@ pipeline/
     keyword_filter.py        stage1 预筛 / stage2 完整评分
     scorer.py                评分引擎（词级加权 + 位置加成 + 分类梯度）
     fulltext_extractor.py    短摘要文章抓原文（并发 8；SSRF 防护）
-    llm_processor.py         TextRank 抽取式摘要（LLM API 分支预留未实现）
+    llm_processor.py         清洗噪声 + 最优连续窗口抽取式摘要（LLM 分支预留未实现）
     translator.py            非中文标题与摘要 → 中文（腾讯云 TMT；正文不翻）
     report_generator.py      Jinja2 → HTML；**渲染成功后才写数据文件**
     mobile_converter.py      桌面 → 移动版（按模板标记剥离详情面板）
@@ -68,13 +68,14 @@ pipeline/
 config/
   source_config.yaml         信源配置（141 条，启用 107 条）
   scoring_keywords.json      评分词表与阈值（改前先看 §5、§7）
-  settings.json              去重阈值/天数、翻译超时与范围、分类顺序（无密钥）
+  settings.json              去重阈值/天数、翻译超时与范围、摘要长度分档、分类顺序（无密钥）
   llm_config.yaml            LLM 配置（预留，默认 enabled: false）
   keywords.json              历史遗留，**当前代码不读取**
 server/config_server.py      管理后台（静态文件白名单 + 认证 + 写入校验）
 server/config.html           管理后台页面
 templates/weekly_report.html 周报模板
 scripts/server.sh            Server 管理脚本（优先 venv 解释器）
+scripts/summary_quality_report.py  摘要质量体检 / 改动前后回归对比（入库）
 reports/                     生成的周报（gitignored）
 data/                        管道中间数据（gitignored）
 docs/                        设计与历史计划文档
@@ -90,7 +91,7 @@ docs/                        设计与历史计划文档
 | 4 | keyword_filter(stage1) | `parsed_items.json` | 标题+前200字快速评分，<30 提前丢弃（省掉全文抓取） |
 | 5 | fulltext_extractor | 原地增强 `parsed_items.json` | 摘要过短的文章抓原文（并发 8、上限 20000 字） |
 | 6 | keyword_filter(stage2) | `classified_items.json` | 完整评分 + 分类 + 内容类型 + 阈值判定 |
-| 7 | llm_processor | `enhanced_items.json` | TextRank 抽取式摘要 → `ai_summary`（不做翻译） |
+| 7 | llm_processor | `enhanced_items.json` | 清洗噪声 → 最优连续窗口抽取式摘要 → `ai_summary` + `ai_summary_kind`（不做翻译） |
 | 8 | translator | `translated_items.json` | 非中文**标题与摘要** → 中文；正文不翻译 |
 | 9 | report_generator | `Security_Reports.html` + `data_<week>*.json` | 渲染成功后才落盘数据文件 |
 | 10 | mobile_converter | `Security_Reports_mobile.html` | 剥离详情面板，注入移动端 CSS/JS |
@@ -122,6 +123,10 @@ docs/                        设计与历史计划文档
 | 报告内按 `raw_score` 降序 | 截顶分大量并列 100，无法分辨"哪条更重要" |
 | `min_strong_for_accept` **默认 0（关闭）** | 实测取 2 时，「Citrix 警告 NetScaler 漏洞正被在野利用」这类只命中 1 个强词的安全要闻会被降级——词表以 AI 话题词为主，`vulnerability`/`exploit`/`ransomware` 等事件词多在中词层 |
 | 翻译范围默认只有 `title` + `ai_summary` | 需求明确"只翻标题和摘要，正文不翻译"；范围在 `settings.json` 的 `translate.fields`，**改配置而不是改代码** |
+| 摘要必须先洗噪声、再按**连续窗口**摘取、按**句边界**收尾 | 改前实测（142 条真实产物）：74.6% 的摘要是半句话（拼完超 500 字直接从中间切开）、25.4% 开头混着导航/署名/分享按钮、181 处英文句子粘连（`accessed.The`）、49.3% 与原文开头逐字相同。散句打分拼接会东抽一句西抽一句 |
+| 摘要长度走 `settings.json` 的 `summary` 段（含分类分档），不写死在代码里 | 改前 72.5% 的摘要正好卡在写死的 500 字上限——长度由上限而不是内容决定。政策/产业类（④⑤）默认 300 字 |
+| 每条摘要写 `ai_summary_kind`，报告显示「自动提炼 / 原文节选」 | 兜底截断与正常提炼此前无法区分，读者会把"原文开头几句"当成摘要 |
+| 报告端剥掉"正文以摘要开头"的那一段 | 改前 39.4% 的收录条目在同一屏把同一段话显示两遍（摘要栏 + 正文栏）；摘要被翻译成中文时与原文对不上，自然不会误剥 |
 | 后台静态文件走**白名单** | 原先直接复用 `SimpleHTTPRequestHandler`，匿名即可下载 `.env`、`config/`、`docs/server_deployment.md`（含 SSH 凭据）与全部源码（已实测复现并修复） |
 | 密钥不进 `config/settings.json` | 该文件曾明文存放腾讯云密钥并推送到公开仓库；现只从 `.env` / `config/secrets.json` 读取 |
 | 后台写入前做结构校验 + 原子替换 | 原先"写进去就算成功"，一次空内容保存即可让下一次运行在第 1 步崩溃 |
@@ -151,6 +156,11 @@ docs/                        设计与历史计划文档
   "商业/产业动态"词（融资/估值/营收/上市/推出/收购/合并/厂商/成本降低/吞吐提升/
   市场报告/财报/定价/订阅），并把负向过滤的豁免条件由"存在任意强词"改为"存在
   **具体安全事件词**"。实测收录 109→106，移出 3 条产业/贸易内容，**零误伤**
+- **抽取式摘要的天花板（改不掉，只能缓解）**：摘要永远是原文里出现过的句子，
+  所以"读懂后用一句话概括"做不到；个别信源的 RSS 正文本身就混着无关内容
+  （实测 AI Hot 的「OpenAI 推出 GPT-6」正文里夹着烤羊肉的待办清单），
+  摘要只能跟着脏。要真正改写必须接入外部模型（`llm_processor._call_llm` 是预留位，
+  主流程当前**从不调用**它，所以后台勾"启用 LLM"也不会改变行为）
 - **历史遗留**：`config/keywords.json`、`docs/superpowers/plans/*`（其中仍有对
   `CLAUDE.md` 的引用）与当前实现无关，不要据此改代码
 
@@ -169,6 +179,13 @@ python -m py_compile $(git ls-files '*.py')          # 语法
 | `test_scoring_dedup.py` | 阈值、多分类计分、阶段1/2 口径、过期过滤、去重 |
 | `test_link_fix.py` | 相对链接补全（单元 + 真实站点） |
 | `test_translate_scope.py` | 翻译范围（只翻标题与摘要） |
+| `scripts/summary_quality_report.py`（**入库**） | 摘要质量体检与改动前后回归：半句截断率、网页噪声率、英文粘连、摘要与正文栏重复率、长度分布、来源标记分布，并逐条打印变化的摘要 |
+
+**调摘要逻辑的流程**（与调评分同等对待，不要凭感觉调）：
+
+1. 用同一份 `data/classified_items.json` 当评测集（抓取波动会影响条目集合，跨轮对比不公平）
+2. 跑 `scripts/summary_quality_report.py 改前.json 改后.json` 出指标与逐条差异
+3. **逐条看变化的摘要**，确认没有把好内容洗掉、没有把正文开头当摘要
 
 **调评分/词表的强制流程**（不要凭感觉调）：
 
@@ -194,6 +211,9 @@ python -m py_compile $(git ls-files '*.py')          # 语法
 {
   "dedup":     { "similarity_threshold": 75, "max_days": 7 },
   "translate": { "timeout": 8, "fields": ["title", "ai_summary"] },  // 正文不翻译
+  "summary":   { "max_chars": 500, "short_max_chars": 300,           // 摘要长度（含分档）
+                 "short_categories": ["④ 政策法规与标准框架", "⑤ 产业动态与技术趋势"],
+                 "min_chars": 80 },                                  // 低于则退化为「原文节选」
   "category_order": ["① AI/LLM 安全", "…", "未分类"]
 }
 ```

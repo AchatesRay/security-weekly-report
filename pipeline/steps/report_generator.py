@@ -103,6 +103,39 @@ def _source_color(source_name: str) -> int:
     return h
 
 
+def _strip_summary_prefix(body: str, summary: str, min_overlap: int = 60) -> str:
+    """正文以摘要开头时剥掉这段重复内容（摘要栏已经显示过一遍）。
+
+    只剥离"从正文开头起、忽略空白后完全一致"的那一段：
+    - 摘要被翻译成中文、正文仍是外文时，二者对不上，自然不会误剥；
+    - 正文与摘要基本同文（剥完所剩无几）时返回空串：既然没有别的内容，
+      就不必在正文栏把同一段话再显示一遍。
+    """
+    if not body or not summary:
+        return body
+    key = re.sub(r"\s+", "", summary).rstrip("….。！？!?")
+    if len(key) < min_overlap:
+        return body
+
+    i = 0
+    cut = 0
+    for idx, ch in enumerate(body):
+        if ch.isspace():
+            continue
+        if i < len(key) and ch == key[i]:
+            i += 1
+            cut = idx + 1
+            if i == len(key):
+                break
+        else:
+            return body
+    if i < len(key):
+        return body
+
+    rest = body[cut:].lstrip()
+    return rest if len(rest) >= min_overlap else ""
+
+
 def build_json_items(items: list[dict]) -> list[dict]:
     """预处理条目为前端 JSON 格式"""
     result = []
@@ -117,11 +150,21 @@ def build_json_items(items: list[dict]) -> list[dict]:
         else:
             summary = summary_orig
 
+        ai_summary = item.get("ai_summary_zh") or item.get("ai_summary") or ""
+        full_body = item.get("full_body") or ""
+        # 第二档：摘要栏与正文栏不再把同一段话显示两遍
+        if ai_summary:
+            full_body = _strip_summary_prefix(full_body, ai_summary)
+            summary = _strip_summary_prefix(summary, ai_summary)
+
         result.append({
             "title": item.get("title_zh") or item.get("title", ""),
             "summary": summary,
             # AI 生成的中文摘要（优先使用翻译后的版本）
-            "ai_summary": item.get("ai_summary_zh") or item.get("ai_summary") or "",
+            "ai_summary": ai_summary,
+            # 摘要来源：extractive（自动提炼）/ fallback（原文节选）/ empty
+            "ai_summary_kind": (item.get("ai_summary_kind")
+                                or ("extractive" if ai_summary else "empty")),
             "url": item.get("url", ""),
             "source_name": item.get("source_name", ""),
             "published_date": (item.get("published_date") or "")[:10],
@@ -136,7 +179,7 @@ def build_json_items(items: list[dict]) -> list[dict]:
             "confidence_score": item.get("confidence_score", 0),
             # 不截顶的证据强度，用于前端排序/展示（截顶分大量并列满分）
             "raw_score": item.get("raw_score", item.get("confidence_score", 0)),
-            "full_body": item.get("full_body") or "",
+            "full_body": full_body,
             # 供前端如实标注“未翻译”的内容（只看报告实际展示的标题与摘要；
             # 正文按设计不翻译，不参与该标记）
             "untranslated": bool(item.get("title_translated") is False

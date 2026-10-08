@@ -10,6 +10,15 @@
       "ai_summary"
     ]
   },
+  "summary": {
+    "max_chars": 500,
+    "short_max_chars": 300,
+    "short_categories": [
+      "④ 政策法规与标准框架",
+      "⑤ 产业动态与技术趋势"
+    ],
+    "min_chars": 80
+  },
   "category_order": [
     "① AI/LLM 安全",
     "② 威胁情报与攻防对抗",

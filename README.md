@@ -7,7 +7,7 @@
 - **141 个信源（启用 107）** — RSS、API、HTTP 爬虫三种采集方式，覆盖国内外主流安全情报源
 - **两阶段评分过滤** — 先快速筛掉无关内容，再完整评分分类，确保报告质量
 - **六维分类体系** — 威胁情报、AI 安全、漏洞态势、政策法规、产业动态、数据隐私
-- **AI 摘要生成** — 内置 TextRank 抽取式摘要，无需外部 API 即可生成中文摘要
+- **AI 摘要生成** — 抽取式摘要（先洗掉网页噪声，再摘取最值得看的**一整段连续内容**，按句边界收尾），无需外部 API；长度可按分类分档，并标注「自动提炼 / 原文节选」
 - **自动翻译** — 非中文的**标题与摘要**自动翻译为中文（腾讯云 TMT API；**正文保持原文**）
 - **双端自适应** — 桌面端完整版 + 移动端轻量版，服务端根据 UA 自动切换
 - **管理后台** — Web 界面管理信源、评分关键词、分类排序、管道启停
@@ -64,7 +64,7 @@ SecurityInfo/
 │   │   ├── keyword_filter.py     # [步骤4+6] 两阶段评分过滤（调用 scorer）
 │   │   ├── scorer.py             # 评分引擎：词级加权 + 位置加成 + 组合校验
 │   │   ├── fulltext_extractor.py # [步骤5] 短摘要文章原文抓取（BS4 解析）
-│   │   ├── llm_processor.py      # [步骤7] AI 摘要（TextRank / LLM API）
+│   │   ├── llm_processor.py      # [步骤7] 摘要（清洗噪声 + 最优连续窗口抽取；LLM 分支预留）
 │   │   ├── translator.py         # [步骤8] 非中文标题与摘要→中文（腾讯云 TMT）
 │   │   ├── report_generator.py   # [步骤9] Jinja2 HTML 报告生成
 │   │   └── mobile_converter.py   # [步骤10] 桌面→移动端转换
@@ -90,8 +90,9 @@ SecurityInfo/
 ├── templates/                    # Jinja2 模板
 │   └── weekly_report.html        # 周报 HTML 模板
 │
-├── scripts/                      # 运维脚本
-│   └── server.sh                 # 管理后台启停脚本（start/stop/restart/status）
+├── scripts/                      # 运维与检查脚本
+│   ├── server.sh                 # 管理后台启停脚本（start/stop/restart/status）
+│   └── summary_quality_report.py # 摘要质量体检 / 改动前后回归对比
 │
 ├── reports/                      # 生成的周报（gitignored）
 │   ├── Security_Reports.html     # 桌面端完整周报
@@ -132,7 +133,7 @@ SecurityInfo/
 | 4 | keyword\_filter (stage1) | `deduped_items.json` | `parsed_items.json` | 标题+前200字快速评分，**<30 分提前丢弃**，减少全文抓取量 | 中止 |
 | 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(原地增强) | 摘要 <300 字的文章抓取全文（并发 8，上限 20000 字），**含 SSRF 防护** | 中止（单条失败仅记录状态） |
 | 6 | keyword\_filter (stage2) | `parsed_items.json` | `classified_items.json` | 完整评分 + 领域分类 + 内容类型。**≥80 收录，50-79 待复核，<50 丢弃** | 中止 |
-| 7 | llm\_processor | `classified_items.json` | `enhanced_items.json` | TextRank 抽取式摘要（默认）或 LLM API 摘要 | 中止 |
+| 7 | llm\_processor | `classified_items.json` | `enhanced_items.json` | 抽取式摘要：先洗掉网页噪声（导航/署名/分享/日期/聚合壳），再摘取**最值得看的连续一段**，按句边界收尾；长度按分类分档（`summary` 段），结果附来源标记 `ai_summary_kind` | 中止 |
 | 8 | translator | `enhanced_items.json` | `translated_items.json` | 腾讯云 TMT，把**非中文的标题与摘要**翻译为中文；**正文不翻译**（范围见 settings 的 `translate.fields`）；翻译失败逐条标记 | 中止（无密钥时跳过并记录状态） |
 | 9 | report\_generator | `translated_items.json` | `Security_Reports.html` + 分类 JSON | Jinja2 渲染 HTML；**渲染成功后才写数据文件**，避免数据与页面不一致 | 中止（保留上一版报告） |
 | 10 | mobile\_converter | `Security_Reports.html` | `Security_Reports_mobile.html` | 按模板标记剥离详情面板，注入 mobile.css/mobile.js | 中止（保留上一版报告） |
@@ -277,6 +278,12 @@ SecurityInfo/
     "timeout": 8,                  // 单条翻译超时（秒）
     "fields": ["title", "ai_summary"]   // 翻译范围：标题 + 摘要（正文不翻译）
   },
+  "summary": {
+    "max_chars": 500,              // 摘要长度上限（字）
+    "short_max_chars": 300,        // 下列分类单独用更短的档位
+    "short_categories": ["④ 政策法规与标准框架", "⑤ 产业动态与技术趋势"],
+    "min_chars": 80                // 低于此长度视为无效，退化为「原文节选」
+  },
   "category_order": [
     "① AI/LLM 安全",
     "② 威胁情报与攻防对抗",
@@ -289,13 +296,51 @@ SecurityInfo/
 }
 ```
 
+### 摘要长度 (`config/settings.json` 的 `summary` 段)
+
+报告「摘要」栏由 `pipeline/steps/llm_processor.py` 生成，长度与分档在这里调整：
+
+| 键 | 含义 | 取值范围 |
+|---|---|---|
+| `max_chars` | 一般分类的摘要长度上限（字） | 100-2000 |
+| `short_max_chars` | `short_categories` 里分类用的上限 | 100-2000 |
+| `short_categories` | 使用短档位的分类名（需与 `category_order` 里的写法一致） | 字符串数组 |
+| `min_chars` | 低于此长度的摘要视为无效，退化为「原文节选」 | 20-500 |
+
+> 该项没有后台界面控件，直接改 `config/settings.json`；后台保存设置时会**原样保留**
+> 这段配置（不会被抹掉）。生成摘要时会把实际生效的上限打印在运行日志里。
+>
+> 每条摘要还会写入来源标记 `ai_summary_kind`：`extractive`（自动提炼）、
+> `fallback`（原文节选，例如原文只有寥寥几句）、`empty`（无可用文本）。
+> 报告「摘要」栏右上角据此显示「自动提炼 / 原文节选」，读者不必猜这段是改写还是摘抄。
+
+### 摘要质量回归（`scripts/summary_quality_report.py`）
+
+改动摘要逻辑后，用最近一次真实运行的产物做前后对比（**不要只看总数，要逐条看**）：
+
+```bash
+python scripts/summary_quality_report.py                      # 体检当前产物
+python scripts/summary_quality_report.py 改前.json 改后.json   # 对比（含逐条差异样例）
+```
+
+输出半句截断率、网页噪声率、英文句子粘连处数、摘要与正文栏重复率、长度分布与来源标记分布。
+
 ### LLM 配置 (`config/llm_config.yaml`)
 
 ```yaml
-mode: extractive          # extractive（TextRank 抽取式，默认）/ api（调用外部 LLM）
-model: claude-sonnet-4-6  # LLM 模式下的模型名
-api_key: ""               # API 密钥（建议用环境变量）
+enabled: false            # 是否启用外部 LLM 摘要（当前主流程仍走抽取式）
+provider: openai          # openai / anthropic / ollama
+api_key: ""               # API 密钥（建议改用 .env，不要写进配置文件）
+model: gpt-4o-mini
+base_url: ""              # 兼容代理或本地部署
+prompt_template: |        # 摘要提示词模板
+  请为以下网络安全资讯生成中文摘要…
 ```
+
+> **当前为预留位**：`enabled: true` 也只会在日志里提示“外部调用尚未实现”，
+> 实际仍使用抽取式摘要（见 `llm_processor.process()`）。接入生成式摘要属于
+> 另一档改造，需同时补齐密钥来源（`.env` / `config/secrets.json`）、失败回退与
+> 调用缓存。
 
 ---
 
@@ -318,7 +363,8 @@ api_key: ""               # API 密钥（建议用环境变量）
 
 - **模块化管道**：10 个步骤通过 JSON 文件传递数据，任意步骤可独立重启。文件位于 `data/` 目录
 - **原子写入**：`utils.atomic_write()` 先写临时文件再 rename，防止写入崩溃导致 JSON 截断
-- **容错设计**：每个步骤失败只记错不阻断（`skip_ok=True`），最终在摘要中汇总错误
+- **失败即中止**：任一步骤失败都会中止运行且**不生成报告**（保留上一版），退出码非零；开跑前清空全部中间产物，杜绝“新信源告警 + 旧正文”的跨轮混用
+- **摘要只做"摘"不做"编"**：抽取式摘要永远取自原文原句（按句边界收尾、附来源标记）；生成式改写是另一档改造，需外部模型与预算
 - **评分替代分类器**：`scorer.py` 的词级评分模型替代了旧版的规则分类器，评分同时完成分类
 - **两阶段过滤**：stage1 用标题+前200字快速预筛（减少全文抓取量），stage2 完整评分
 - **预压缩**：`utils.precompress()` 在生成报告时同时生成 `.gz` 版本，减小传输体积
@@ -344,6 +390,10 @@ python app.py --run --skip-fetch
 
 # 查看中间数据
 cat data/parsed_items.json | python3 -m json.tool | head -50
+
+# 摘要质量体检 / 改动前后回归对比
+python scripts/summary_quality_report.py
+python scripts/summary_quality_report.py 改前.json 改后.json
 ```
 
 ### 红线
