@@ -82,7 +82,7 @@ SecurityInfo/
 ├── config/                       # 配置文件（全部位于此目录，平铺管理）
 │   ├── source_config.yaml        # 信源配置（~80 个信源，含 RSS/API/Scraper 三种类型）
 │   ├── scoring_keywords.json     # 评分关键词（强/中/弱三级 + 分类 + 内容类型）
-│   ├── keywords.json             # 关键词别名映射（兼容旧版 API）
+│   ├── keywords.json             # 历史遗留，当前代码未读取（保留备查）
 │   ├── llm_config.yaml           # LLM 摘要配置（抽取式/API 模式切换）
 │   ├── settings.json             # 管理后台全局设置
 │   └── secrets.json              # API 密钥（gitignored，建议改用 .env）

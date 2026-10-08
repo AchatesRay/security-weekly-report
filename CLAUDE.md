@@ -38,7 +38,7 @@ pipeline/                 10 步数据处理管道
 config/                   配置文件
   source_config.yaml      信源配置（141 条，启用 107 条）
   scoring_keywords.json   评分关键词与阈值配置
-  keywords.json           关键词别名映射
+  keywords.json           历史遗留，当前代码未读取（保留备查）
   llm_config.yaml         LLM 配置（预留）
   settings.json           管理后台配置（只存非敏感项，密钥不写入此文件）
 server/                   管理后台
@@ -113,7 +113,7 @@ data/                     中间数据（gitignored）
 
 ### 部署注意事项
 
-- 远端 `scripts/server.sh` 使用系统 `python3`（3.12），若未装依赖需改为 `venv/bin/python3`
+- `scripts/server.sh` 会优先使用项目 `venv/bin/python3`，没有 venv 时才回退系统 `python3`（用系统 python 需自行装齐 `requirements.txt`）
 - `hub/` 下遗留孤儿文件 `server_with_ua.py`（旧版，不再使用）
 - 远端 `.env` 中管理后台密码仍为默认 `you_should_change_this`，建议修改
 - Hermes Agent 运行后会在项目根生成 `cybersec_weekly_<日期>.html` 冗余副本

@@ -51,7 +51,6 @@ _REPORT_DIR = None
 _SETTINGS_PATH = None
 _SOURCES_PATH = None
 _LLM_PATH = None
-_KEYWORDS_PATH = None
 _SCORING_KEYWORDS_PATH = None
 _PIPELINE_LOG_PATH = None
 
@@ -69,7 +68,7 @@ _STATIC_ALLOW_PREFIXES = ("reports/", "pipeline/assets/")
 
 def _init_paths(project_dir: str | None = None):
     global _PROJECT_DIR, _CONFIG_DIR, _DATA_DIR, _REPORT_DIR
-    global _SETTINGS_PATH, _SOURCES_PATH, _LLM_PATH, _KEYWORDS_PATH
+    global _SETTINGS_PATH, _SOURCES_PATH, _LLM_PATH
     global _PIPELINE_LOG_PATH, _SCORING_KEYWORDS_PATH
 
     _PROJECT_DIR = Path(project_dir).resolve() if project_dir else SERVER_DIR.parent
@@ -82,7 +81,6 @@ def _init_paths(project_dir: str | None = None):
     _SETTINGS_PATH = _CONFIG_DIR / "settings.json"
     _SOURCES_PATH = _CONFIG_DIR / "source_config.yaml"
     _LLM_PATH = _CONFIG_DIR / "llm_config.yaml"
-    _KEYWORDS_PATH = _CONFIG_DIR / "keywords.json"
     _SCORING_KEYWORDS_PATH = _CONFIG_DIR / "scoring_keywords.json"
     _PIPELINE_LOG_PATH = _DATA_DIR / "pipeline_run.log"
 
