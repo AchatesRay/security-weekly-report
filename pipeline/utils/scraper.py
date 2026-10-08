@@ -10,9 +10,11 @@ HTTP 爬虫 — 用于解析不支持 RSS/API 的信源的 HTML 页面
 """
 
 import re
-import httpx
 from datetime import datetime
+
 from bs4 import BeautifulSoup, Tag
+
+from . import UnsafeURLError, safe_get
 
 
 USER_AGENT = (
@@ -119,6 +121,9 @@ def fetch_and_extract(source: dict) -> list[dict]:
 
     Args:
         source: 信源配置，必须包含 url 字段
+
+    注意: 抓取统一走 safe_get()（仅公网 http/https，逐跳校验重定向，
+    并限制响应体积），避免配置里的地址指向内网服务。
     """
     url = source.get("url", "")
     if not url:
@@ -126,12 +131,14 @@ def fetch_and_extract(source: dict) -> list[dict]:
         return []
 
     try:
-        resp = httpx.get(url, headers={"User-Agent": USER_AGENT},
-                         timeout=30.0, follow_redirects=True)
-        resp.raise_for_status()
+        resp = safe_get(url, headers={"User-Agent": USER_AGENT}, timeout=30.0,
+                        max_bytes=5 * 1024 * 1024)
         items = extract_articles(source, resp.text)
         print(f"  [SCRAPER] {source.get('name', '?')}: 提取 {len(items)} 条")
         return items
+    except UnsafeURLError as e:
+        print(f"  [SCRAPER BLOCKED] {source.get('name', '?')}: 地址被安全策略拦截 ({e})")
+        return []
     except Exception as e:
         print(f"  [SCRAPER ERROR] {source.get('name', '?')}: {e}")
         return []

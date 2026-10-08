@@ -1,25 +1,39 @@
-"""
-LLM 摘要模块 — 对获取到原文的内容生成中文摘要
+"""LLM/抽取式摘要模块 — 为收录内容生成中文摘要
 
 支持两种模式:
   1. 抽取式摘要（默认） — TextRank 图排序，无需外部 API
   2. LLM 摘要（配置启用） — 调用外部 LLM API
 
-管道位置: 评分过滤阶段2之后，翻译步骤之前
+数据流：classified_items.json --[本步骤]--> enhanced_items.json
+
+2026-09-29 修复：
+  1. **输入文件改为阶段2 的独立产物** classified_items.json（此前读
+     parsed_items.json，与阶段1 的产物混用，某步失败时会读到上一轮旧数据）。
+  2. **TextRank 规模上限**：句子相似度是纯 Python 的双重循环，句子数 n 时
+     需要 n²/2 次集合运算。全文提取上限 2 万字时可产生数百句，单条就要数秒。
+     现在限制参与排序的句子数与输入长度。
+  3. **不在本步骤内翻译**：原先对英文摘要在本步骤调用翻译 API，与后续
+     翻译步骤重复。现在本步骤只负责“选出关键句”，翻译统一交给翻译步骤，
+     职责单一且减少 API 调用。若后续翻译失败，报告会如实标注。
 """
 
 import json
 import re
-import yaml
-from pathlib import Path
 
-DATA_DIR = Path("data")
-CONFIG_PATH = Path("config/llm_config.yaml")
-PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
+import yaml
+
+from ..utils import (DATA_DIR, LLM_CONFIG_PATH, atomic_write)
+
+CLASSIFIED_ITEMS_PATH = DATA_DIR / "classified_items.json"
 ENHANCED_ITEMS_PATH = DATA_DIR / "enhanced_items.json"
 
 import jieba
-import numpy as np
+
+# ── 计算规模上限（防止抽取式摘要在长文上退化） ──
+MAX_SENTENCES = 150          # 参与 TextRank 的最大句子数
+MAX_SUMMARY_INPUT = 12000    # 参与抽取的最大字符数
+MIN_SUMMARY_INPUT = 100      # 低于此长度不生成摘要
+SUMMARY_MAX_CHARS = 500      # 摘要输出上限
 
 # 中文停用词表（基础）
 _STOP_WORDS: set[str] = set()
@@ -48,18 +62,15 @@ def _load_stop_words():
 
 def _split_sentences(text: str) -> list[str]:
     """将文本分割为句子列表"""
-    # 统一换行符为空格，保留段落分隔
     text = re.sub(r"\n\s*\n", " ¶ ", text)
     text = re.sub(r"\n", " ", text)
 
-    # 按中英文句末标点分割
     raw = re.split(r"(?<=[。！？.!?])\s*", text)
     sentences = []
     for s in raw:
         s = s.strip()
         if not s or s == "¶":
             continue
-        # 跳过纯标点/空白
         if len(re.sub(r"[^\w]", "", s)) < 3:
             continue
         sentences.append(s.replace("¶ ", "").replace("¶", ""))
@@ -104,25 +115,28 @@ def _sentence_similarity(words_i: set[str], words_j: set[str]) -> float:
 
 def _textrank(sentences: list[str], damping: float = 0.85,
               max_iter: int = 200, tol: float = 1e-4) -> list[float]:
-    """TextRank 图排序，返回每个句子的 PageRank 分数"""
+    """TextRank 图排序，返回每个句子的 PageRank 分数（纯 Python 实现，规模已限）"""
+    import numpy as np
+
     n = len(sentences)
     if n == 0:
         return []
     if n == 1:
         return [1.0]
 
-    # 预处理：所有句子分词
     tokenized = [_tokenize(s) for s in sentences]
 
-    # 构建相似度矩阵
     sim = np.zeros((n, n))
     for i in range(n):
+        ti = tokenized[i]
+        if not ti:
+            continue
         for j in range(i + 1, n):
-            s = _sentence_similarity(tokenized[i], tokenized[j])
-            sim[i, j] = s
-            sim[j, i] = s
+            s = _sentence_similarity(ti, tokenized[j])
+            if s:
+                sim[i, j] = s
+                sim[j, i] = s
 
-    # 列归一化
     col_sums = sim.sum(axis=0)
     for j in range(n):
         if col_sums[j] > 0:
@@ -130,7 +144,6 @@ def _textrank(sentences: list[str], damping: float = 0.85,
         else:
             sim[:, j] = 1.0 / n
 
-    # PageRank 迭代
     pr = np.ones(n) / n
     for _ in range(max_iter):
         prev = pr.copy()
@@ -142,55 +155,67 @@ def _textrank(sentences: list[str], damping: float = 0.85,
 
 
 def generate_extractive_summary(text: str, max_sentences: int = 5) -> str:
-    """
-    TextRank 抽取式摘要
-    """
-    if not text or len(text.strip()) < 100:
+    """TextRank 抽取式摘要"""
+    import numpy as np
+
+    if not text or len(text.strip()) < MIN_SUMMARY_INPUT:
         return ""
 
-    sentences = _split_sentences(text)
+    # 限制输入长度与句子数：相似度矩阵是 O(n²) 的纯 Python 运算
+    work = text[:MAX_SUMMARY_INPUT]
+    sentences = _split_sentences(work)
     sentences = [s for s in sentences if _is_meaningful(s)]
     if not sentences:
         return ""
+    if len(sentences) > MAX_SENTENCES:
+        sentences = sentences[:MAX_SENTENCES]
 
-    # 句子太少时直接截取前 500 字
     if len(sentences) <= 3:
-        return text[:500].strip()
+        return work[:SUMMARY_MAX_CHARS].strip()
 
     scores = _textrank(sentences)
 
-    # 取 top-k，按原文顺序重排
     n = min(max_sentences, len(sentences))
     top_indices = sorted(np.argsort(scores)[-n:])
 
     result = "".join(sentences[i] for i in top_indices)
-    if len(result) > 500:
-        result = result[:497] + "..."
+    if len(result) > SUMMARY_MAX_CHARS:
+        result = result[:SUMMARY_MAX_CHARS - 3] + "..."
 
     return result.strip()
 
 
 def _count_chinese(text: str) -> int:
     """统计中文字符数"""
-    return len(re.findall(r"[一-鿿]", text))
+    return len(re.findall(r"[\u4e00-\u9fff]", text))
 
 
 def _is_chinese_text(text: str) -> bool:
     """检测文本是否主要是中文（>30% 字符为中文）"""
     if not text:
         return False
-    chinese_chars = _count_chinese(text[:200])
-    return chinese_chars > len(text[:200]) * 0.3 if text[:200] else False
+    head = text[:200]
+    return _count_chinese(head) > len(head) * 0.3 if head else False
+
+
+def _pick_source_text(item: dict) -> str:
+    """选择用于抽取摘要的源文本。
+
+    - 摘要曾被全文替换过（original_summary 存在）→ 用替换后的全文
+    - 否则若有更长的 full_body → 用 full_body
+    - 都没有 → 用摘要本身
+    """
+    summary = item.get("summary") or ""
+    if item.get("original_summary"):
+        return summary
+    body = item.get("full_body") or ""
+    if body and len(body) > len(summary) * 2:
+        return body
+    return summary
 
 
 def process(items: list[dict], config: dict) -> list[dict]:
-    """为每条内容生成中文摘要
-
-    策略:
-      - RSS 已有摘要 → 直接使用（英文则翻译为中文）
-      - RSS 摘要过短，已由 fulltext_extractor 抓取到全文 → 从全文抽取关键句（英文则翻译）
-      - 无内容 → 不生成摘要
-    """
+    """为每条内容生成摘要（不做翻译，翻译由后续翻译步骤统一处理）"""
     enabled = config.get("enabled", False)
     provider = config.get("provider", "extractive")
 
@@ -199,62 +224,26 @@ def process(items: list[dict], config: dict) -> list[dict]:
         if not api_key:
             print("[LLM] LLM 已启用但未配置 API Key，回退到抽取式摘要")
             enabled = False
-
-    from .translator import translate_text
+    if enabled and provider != "extractive":
+        print(f"[LLM] 注意: provider={provider} 的外部调用尚未实现，本次仍使用抽取式摘要")
 
     total = len(items)
     summary_count = 0
 
     for idx, item in enumerate(items):
-        summary = item.get("summary", "")
-        language = item.get("language", "")
-        has_fulltext = item.get("fulltext_fetched", False)
-        # original_summary 存在说明摘要曾被全文替换过
-        original_summary = item.get("original_summary", "")
-
-        # 无内容 → 跳过
-        if not summary or len(summary.strip()) < 50:
+        source_text = _pick_source_text(item)
+        if not source_text or len(source_text.strip()) < 50:
             item["ai_summary"] = ""
             continue
 
-        ai_summary = ""
-
-        # 情况 A: 摘要曾被全文替换 → 从全文中抽取关键句
-        if original_summary:
-            if language == "en" and not _is_chinese_text(summary):
-                raw = generate_extractive_summary(summary)
-                ai_summary = translate_text(raw) if raw else ""
-            else:
-                ai_summary = generate_extractive_summary(summary)
-
-        # 情况 B: RSS 摘要性内容可直接使用
-        else:
-            if language == "en" and not _is_chinese_text(summary):
-                ai_summary = translate_text(summary[:800])
-            elif language == "en":
-                # 语言标记为英语但实际是中文（如 AI Hot 部分内容）
-                body_text = item.get("full_body", "")
-                if body_text and len(body_text) > len(summary) * 2:
-                    extracted = generate_extractive_summary(body_text)
-                    ai_summary = extracted if extracted else summary[:300]
-                else:
-                    ai_summary = summary[:500]
-            else:
-                # 优先从 full_body 做抽取式摘要
-                body_text = item.get("full_body", "")
-                if body_text and len(body_text) > len(summary) * 2:
-                    extracted = generate_extractive_summary(body_text)
-                    ai_summary = extracted if extracted else summary[:300]
-                else:
-                    ai_summary = summary[:500]
+        ai_summary = generate_extractive_summary(source_text)
+        if not ai_summary:
+            ai_summary = source_text[:SUMMARY_MAX_CHARS].strip()
 
         item["ai_summary"] = ai_summary
 
         if ai_summary:
             summary_count += 1
-            ch_count = _count_chinese(ai_summary[:100])
-            print(f"  [LLM] ✓ {item.get('source_name','?')}: {item.get('title','')[:40]}... "
-                  f"→ {ch_count} 字摘要")
 
         if (idx + 1) % 20 == 0:
             print(f"  [LLM] 进度: {idx+1}/{total}")
@@ -298,21 +287,22 @@ def _call_llm(text: str, config: dict) -> str:
 
 def run():
     """管道调用入口"""
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+    if not LLM_CONFIG_PATH.exists():
+        raise FileNotFoundError(f"缺少 LLM 配置 {LLM_CONFIG_PATH}")
+    with open(LLM_CONFIG_PATH, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f) or {}
 
-    if not PARSED_ITEMS_PATH.exists():
-        print("[LLM] 无评分数据，跳过 LLM 摘要生成")
-        return
+    if not CLASSIFIED_ITEMS_PATH.exists():
+        raise FileNotFoundError(
+            f"缺少阶段2产物 {CLASSIFIED_ITEMS_PATH}，无法生成摘要（请检查评分步骤）")
 
-    with open(PARSED_ITEMS_PATH, "r", encoding="utf-8") as f:
+    with open(CLASSIFIED_ITEMS_PATH, "r", encoding="utf-8") as f:
         items = json.load(f)
 
     result = process(items, config)
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    from ..utils import atomic_write
     atomic_write(ENHANCED_ITEMS_PATH, result, indent=2)
+    return result
 
 
 if __name__ == "__main__":

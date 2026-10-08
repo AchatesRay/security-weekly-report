@@ -2,11 +2,11 @@ import feedparser
 import html
 import json
 import re
-from pathlib import Path
 from datetime import datetime
-from email.utils import parsedate_to_datetime
+from pathlib import Path
 
-DATA_DIR = Path("data")
+from ..utils import DATA_DIR, atomic_write, parse_datetime_utc
+
 RAW_ITEMS_PATH = DATA_DIR / "raw_items.json"
 PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
 
@@ -58,22 +58,17 @@ def parse_entry(source_info: dict, entry) -> dict:
         if raw:
             full_body = strip_html(raw)
 
-    # 尝试 feedparser 解析；失败时用 email.utils 回退
-    pub_date = ""
-    published = entry.get("published_parsed", entry.get("updated_parsed", None))
-    if published:
-        try:
-            pub_date = datetime(*published[:6]).isoformat()
-        except Exception:
-            pub_date = ""
-    if not pub_date:
-        raw = entry.get("published", entry.get("updated", ""))
-        if raw:
+    # 统一解析为 UTC 无时区 ISO 字符串（后续过期过滤依赖可比较的时间）
+    raw_date = entry.get("published") or entry.get("updated") or ""
+    if not raw_date:
+        parsed_struct = entry.get("published_parsed", entry.get("updated_parsed", None))
+        if parsed_struct:
             try:
-                dt = parsedate_to_datetime(raw)
-                pub_date = dt.isoformat()
+                raw_date = datetime(*parsed_struct[:6]).isoformat()
             except Exception:
-                pass
+                raw_date = ""
+    dt = parse_datetime_utc(raw_date)
+    pub_date = dt.isoformat() if dt else ""
 
     result = {
         "title": title,
@@ -416,8 +411,33 @@ API_PLATFORM_PARSERS = {
 }
 
 
+def _normalize_item_dates(items: list[dict]) -> int:
+    """把全部条目的 published_date 归一到 UTC 无时区 ISO 字符串。
+
+    各 API 解析器直接沿用上游返回的原始时间串（format 五花八门，且常带
+    时区偏移）。在此统一归一，保证下游过期过滤不会因为格式差异静默失效。
+    返回无法解析的条目数。
+    """
+    bad = 0
+    for item in items:
+        raw = item.get("published_date", "")
+        if not raw:
+            continue
+        dt = parse_datetime_utc(raw)
+        if dt is None:
+            bad += 1
+            item["published_date"] = ""
+        else:
+            item["published_date"] = dt.isoformat()
+    return bad
+
+
 def parse_all() -> list[dict]:
     """解析所有已抓取的原始数据 (RSS + API)"""
+    if not RAW_ITEMS_PATH.exists():
+        raise FileNotFoundError(
+            f"缺少抓取结果 {RAW_ITEMS_PATH}，无法解析（请先执行抓取阶段，"
+            f"或检查上一步是否失败）")
     with open(RAW_ITEMS_PATH, "r", encoding="utf-8") as f:
         raw_sources = json.load(f)
 
@@ -478,10 +498,10 @@ def parse_all() -> list[dict]:
         except Exception as e:
             print(f"  [PARSE ERROR] {source['source_name']} feed: {e}")
 
-    print(f"[PARSER] 解析完成: {len(all_items)} 条")
+    unparsable = _normalize_item_dates(all_items)
+    print(f"[PARSER] 解析完成: {len(all_items)} 条"
+          + (f"（{unparsable} 条时间无法解析，已置空并按“保留”处理）" if unparsable else ""))
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    from ..utils import atomic_write
     atomic_write(PARSED_ITEMS_PATH, all_items, indent=2)
 
     return all_items

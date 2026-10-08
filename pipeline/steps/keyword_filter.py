@@ -5,20 +5,24 @@
 阶段 1（去重后）：快速预筛，用标题+前200字评分，<30 分提前丢弃
 阶段 2（全文提取后）：完整评分 + 领域分类 + 阈值判定
 
+数据流（2026-09-29 修复：阶段产物独立留档）：
+    去重结果 deduped_items.json --[阶段1]--> parsed_items.json
+                                --[全文提取，原地增强]-->
+                                --[阶段2]--> classified_items.json
+    此前阶段 2 直接覆盖 parsed_items.json，各阶段产物混在一个文件里，
+    某一阶段失败时下游会读到上一轮遗留的数据，导致“用旧数据重发周报”。
+
 关键字配置存储在 config/scoring_keywords.json 中。
 """
 
 import json
-from pathlib import Path
 
-from .scorer import SecurityScorer
+from .scorer import SecurityScorer, SCORING_CONFIG_PATH
+from ..utils import DATA_DIR, atomic_write
 
-DATA_DIR = Path("data")
 PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
 DEDUPED_ITEMS_PATH = DATA_DIR / "deduped_items.json"
-
-# 保留旧的 load_keywords/save_keywords 接口供 config_server 调用
-from .scorer import SCORING_CONFIG_PATH
+CLASSIFIED_ITEMS_PATH = DATA_DIR / "classified_items.json"
 
 # 默认网络安全关键字列表（兼容旧版 API）
 DEFAULT_KEYWORDS = sorted([
@@ -42,15 +46,20 @@ def load_keywords() -> list[str]:
 
 
 def save_keywords(keywords: list[str]) -> bool:
-    """保存关键字文本列表到 scoring_keywords.json 的 strong 字段（兼容旧版 API）"""
+    """保存关键字文本列表到 scoring_keywords.json 的 strong 字段（兼容旧版 API）
+
+    写入前校验结构完整性；使用原子替换，避免中断留下截断的 JSON。
+    """
+    import json as _json
     try:
         with open(SCORING_CONFIG_PATH, encoding="utf-8") as f:
             data = json.load(f)
         # 保留现有元数据（categories/content_types），只更新 text
-        existing = {kw["text"].lower(): kw for kw in data["strong"]["keywords"] if isinstance(kw, dict)}
+        existing = {kw["text"].lower(): kw
+                    for kw in data["strong"]["keywords"] if isinstance(kw, dict)}
         new_kws = []
         for kw in keywords:
-            t = kw.strip()
+            t = (kw or "").strip()
             if not t:
                 continue
             if t.lower() in existing:
@@ -59,41 +68,56 @@ def save_keywords(keywords: list[str]) -> bool:
                 new_kws.append({"text": t})
         # 按 text 排序
         new_kws.sort(key=lambda x: x["text"])
+        if not new_kws:
+            print("[KEYWORD] 拒绝写入空的关键词列表")
+            return False
         data["strong"]["keywords"] = new_kws
-        with open(SCORING_CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        from ..utils import atomic_write_text
+        atomic_write_text(
+            SCORING_CONFIG_PATH,
+            _json.dumps(data, ensure_ascii=False, indent=2),
+        )
         return True
-    except Exception:
+    except Exception as e:
+        print(f"[KEYWORD] 保存关键字失败: {e}")
         return False
 
 
-def init_default_keywords():
-    """确保 scoring_keywords.json 存在并包含默认数据"""
-    if not SCORING_CONFIG_PATH.exists():
-        # 复制默认配置
-        from shutil import copy2
-        default = Path(__file__).resolve().parent.parent.parent / "config" / "scoring_keywords.json"
-        if default.exists():
-            copy2(default, SCORING_CONFIG_PATH)
-            print(f"[KEYWORD] 已初始化评分配置: {SCORING_CONFIG_PATH}")
+def init_default_keywords() -> bool:
+    """确认评分配置存在且可用。
+
+    原实现把“默认模板路径”和“目标路径”指向同一个文件，`if not exists`
+    永远为假（空操作）；一旦从其他目录启动，又会相对当前工作目录创建
+    config/ 并把配置写到错误位置。这里改为显式检查并如实报告。
+    """
+    if SCORING_CONFIG_PATH.exists():
+        return True
+    print(f"[KEYWORD] 评分配置缺失: {SCORING_CONFIG_PATH}")
+    print("[KEYWORD] 该文件随仓库提供，请确认工作副本完整（缺失会导致评分不可用）")
+    return False
 
 
 def run_stage1():
-    """阶段1过滤：快速预筛，<30 分提前丢弃（读取去重后的数据）"""
+    """阶段1过滤：快速预筛，<30 分提前丢弃（读取去重结果）"""
     init_default_keywords()
-    scorer = SecurityScorer()
 
-    source = DEDUPED_ITEMS_PATH if DEDUPED_ITEMS_PATH.exists() else PARSED_ITEMS_PATH
-    if not source.exists():
-        print(f"[KEYWORD] 阶段1跳过: {source} 不存在")
-        return
+    if DEDUPED_ITEMS_PATH.exists():
+        source = DEDUPED_ITEMS_PATH
+    elif PARSED_ITEMS_PATH.exists():
+        source = PARSED_ITEMS_PATH
+    else:
+        raise FileNotFoundError(
+            f"缺少去重产物 {DEDUPED_ITEMS_PATH}，无法执行阶段1（请检查去重步骤）")
+
+    scorer = SecurityScorer()
 
     with open(source, "r", encoding="utf-8") as f:
         items = json.load(f)
 
     total_before = len(items)
     kept = []
-    dropped = []
+    dropped = 0
+    drop_threshold = scorer.thresholds.get("stage1_drop_below", 30)
 
     for item in items:
         result = scorer.quick_score(item)
@@ -101,24 +125,23 @@ def run_stage1():
         item["stage1_drop"] = result["drop"]
 
         if result["drop"]:
-            dropped.append(item)
+            dropped += 1
         else:
             kept.append(item)
 
-    from ..utils import atomic_write
     atomic_write(PARSED_ITEMS_PATH, kept, indent=2)
 
     print(f"[KEYWORD] 阶段1过滤: {total_before} → {len(kept)} 条保留"
-          f" ({len(dropped)} 条得分<{scorer.thresholds.get('stage1_drop_below', 30)} 提前丢弃)")
+          f" ({dropped} 条得分<{drop_threshold} 提前丢弃)")
 
 
 def run_stage2():
-    """阶段2过滤：完整评分 + 领域分类 + 阈值判定"""
+    """阶段2过滤：完整评分 + 领域分类 + 阈值判定，产出 classified_items.json"""
     scorer = SecurityScorer()
 
     if not PARSED_ITEMS_PATH.exists():
-        print(f"[KEYWORD] 阶段2跳过: {PARSED_ITEMS_PATH} 不存在")
-        return
+        raise FileNotFoundError(
+            f"缺少阶段1产物 {PARSED_ITEMS_PATH}，无法执行阶段2（请检查阶段1是否失败）")
 
     with open(PARSED_ITEMS_PATH, "r", encoding="utf-8") as f:
         items = json.load(f)
@@ -146,23 +169,28 @@ def run_stage2():
         else:
             discarded.append(item)
 
-    # 写回：accepted + review 都保留继续走管道
+    # 写回：accepted + review 都保留继续走管道（字段已带 filter_decision 区分）
     final = accepted + review
+    atomic_write(CLASSIFIED_ITEMS_PATH, final, indent=2)
 
-    from ..utils import atomic_write
-    atomic_write(PARSED_ITEMS_PATH, final, indent=2)
-
+    accept_threshold = scorer.thresholds.get("accept_threshold", 80)
+    review_threshold = scorer.thresholds.get("review_threshold", 50)
     print(f"[KEYWORD] 阶段2过滤: {total_before} → {len(final)} 条保留"
-          f" ({len(accepted)} 收录, {len(review)} 待复核, {len(discarded)} 丢弃)")
+          f" ({len(accepted)} 收录>={accept_threshold}, "
+          f"{len(review)} 待复核>={review_threshold}, {len(discarded)} 丢弃)")
 
     # ── 评分质量仪表盘 ──
-    all_scored = accepted + discarded
+    # 统计口径：收录 + 待复核 + 丢弃（此前漏掉 review，导致周对比的百分比失真）
+    all_scored = accepted + review + discarded
 
     # 分数段分布
     buckets = [0] * 11  # 0-9, 10-19, ..., 90-100
     for item in all_scored:
         s = item.get("confidence_score", 0)
-        idx = min(s // 10, 10)
+        try:
+            idx = min(max(int(s), 0) // 10, 10)
+        except (TypeError, ValueError):
+            idx = 0
         buckets[idx] += 1
 
     print(f"[KEYWORD] 评分分布:")
@@ -177,7 +205,7 @@ def run_stage2():
     print(f"[KEYWORD] 决策分布: accepted={len(accepted)}, "
           f"review={len(review)}, discarded={len(discarded)}")
 
-    # 分类分布（使用 item["category"]）
+    # 分类分布
     cat_dist = {}
     for item in final:
         cat = item.get("category", "未分类")
@@ -195,8 +223,12 @@ def run_stage2():
         "total_discarded": len(discarded),
         "score_buckets": buckets,
         "category_distribution": cat_dist,
+        "thresholds": {
+            "accept_threshold": accept_threshold,
+            "review_threshold": review_threshold,
+            "stage1_drop_below": scorer.thresholds.get("stage1_drop_below", 30),
+        },
     }
-    from ..utils import atomic_write
     atomic_write(DATA_DIR / "scoring_stats.json", stats, indent=2)
 
 

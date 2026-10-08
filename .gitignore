@@ -3,7 +3,12 @@ __pycache__/
 data/
 reports/
 .env
+.env.*
+*.env
 .worktrees/
 .claude/
 config/secrets.json
 docs/server_deployment.md
+
+# 本地交付物与备份目录（含修复前的 git 历史备份，禁止入库）
+Output/

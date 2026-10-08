@@ -428,22 +428,17 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
           <span class="badge badge-S" style="font-size:12px;padding:3px 10px">腾讯云 TMT</span>
         </div>
         <div class="form-row">
-          <div class="form-group">
-            <label>SecretId</label>
-            <input type="password" id="tencentSecretId" placeholder="AKID...">
-          </div>
-          <div class="form-group">
-            <label>SecretKey</label>
-            <input type="password" id="tencentSecretKey" placeholder="...">
-          </div>
-        </div>
-        <div class="form-row">
           <div class="form-group" style="max-width:120px">
             <label>超时时长（秒）</label>
             <input type="number" id="translateTimeout" min="3" max="30" value="8">
           </div>
         </div>
-        <div class="card-desc">密钥优先使用环境变量 <code>TENCENT_SECRET_ID</code> / <code>TENCENT_SECRET_KEY</code>，留空则使用环境变量值。</div>
+        <div class="card-desc">
+          密钥<b>不在此处填写</b>：为避免密钥进入配置文件与版本库，腾讯云密钥只从环境变量
+          <code>TMT_SECRET_ID</code> / <code>TMT_SECRET_KEY</code>（兼容旧名
+          <code>TENCENT_SECRET_ID</code> / <code>TENCENT_SECRET_KEY</code>）或
+          <code>config/secrets.json</code> 读取。修改后需重启后台。
+        </div>
       </div>
       <button class="btn btn-primary" onclick="saveSettings()">保存翻译配置</button>
     </div>
@@ -675,7 +670,7 @@ function saveSources() {
   var yaml = buildSourcesYaml(_sources);
   api('PUT', '/api/config/sources', { yaml: yaml }).then(function(r) {
     if (r.ok) { toast('信源配置已保存', 'success'); dirtySources = false; }
-    else toast('保存失败', 'error');
+    else toast(r.error || '保存失败', 'error');
   });
 }
 
@@ -842,7 +837,7 @@ function saveKwMgrRow(flatIdx, oldText, oldWeight) {
 function saveKwMgr() {
   api('PUT', '/api/config/scoring_keywords', { config: _scoringConfig }).then(function(r) {
     if (r.ok) { toast('关键词配置已保存', 'success'); document.getElementById('scoringEditor').value = JSON.stringify(_scoringConfig, null, 2); }
-    else toast('保存失败', 'error');
+    else toast(r.error || '保存失败', 'error');
   });
 }
 
@@ -851,11 +846,9 @@ function saveKwMgr() {
 function renderSettings() {
   var d = _settings.dedup || {};
   var t = _settings.translate || {};
-  document.getElementById('similarityThreshold').value = d.similarity_threshold || 85;
-  document.getElementById('thresholdVal').textContent = d.similarity_threshold || 85;
+  document.getElementById('similarityThreshold').value = d.similarity_threshold || 75;
+  document.getElementById('thresholdVal').textContent = d.similarity_threshold || 75;
   document.getElementById('maxDays').value = d.max_days || 7;
-  document.getElementById('tencentSecretId').value = t.tencent_secret_id || '';
-  document.getElementById('tencentSecretKey').value = t.tencent_secret_key || '';
   document.getElementById('translateTimeout').value = t.timeout || 8;
 }
 
@@ -867,14 +860,12 @@ function saveSettings() {
     },
     translate: {
       timeout: parseInt(document.getElementById('translateTimeout').value),
-      tencent_secret_id: document.getElementById('tencentSecretId').value,
-      tencent_secret_key: document.getElementById('tencentSecretKey').value,
     },
     category_order: _catNames.concat(['未分类']),
   };
   api('PUT', '/api/config/settings', { settings: settings }).then(function(r) {
     if (r.ok) toast('设置已保存', 'success');
-    else toast('保存失败', 'error');
+    else toast(r.error || '保存失败', 'error');
   });
 }
 
@@ -929,7 +920,7 @@ function saveLlm() {
   var yaml = buildLlmYaml(cfg);
   api('PUT', '/api/config/llm', { yaml: yaml }).then(function(r) {
     if (r.ok) toast('LLM 配置已保存', 'success');
-    else toast('保存失败', 'error');
+    else toast(r.error || '保存失败', 'error');
   });
 }
 
@@ -1003,7 +994,7 @@ function saveScoringConfig() {
       toast('评分配置已保存', 'success');
       loadScoringConfig();
     } else {
-      toast('保存失败', 'error');
+      toast(r.error || '保存失败', 'error');
     }
   });
 }

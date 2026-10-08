@@ -3732,8 +3732,8 @@
     "tail": 0.5
   },
   "thresholds": {
-    "accept_threshold": 50,
-    "review_threshold": 45,
+    "accept_threshold": 80,
+    "review_threshold": 50,
     "stage1_drop_below": 30
   },
   "lead_max_chars": 200,

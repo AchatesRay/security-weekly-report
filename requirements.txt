@@ -1,19 +1,37 @@
-feedparser>=6.0.0
-httpx>=0.27.0
-PyYAML>=6.0
-Jinja2>=3.1.0
-rapidfuzz>=3.0.0
-beautifulsoup4>=4.12.0
-lxml>=5.0.0
-python-dotenv>=1.0.0
+# 依赖锁定（2026-09-29）
+#
+# 原文件全部使用 ">=" 下限约束，没有等于号也没有锁文件，同一份代码在不同
+# 时间安装会得到不同版本，构建不可复现。此处改为精确版本锁定。
+# 下列版本为本次修复验证时实际使用的版本。
+#
+# 升级依赖时请成组升级并在本地跑一次 `python app.py --run --skip-fetch` 验证。
 
-# 文本处理（LLM 处理器依赖）
-jieba>=0.42.1
-numpy>=1.24.0
+# ── 抓取与解析 ──
+httpx==0.28.1
+feedparser==6.0.14
+beautifulsoup4==4.15.0
+lxml==6.1.3
+PyYAML==6.0.3
 
-# 翻译模块依赖（腾讯云 TMT，使用 3.0.x 兼容 TextTranslate API）
+# ── 报告渲染 ──
+Jinja2==3.1.6
+
+# ── 去重 ──
+rapidfuzz==3.14.6
+
+# ── 配置加载 ──
+python-dotenv==1.2.4
+
+# ── 文本处理（摘要模块依赖）──
+jieba==0.42.1
+numpy==2.3.5
+
+# ── 翻译（腾讯云 TMT）──
+# 代码按 3.0.x 的 TextTranslate 接口编写，故保持在 3.0.x 区间内。
+# 未锁到具体小版本：3.0.x 发版极为频繁，具体版本按部署环境取该区间最新即可。
 tencentcloud-sdk-python>=3.0.0,<3.1
 
-# LLM 摘要（预留功能，默认关闭 — 仅在 LLM 模式启用时需要）
+# ── 可选（未启用）──
+# LLM 摘要功能默认关闭，仅在 config/llm_config.yaml 中 enabled: true 时才需要：
 # openai>=1.0.0
 # anthropic>=0.30.0

@@ -3,20 +3,34 @@
 管道位置: 评分阶段1之后，评分阶段2之前
 
 流程:
-  1. 对摘要 <300 字的文章，用 httpx 抓取原文 HTML
+  1. 对摘要 <300 字的文章，抓取原文 HTML
   2. BS4 解析 + 启发式去噪 + 正文定位，提取纯文本
   3. 存入 summary（供右栏显示），原摘要备份到 original_summary
   4. 后续 llm_processor 从 summary 中抽取摘要到 ai_summary
+
+2026-09-29 修复：
+  1. **SSRF 防护**：此前对 RSS 条目里的任意 URL 直接 httpx.get，且
+     follow_redirects=True。条目链接由外部内容方控制，可指向 127.0.0.1、
+     内网服务或云元数据地址，抓回的内容会写进周报正文，形成“内网探测 +
+     内容外带”通道，还能把管理后台的配置读进公开周报。现在统一走
+     utils.safe_get()：仅允许公网 http/https，起始地址与**每一次重定向**
+     都校验，并限制响应体积。
+  2. **串行抓取**：原本一条一条同步抓取、每条 15 秒超时，数百条时耗时可达
+     数十分钟。改为有界线程池并发。
+  3. **实体二次解码**：BS4 的 get_text 已经解码过 HTML 实体，代码又解码一次，
+     遇到 "&amp;lt;" 这类内容会被二次解码成 "<"。现在只在正则回退路径解码。
 """
 
+import html
 import json
 import re
-import httpx
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-DATA_DIR = Path("data")
+from ..utils import DATA_DIR, UnsafeURLError, atomic_write, safe_get
+
 PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
 
 # 摘要长度阈值：低于此值的文章需要抓取全文
@@ -25,6 +39,10 @@ SUMMARY_MIN_LENGTH = 300
 REQUEST_TIMEOUT = 15.0
 # 正文最大长度（远超摘要，足够右栏显示）
 MAX_BODY_LENGTH = 20000
+# 单篇响应体积上限（超过即截断，避免超大页面占满内存）
+MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+# 并发抓取线程数
+MAX_WORKERS = 8
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -107,14 +125,11 @@ def _find_main_content(soup: BeautifulSoup) -> str | None:
         if html_raw_len == 0:
             continue
 
-        # 文本密度 = 可见文本 / 原始 HTML 长度
         density = len(text) / html_raw_len
 
-        # 链接密度惩罚
         if _has_high_link_density(tag):
             continue
 
-        # 评分: 文本量 × 密度²（优先选又长又密的块）
         score = len(text) * density ** 2
         scored.append((score, text))
 
@@ -150,7 +165,6 @@ def _clean_noise_lines(text: str) -> str:
         if not stripped:
             cleaned.append('')
             continue
-        # 跳过噪音模式
         if any(p.search(stripped) for p in _LINE_NOISE_PATTERNS):
             continue
         cleaned.append(stripped)
@@ -160,16 +174,8 @@ def _clean_noise_lines(text: str) -> str:
     return text.strip()
 
 
-def _decode_html_entities(text: str) -> str:
-    """解码 HTML 实体"""
-    text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
-    text = text.replace('&quot;', '"').replace('&#39;', "'").replace('&#x27;', "'")
-    text = re.sub(r'&[a-zA-Z]+;', ' ', text)
-    return text
-
-
 def _fallback_extract_text(html_text: str) -> str:
-    """回退策略：正则提取纯文本（与重构前一致）"""
+    """回退策略：正则提取纯文本（此处需要显式解码 HTML 实体）"""
     text = re.sub(r'<script[^>]*>[\s\S]*?</script>', '', html_text, flags=re.IGNORECASE)
     text = re.sub(r'<style[^>]*>[\s\S]*?</style>', '', text, flags=re.IGNORECASE)
     for tag in ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -178,8 +184,8 @@ def _fallback_extract_text(html_text: str) -> str:
     text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
     text = re.sub(r'<hr\s*/?>', '\n', text, flags=re.IGNORECASE)
     text = re.sub(r'<[^>]+>', '', text)
-    text = _decode_html_entities(text)
-    return text
+    # 仅此处解码一次（BS4 路径下 get_text 已解码，不能再解一次）
+    return html.unescape(text)
 
 
 def extract_text_from_html(html_text: str) -> str:
@@ -193,7 +199,6 @@ def extract_text_from_html(html_text: str) -> str:
     if not html_text:
         return ""
 
-    # 第一层: BS4 解析 + 去噪 + 正文定位
     try:
         soup = BeautifulSoup(html_text, 'lxml')
         _remove_boilerplate_elements(soup)
@@ -204,10 +209,7 @@ def extract_text_from_html(html_text: str) -> str:
     if not text:
         return ""
 
-    # 统一解码 HTML 实体
-    text = _decode_html_entities(text)
-
-    # 合并空白
+    # 统一空白（此处不再重复解码 HTML 实体）
     text = re.sub(r'[ \t]+', ' ', text)
 
     # 第三层: 行级噪音过滤
@@ -216,63 +218,98 @@ def extract_text_from_html(html_text: str) -> str:
     return text
 
 
-def fetch_article_text(url: str) -> str | None:
-    """抓取文章 URL 并提取纯文本（供右栏详情显示）"""
+def fetch_article_text(url: str) -> tuple[str | None, str]:
+    """抓取文章 URL 并提取纯文本。
+
+    返回 (正文或 None, 状态说明)。状态用于统计被安全策略拦下的条目数。
+    """
     try:
-        resp = httpx.get(
+        resp = safe_get(
             url,
             headers={"User-Agent": USER_AGENT},
             timeout=REQUEST_TIMEOUT,
-            follow_redirects=True,
+            max_bytes=MAX_RESPONSE_BYTES,
         )
-        resp.raise_for_status()
-        content_type = resp.headers.get("content-type", "")
-        if "html" not in content_type.lower():
-            return None
-        text = extract_text_from_html(resp.text)
-        if len(text) < 200:
-            return None
-        return text[:MAX_BODY_LENGTH]
-    except Exception:
-        return None
+    except UnsafeURLError as e:
+        return None, f"blocked:{e}"
+    except Exception as e:
+        return None, f"error:{type(e).__name__}"
+
+    content_type = resp.header("content-type", "")
+    if "html" not in content_type.lower():
+        return None, "skipped_content_type"
+
+    text = extract_text_from_html(resp.text)
+    if len(text) < 200:
+        return None, "too_short"
+    return text[:MAX_BODY_LENGTH], ("truncated" if resp.truncated else "ok")
+
+
+def _fetch_one(item: dict) -> tuple[dict, str | None, str]:
+    url = item.get("url", "") or ""
+    body, status = fetch_article_text(url)
+    return item, body, status
 
 
 def run():
+    if not PARSED_ITEMS_PATH.exists():
+        raise FileNotFoundError(
+            f"缺少阶段1产物 {PARSED_ITEMS_PATH}，无法提取全文")
+
     with open(PARSED_ITEMS_PATH, "r", encoding="utf-8") as f:
         items = json.load(f)
 
     total = len(items)
-    fetched_count = 0
-
-    for idx, item in enumerate(items):
-        summary = item.get("summary", "")
-        url = item.get("url", "")
-        # 仅对摘要过短且有 URL 的条目抓取
+    targets = []
+    for item in items:
+        summary = item.get("summary", "") or ""
+        url = item.get("url", "") or ""
         if len(summary) >= SUMMARY_MIN_LENGTH or not url:
             continue
         if not url.startswith("http"):
             continue
-        # 已有正文（content:encoded）→ 无需 HTTP 抓取
         if item.get("full_body"):
             continue
+        targets.append(item)
 
-        body = fetch_article_text(url)
-        if body:
-            item["original_summary"] = item.get("summary", "")
-            item["summary"] = body
-            item["fulltext_fetched"] = True
-            fetched_count += 1
-        else:
-            item["fulltext_fetched"] = False
+    print(f"[FULLTEXT] 需抓取全文: {len(targets)}/{total} 条（并发 {MAX_WORKERS}）")
 
-        if (idx + 1) % 20 == 0:
-            print(f"  [FULLTEXT] 进度: {idx+1}/{total}")
+    fetched_count = 0
+    blocked_count = 0
+    status_counter: dict[str, int] = {}
+    if targets:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+            futures = [pool.submit(_fetch_one, it) for it in targets]
+            done = 0
+            for fut in as_completed(futures):
+                item, body, status = fut.result()
+                done += 1
+                key = status.split(":", 1)[0]
+                status_counter[key] = status_counter.get(key, 0) + 1
+                if key == "blocked":
+                    blocked_count += 1
+                    print(f"  [FULLTEXT] 已拦截不安全链接: {item.get('url','')[:80]}"
+                          f" ({status.split(':', 1)[1][:60]})")
 
-    # 写回 parsed_items.json（后续步骤从中读取更新后的数据）
-    from ..utils import atomic_write
+                if body:
+                    item["original_summary"] = item.get("summary", "")
+                    item["summary"] = body
+                    item["fulltext_fetched"] = True
+                    fetched_count += 1
+                else:
+                    item["fulltext_fetched"] = False
+
+                if done % 20 == 0:
+                    print(f"  [FULLTEXT] 进度: {done}/{len(targets)}")
+
     atomic_write(PARSED_ITEMS_PATH, items, indent=2)
 
-    print(f"[FULLTEXT] 全文提取完成: {fetched_count}/{total} 条获取到正文")
+    detail = ", ".join(f"{k}={v}" for k, v in sorted(status_counter.items()))
+    print(f"[FULLTEXT] 全文提取完成: {fetched_count}/{len(targets)} 条获取到正文"
+          + (f"（{detail}）" if detail else ""))
+    if blocked_count:
+        print(f"[FULLTEXT] 其中 {blocked_count} 条链接指向内网/非法地址，已按安全策略拦截")
+    return items
 
 
 if __name__ == "__main__":

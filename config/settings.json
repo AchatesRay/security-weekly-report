@@ -4,9 +4,7 @@
     "max_days": 7
   },
   "translate": {
-    "timeout": 8,
-    "tencent_secret_id": "REDACTED_ROTATED_KEY",
-    "tencent_secret_key": "REDACTED_ROTATED_KEY"
+    "timeout": 8
   },
   "category_order": [
     "① AI/LLM 安全",

@@ -427,6 +427,8 @@ sources:
   type: rss
   language: zh
   enabled: true
+  # 注意：跳过 TLS 证书校验会让该信源内容可被中间人篡改，而抓取内容会直接
+  # 进入周报。该开关为此信源的证书链问题保留；若该站证书已修复，建议删除此行。
   ssl_verify: false
 - name: Sekoia Blog
   group: 安全厂商

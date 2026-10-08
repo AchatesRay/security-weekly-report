@@ -1,0 +1,28 @@
+# 统一换行符为 LF（仓库与工作区一致）
+#
+# 背景：本机 core.autocrlf=true。本项目的部署方式是「在本地打包工作区 tar →
+# scp 到 Linux 解压」，因此签出到 Windows 工作区时若被转成 CRLF，
+# scripts/server.sh 会带着 \r 一起上线，出现 "$'\r': command not found"
+# 一类的错误。注意：版本库中该文件目前存的是 LF（已逐字节核实），
+# 这里的声明是为了防止未来的签出把工作区文件改写为 CRLF。
+* text=auto eol=lf
+
+*.py    text eol=lf
+*.sh    text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+
+# 二进制文件不做换行转换
+*.gz    binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary

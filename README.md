@@ -1,10 +1,10 @@
 # SecurityInfo — 网络安全态势周报系统
 
-从 80+ 信源（安全媒体、厂商、CERT、政府机构、AI 厂商等）自动抓取网络安全资讯，经 10 步流水线处理评分后，生成 HTML 周报（桌面端 + 移动端自适应）。
+从 141 个信源（当前启用 107 个；安全媒体、厂商、CERT、政府机构、AI 厂商等）自动抓取网络安全资讯，经 10 步流水线处理评分后，生成 HTML 周报（桌面端 + 移动端自适应）。
 
 ## 功能特性
 
-- **80+ 信源** — RSS、API、HTTP 爬虫三种采集方式，覆盖国内外主流安全情报源
+- **141 个信源（启用 107）** — RSS、API、HTTP 爬虫三种采集方式，覆盖国内外主流安全情报源
 - **两阶段评分过滤** — 先快速筛掉无关内容，再完整评分分类，确保报告质量
 - **六维分类体系** — 威胁情报、AI 安全、漏洞态势、政策法规、产业动态、数据隐私
 - **AI 摘要生成** — 内置 TextRank 抽取式摘要，无需外部 API 即可生成中文摘要
@@ -122,20 +122,20 @@ SecurityInfo/
 
 ## 10 步流水线详解
 
-管道由 `pipeline/orchestrator.py` 统一编排，任何步骤失败不影响后续流程（`skip_ok=True`）。
+管道由 `pipeline/orchestrator.py` 统一编排。**任一步骤失败都会中止整个运行，且不会生成报告**（保留上一版周报），并以非零退出码结束；开跑前会清空全部中间产物，因此不存在“用上一轮旧数据重发周报”的情况。每次运行的步骤状态记录在 `data/pipeline_run.json`。
 
-| # | 模块 | 输入 | 输出 | 职责 | 容错 |
+| # | 模块 | 输入 | 输出 | 职责 | 失败处理 |
 |---|------|------|------|------|------|
-| 1 | fetcher | 80+ 信源配置 | `raw_items.json` | 并发抓取 RSS/API/Scraper 信源，自动轮换 UA，信源健康监测 | 单信源失败不阻断 |
-| 2 | parser | `raw_items.json` | `parsed_items.json` | XML→统一 dict，HTML 去标签，Scraper 类型特殊解析 | ✅ |
-| 3 | deduplicator | `parsed_items.json` | `deduped_items.json` | URL 精确去重 + rapidfuzz 标题模糊去重（阈值 75%），过期过滤（>7天） | ✅ |
-| 4 | keyword\_filter (stage1) | `deduped_items.json` | `parsed_items.json`(更新) | 标题+前200字快速评分，**<30 分提前丢弃**，减少后续处理量 | ✅ |
-| 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(更新) | 摘要 <300 字的文章用 httpx+BS4 抓取全文（上限 20000 字） | ✅ |
-| 6 | keyword\_filter (stage2) | `parsed_items.json` | `classified_items.json` | 完整评分 + 领域分类 + 内容类型 + 地域推断。**≥80 收录，50-79 待复核，<50 丢弃** | ✅ |
-| 7 | llm\_processor | `classified_items.json` | `enhanced_items.json` | TextRank 抽取式摘要（默认）或 LLM API 摘要。英文摘要自动翻译 | ✅ |
-| 8 | translator | `enhanced_items.json` | `translated_items.json` | 调用腾讯云 TMT API，将英文摘要翻译为中文。单条超时 8s | ✅ |
-| 9 | report\_generator | `translated_items.json` | `Security_Reports.html` + 分类 JSON | Jinja2 渲染 HTML，按分类拆分数据文件，gzip 预压缩 | ✅ |
-| 10 | mobile\_converter | `Security_Reports.html` | `Security_Reports_mobile.html` | 剥离详情字段（按需加载），注入 mobile.css/mobile.js | ✅ |
+| 1 | fetcher | 141 个信源配置 | `raw_items.json` | 并发抓取 RSS/API/Scraper 信源，API 密钥按平台下发，信源健康监测 | 单信源失败不阻断；连续失败进入指数退避重试 |
+| 2 | parser | `raw_items.json` | `parsed_items.json` | XML→统一 dict，HTML 去标签，时间统一归一到 UTC | 中止 |
+| 3 | deduplicator | `parsed_items.json` | `deduped_items.json` | URL 规范化去重（剥追踪参数）+ rapidfuzz 标题相似去重（阈值 75%），过期过滤（>7 天） | 中止 |
+| 4 | keyword\_filter (stage1) | `deduped_items.json` | `parsed_items.json` | 标题+前200字快速评分，**<30 分提前丢弃**，减少全文抓取量 | 中止 |
+| 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(原地增强) | 摘要 <300 字的文章抓取全文（并发 8，上限 20000 字），**含 SSRF 防护** | 中止（单条失败仅记录状态） |
+| 6 | keyword\_filter (stage2) | `parsed_items.json` | `classified_items.json` | 完整评分 + 领域分类 + 内容类型。**≥80 收录，50-79 待复核，<50 丢弃** | 中止 |
+| 7 | llm\_processor | `classified_items.json` | `enhanced_items.json` | TextRank 抽取式摘要（默认）或 LLM API 摘要 | 中止 |
+| 8 | translator | `enhanced_items.json` | `translated_items.json` | 腾讯云 TMT，把**非中文**的标题/摘要/AI 摘要翻译为中文；翻译失败逐条标记 | 中止（无密钥时跳过并记录状态） |
+| 9 | report\_generator | `translated_items.json` | `Security_Reports.html` + 分类 JSON | Jinja2 渲染 HTML；**渲染成功后才写数据文件**，避免数据与页面不一致 | 中止（保留上一版报告） |
+| 10 | mobile\_converter | `Security_Reports.html` | `Security_Reports_mobile.html` | 按模板标记剥离详情面板，注入 mobile.css/mobile.js | 中止（保留上一版报告） |
 
 ### 评分机制
 
@@ -175,19 +175,41 @@ SecurityInfo/
 
 ### 信源配置 (`config/source_config.yaml`)
 
-支持三种信源类型：
+每个信源真实使用的字段（RSS / API / Scraper 通用）：
 
 ```yaml
-- source_name: "安全内参"           # 显示名称
-  enabled: true                    # 是否启用
-  type: rss                        # rss / api / scraper
-  feed_url: "https://example.com/rss"
-  category: "国内信源"              # 信源分组（用于健康告警）
-  site_url: "https://example.com"
+- name: "安全内参"                   # 显示名称（必填，唯一）
+  group: "国内信源"                   # 信源分组，用于健康告警
+  url: "https://example.com/rss"     # 抓取地址（必填，仅支持 http/https）
+  type: rss                          # rss / api / scraper
+  language: zh                       # en / zh / fr / hr ...（仅作标记，翻译按内容判断）
+  enabled: true                      # 是否启用
+  note: "备注"                        # 可选备注
+  ssl_verify: false                  # 可选，关闭 TLS 证书校验（有中间人风险，慎用）
+  api_platform: github_repo          # 仅 API 类型：github / github_repo / arxiv /
+                                     #   semantic_scholar / ietf / mitre_attack / secrss
+  scraper_config:                    # 仅 Scraper 类型：CSS 选择器
+    article_selector: "article"
+    title_selector: "h2 a"
+    summary_selector: "p"
+    date_selector: "time"
+    link_selector: "a"
+    link_base: "https://example.com"
 ```
 
-API 类型额外支持 `api_params`（请求参数、分页、JSON 路径提取）。
-Scraper 类型额外支持 `scraper_config`（CSS 选择器、分页规则）。
+> 未写 `api_platform` 的 API 信源会按信源名自动回补平台（见
+> `pipeline/steps/fetcher.py` 的 `SOURCE_NAME_PLATFORMS`），以便正确带上
+> `GITHUB_TOKEN` / `SCHOLAR_API_KEY`。
+
+### 设置 (`config/settings.json`)
+
+只保存非敏感项：去重阈值与天数、翻译超时、分类顺序。
+
+> **密钥一律不写入此文件。** 腾讯云密钥只从环境变量
+> `TMT_SECRET_ID` / `TMT_SECRET_KEY`（兼容旧名 `TENCENT_SECRET_ID` /
+> `TENCENT_SECRET_KEY`）或 `config/secrets.json` 读取；管理后台的翻译页
+> 也不再提供密钥输入框。后台保存设置时会按白名单裁剪字段，未声明的键
+> （含历史上的 `tencent_secret_*`）会被直接丢弃。
 
 ### 评分关键词 (`config/scoring_keywords.json`)
 
@@ -265,7 +287,7 @@ api_key: ""               # API 密钥（建议用环境变量）
 
 ### 添加新信源
 
-编辑 `config/source_config.yaml`，添加一条信源记录。RSS 类型最简配置只需 `name`、`type: rss`、`feed_url`。
+编辑 `config/source_config.yaml`，添加一条信源记录。RSS 类型最简配置只需 `name`、`url`、`type: rss`、`language`、`enabled`（字段名是 `url`，不是 `feed_url`）。保存时会做结构校验，缺少 `name` / `url` 或 YAML 语法错误会被拒绝。
 
 ### 修改评分关键词
 
@@ -284,9 +306,10 @@ cat data/parsed_items.json | python3 -m json.tool | head -50
 ### 红线
 
 - 不要直接运行 `pipeline/utils/scraper.py` 或 `pipeline/orchestrator.py` — 始终通过 `app.py` 入口
-- 不要在信源配置中硬编码 API 密钥 — 使用 `.env` 文件或环境变量
+- **任何密钥都不得写入 `config/` 下的配置文件或提交进版本库** — 腾讯云密钥用 `.env` 或 `config/secrets.json`，其余用环境变量
 - 评分阈值（stage1: 30, stage2: 80）改动需谨慎，影响报告条数质量
 - `config/source_config.yaml` 中 `enabled: false` 的信源不要删除，留作记录
+- `templates/weekly_report.html` 中的 `<!--DETAIL_PANEL_START-->` / `<!--DETAIL_PANEL_END-->` 标记供移动版转换定位详情面板，不要删除
 
 ---
 
