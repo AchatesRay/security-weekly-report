@@ -360,5 +360,4 @@ cat data/parsed_items.json | python3 -m json.tool | head -50
 
 - [设计文档](docs/superpowers/specs/2026-06-22-security-weekly-report-design.md) — 分类体系、标签维度、布局规范
 - [API 采集设计](docs/superpowers/specs/2026-06-30-api-collector-design.md) — API 采集通道设计
-- [memory.md](memory.md) — 项目记忆：架构、硬约束、**已定型的决策与原因**、自检清单（改动前建议先读）
-- [CLAUDE.md](CLAUDE.md) — 自动加载入口，仅指向 `memory.md`
+- [AGENTS.md](AGENTS.md) — 项目记忆 / Agent 指令：架构、硬约束、**已定型的决策与原因**、自检清单（改动前建议先读）
