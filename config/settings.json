@@ -4,7 +4,11 @@
     "max_days": 7
   },
   "translate": {
-    "timeout": 8
+    "timeout": 8,
+    "fields": [
+      "title",
+      "ai_summary"
+    ]
   },
   "category_order": [
     "① AI/LLM 安全",

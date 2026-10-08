@@ -14,7 +14,7 @@ python app.py server [port]      # 启动管理后台 (默认 8090)
 
 ```
 app.py                    统一入口
-CLAUDE.md                 本文件
+memory.md                 本文件（项目记忆）
 pipeline/                 10 步数据处理管道
   __init__.py             模块导出
   orchestrator.py         管道编排器（串联所有步骤）
@@ -25,7 +25,7 @@ pipeline/                 10 步数据处理管道
     scorer.py             评分逻辑（被 keyword_filter 调用）
     fulltext_extractor.py 短摘要文章原文抓取（右栏正文）
     deduplicator.py       URL 规范化去重 + 标题相似去重 + 过期过滤
-    translator.py         非中文→中文翻译（腾讯云 TMT API）
+    translator.py         非中文标题与摘要→中文（腾讯云 TMT；正文不翻译）
     llm_processor.py      TextRank 抽取式摘要（LLM API 预留）
     report_generator.py   Jinja2 HTML 报告生成
     mobile_converter.py   桌面→移动端转换（移动端按需加载详情）
@@ -66,7 +66,7 @@ data/                     中间数据（gitignored）
 | 5 | fulltext_extractor | 原地增强 `parsed_items.json` | 短摘要文章抓取原文（并发 8，上限20000字，含 SSRF 防护） |
 | 6 | keyword_filter (stage2) | `classified_items.json` | 完整评分+分类+内容类型（≥80收录，50-79待复核，<50丢弃） |
 | 7 | llm_processor | `enhanced_items.json` | TextRank 抽取式摘要 → ai_summary（不做翻译） |
-| 8 | translator | `translated_items.json` | 非中文的标题/摘要/AI摘要 → 中文（腾讯云 TMT），失败逐条标记 |
+| 8 | translator | `translated_items.json` | 非中文的**标题与摘要** → 中文（腾讯云 TMT）；**正文不翻译**，范围见 settings 的 `translate.fields`；失败逐条标记 |
 | 9 | report_generator | `Security_Reports.html` + 分类 JSON | Jinja2 → HTML 报告（渲染成功后才写数据文件） |
 | 10 | mobile_converter | `Security_Reports_mobile.html` | 按模板标记剥离详情面板，注入 CSS/JS |
 

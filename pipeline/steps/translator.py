@@ -1,4 +1,10 @@
-"""翻译模块 — 非中文摘要/标题 → 中文（腾讯云 TMT）
+"""翻译模块 — 非中文标题与摘要 → 中文（腾讯云 TMT）
+
+**翻译范围**（2026-10-08 调整）：默认只翻译**标题**和**摘要**（报告 UI 里
+「摘要」一栏显示的 ai_summary，即抽取式摘要），**正文不翻译**。
+正文（full_body / 被全文替换后的 summary）在报告里保持原文。
+范围由 `config/settings.json` 的 `translate.fields` 控制，可选
+`title` / `summary` / `ai_summary`。
 
 2026-09-29 修复：
   1. **缓存键与翻译内容不一致**：缓存键取 `text[:200]`，实际翻译 `text[:1500]`。
@@ -29,6 +35,14 @@ REQUEST_INTERVAL = 0.22
 # 单条送去翻译的最大字符数
 MAX_TRANSLATE_CHARS = 1500
 
+# 可翻译的字段与其含义：
+#   title      标题
+#   summary    短摘要（RSS description；若被全文替换，则是被替换前的那段）
+#   ai_summary 报告「摘要」栏显示的抽取式摘要
+SUPPORTED_FIELDS = ("title", "summary", "ai_summary")
+# 默认只翻标题与摘要，正文保持原文
+DEFAULT_TRANSLATE_FIELDS = ("title", "ai_summary")
+
 _cache: dict[str, str] = {}
 _stats = {"calls": 0, "cache_hits": 0, "failures": 0}
 
@@ -53,6 +67,16 @@ def _load_translate_config() -> dict:
         return cfg.get("translate", {})
     except Exception:
         return {}
+
+
+def fields_to_translate() -> tuple[str, ...]:
+    """读取要翻译的字段集合（settings.json 的 translate.fields）"""
+    raw = _load_translate_config().get("fields")
+    if isinstance(raw, list):
+        selected = tuple(f for f in raw if f in SUPPORTED_FIELDS)
+        if selected:
+            return selected
+    return DEFAULT_TRANSLATE_FIELDS
 
 
 _translate_cfg = _load_translate_config()
@@ -162,6 +186,10 @@ def translate_all() -> list[dict]:
     from datetime import datetime as dt
     start = dt.now()
 
+    fields = fields_to_translate()
+    print(f"[TRANSLATOR] 翻译范围: {', '.join(fields)}"
+          f"（正文不翻译，范围可在 settings.json 的 translate.fields 调整）")
+
     title_total = title_ok = 0
     summary_total = summary_ok = 0
     ai_total = ai_ok = 0
@@ -169,7 +197,7 @@ def translate_all() -> list[dict]:
     for idx, item in enumerate(items):
         # ── 标题 ──
         title = item.get("title", "") or ""
-        if needs_translation(title):
+        if "title" in fields and needs_translation(title):
             title_total += 1
             translated, ok = translate_text_ex(title)
             item["title_zh"] = translated
@@ -180,27 +208,32 @@ def translate_all() -> list[dict]:
             item["title_zh"] = title
             item["title_translated"] = True
 
-        # ── 摘要（优先翻译原始短摘要；全文替换过的条目用 original_summary）──
-        summary = item.get("original_summary") or item.get("summary", "") or ""
-        if needs_translation(summary):
-            summary_total += 1
-            translated, ok = translate_text_ex(summary)
-            item["summary_zh"] = translated
-            item["summary_translated"] = ok
-            if ok:
-                summary_ok += 1
+        # ── 短摘要（默认不翻译；正文保持原文）──
+        if "summary" in fields:
+            summary = item.get("original_summary") or item.get("summary", "") or ""
+            if needs_translation(summary):
+                summary_total += 1
+                translated, ok = translate_text_ex(summary)
+                item["summary_zh"] = translated
+                item["summary_translated"] = ok
+                if ok:
+                    summary_ok += 1
+            else:
+                item["summary_zh"] = summary
+                item["summary_translated"] = True
         else:
-            item["summary_zh"] = summary
-            item["summary_translated"] = True
+            # 明确标记为未翻译，避免下游把原文误当作译文
+            item.pop("summary_zh", None)
+            item["summary_translated"] = False
 
         if (idx + 1) % 10 == 0:
             elapsed = (dt.now() - start).total_seconds()
             print(f"  [TRANSLATOR] 进度: {idx+1}/{len(items)} ({elapsed:.0f}s)")
 
-    # ── AI 摘要 ──
+    # ── AI 摘要（报告「摘要」栏显示的内容）──
     for item in items:
         ai_summary = item.get("ai_summary", "") or ""
-        if needs_translation(ai_summary):
+        if "ai_summary" in fields and needs_translation(ai_summary):
             ai_total += 1
             translated, ok = translate_text_ex(ai_summary)
             item["ai_summary_zh"] = translated
@@ -214,8 +247,10 @@ def translate_all() -> list[dict]:
     elapsed = (dt.now() - start).total_seconds()
     untranslated = (title_total - title_ok) + (summary_total - summary_ok) + (ai_total - ai_ok)
     print(f"[TRANSLATOR] 翻译完成: 标题 {title_ok}/{title_total}, "
-          f"摘要 {summary_ok}/{summary_total}, AI 摘要 {ai_ok}/{ai_total}, "
-          f"失败 {untranslated} 处, 耗时 {elapsed:.0f}s"
+          f"AI 摘要 {ai_ok}/{ai_total}"
+          + (f", 短摘要 {summary_ok}/{summary_total}" if "summary" in fields else
+             "（短摘要/正文未翻译）")
+          + f", 失败 {untranslated} 处, 耗时 {elapsed:.0f}s"
           f"（API 调用 {_stats['calls']} 次，缓存命中 {_stats['cache_hits']} 次）")
 
     atomic_write(TRANSLATED_ITEMS_PATH, items, indent=2)

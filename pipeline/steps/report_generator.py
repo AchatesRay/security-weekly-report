@@ -137,9 +137,10 @@ def build_json_items(items: list[dict]) -> list[dict]:
             # 不截顶的证据强度，用于前端排序/展示（截顶分大量并列满分）
             "raw_score": item.get("raw_score", item.get("confidence_score", 0)),
             "full_body": item.get("full_body") or "",
-            # 供前端如实标注“未翻译”的内容
+            # 供前端如实标注“未翻译”的内容（只看报告实际展示的标题与摘要；
+            # 正文按设计不翻译，不参与该标记）
             "untranslated": bool(item.get("title_translated") is False
-                                 or item.get("summary_translated") is False),
+                                 or item.get("ai_summary_translated") is False),
         })
     return result
 

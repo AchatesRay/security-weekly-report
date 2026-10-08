@@ -860,6 +860,9 @@ function saveSettings() {
     },
     translate: {
       timeout: parseInt(document.getElementById('translateTimeout').value),
+      // 保留翻译范围设置：本页未提供控件，直接在 config/settings.json 中调整
+      // （不带上它的话，保存设置会把这个字段抹掉）
+      fields: (t.fields && t.fields.length) ? t.fields : ['title', 'ai_summary'],
     },
     category_order: _catNames.concat(['未分类']),
   };

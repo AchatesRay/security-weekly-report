@@ -212,9 +212,12 @@ def validate_sources_yaml(text: str) -> list[dict]:
 # settings.json 允许的字段与其类型（白名单，防止把密钥等任意键写进配置文件）
 _ALLOWED_SETTINGS_SPEC = {
     "dedup": {"similarity_threshold": int, "max_days": int},
-    "translate": {"timeout": (int, float)},
+    "translate": {"timeout": (int, float), "fields": list},
     "category_order": list,
 }
+
+# translate.fields 允许的取值（与 translator.SUPPORTED_FIELDS 保持一致）
+_TRANSLATE_FIELDS = ("title", "summary", "ai_summary")
 
 
 def sanitize_settings(raw: dict) -> dict:
@@ -254,6 +257,17 @@ def sanitize_settings(raw: dict) -> dict:
     days = dedup.get("max_days")
     if days is not None and not (1 <= days <= 365):
         raise ConfigValidationError("dedup.max_days 必须在 1-365 之间")
+
+    translate = out.get("translate", {})
+    fields = translate.get("fields")
+    if fields is not None:
+        if not fields:
+            raise ConfigValidationError("translate.fields 不能为空数组")
+        bad = [f for f in fields if f not in _TRANSLATE_FIELDS]
+        if bad:
+            raise ConfigValidationError(
+                f"translate.fields 含不支持的字段 {bad}，"
+                f"可选: {list(_TRANSLATE_FIELDS)}")
     return out
 
 

@@ -8,7 +8,7 @@
 - **两阶段评分过滤** — 先快速筛掉无关内容，再完整评分分类，确保报告质量
 - **六维分类体系** — 威胁情报、AI 安全、漏洞态势、政策法规、产业动态、数据隐私
 - **AI 摘要生成** — 内置 TextRank 抽取式摘要，无需外部 API 即可生成中文摘要
-- **自动翻译** — 英文内容自动翻译为中文（腾讯云 TMT API）
+- **自动翻译** — 非中文的**标题与摘要**自动翻译为中文（腾讯云 TMT API；**正文保持原文**）
 - **双端自适应** — 桌面端完整版 + 移动端轻量版，服务端根据 UA 自动切换
 - **管理后台** — Web 界面管理信源、评分关键词、分类排序、管道启停
 - **预压缩** — HTML 和数据文件自动 gzip 预压缩，减少传输体积
@@ -65,7 +65,7 @@ SecurityInfo/
 │   │   ├── scorer.py             # 评分引擎：词级加权 + 位置加成 + 组合校验
 │   │   ├── fulltext_extractor.py # [步骤5] 短摘要文章原文抓取（BS4 解析）
 │   │   ├── llm_processor.py      # [步骤7] AI 摘要（TextRank / LLM API）
-│   │   ├── translator.py         # [步骤8] 英文→中文翻译（腾讯云 TMT）
+│   │   ├── translator.py         # [步骤8] 非中文标题与摘要→中文（腾讯云 TMT）
 │   │   ├── report_generator.py   # [步骤9] Jinja2 HTML 报告生成
 │   │   └── mobile_converter.py   # [步骤10] 桌面→移动端转换
 │   ├── utils/                    # 工具函数
@@ -133,7 +133,7 @@ SecurityInfo/
 | 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(原地增强) | 摘要 <300 字的文章抓取全文（并发 8，上限 20000 字），**含 SSRF 防护** | 中止（单条失败仅记录状态） |
 | 6 | keyword\_filter (stage2) | `parsed_items.json` | `classified_items.json` | 完整评分 + 领域分类 + 内容类型。**≥80 收录，50-79 待复核，<50 丢弃** | 中止 |
 | 7 | llm\_processor | `classified_items.json` | `enhanced_items.json` | TextRank 抽取式摘要（默认）或 LLM API 摘要 | 中止 |
-| 8 | translator | `enhanced_items.json` | `translated_items.json` | 腾讯云 TMT，把**非中文**的标题/摘要/AI 摘要翻译为中文；翻译失败逐条标记 | 中止（无密钥时跳过并记录状态） |
+| 8 | translator | `enhanced_items.json` | `translated_items.json` | 腾讯云 TMT，把**非中文的标题与摘要**翻译为中文；**正文不翻译**（范围见 settings 的 `translate.fields`）；翻译失败逐条标记 | 中止（无密钥时跳过并记录状态） |
 | 9 | report\_generator | `translated_items.json` | `Security_Reports.html` + 分类 JSON | Jinja2 渲染 HTML；**渲染成功后才写数据文件**，避免数据与页面不一致 | 中止（保留上一版报告） |
 | 10 | mobile\_converter | `Security_Reports.html` | `Security_Reports_mobile.html` | 按模板标记剥离详情面板，注入 mobile.css/mobile.js | 中止（保留上一版报告） |
 
@@ -231,13 +231,27 @@ SecurityInfo/
 
 ### 设置 (`config/settings.json`)
 
-只保存非敏感项：去重阈值与天数、翻译超时、分类顺序。
+只保存非敏感项：去重阈值与天数、翻译超时与**翻译范围**、分类顺序。
 
 > **密钥一律不写入此文件。** 腾讯云密钥只从环境变量
 > `TMT_SECRET_ID` / `TMT_SECRET_KEY`（兼容旧名 `TENCENT_SECRET_ID` /
 > `TENCENT_SECRET_KEY`）或 `config/secrets.json` 读取；管理后台的翻译页
 > 也不再提供密钥输入框。后台保存设置时会按白名单裁剪字段，未声明的键
 > （含历史上的 `tencent_secret_*`）会被直接丢弃。
+
+### 翻译范围 (`config/settings.json` 的 `translate.fields`)
+
+默认 `["title", "ai_summary"]` —— 只翻译**标题**与报告「摘要」栏显示的抽取式摘要，
+**正文（`full_body` / 被全文替换后的 `summary`）保持原文**。可选值：
+
+| 值 | 含义 |
+|---|---|
+| `title` | 条目标题 |
+| `ai_summary` | 报告「摘要」栏显示的抽取式摘要 |
+| `summary` | 短摘要（RSS description）；开启后会把这段也翻译 |
+
+> 该项没有后台界面控件，直接在 `config/settings.json` 修改；后台保存设置时会
+> 原样保留该字段（不会被抹掉）。翻译步骤启动时会打印实际生效的范围。
 
 ### 评分关键词 (`config/scoring_keywords.json`)
 
@@ -260,7 +274,8 @@ SecurityInfo/
     "max_days": 7                  // 文章过期天数
   },
   "translate": {
-    "timeout": 8                   // 单条翻译超时（秒）
+    "timeout": 8,                  // 单条翻译超时（秒）
+    "fields": ["title", "ai_summary"]   // 翻译范围：标题 + 摘要（正文不翻译）
   },
   "category_order": [
     "① AI/LLM 安全",
