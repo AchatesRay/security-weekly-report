@@ -82,7 +82,8 @@ data/                     中间数据（gitignored）
 
 - 不要直接运行 `pipeline/utils/scraper.py` 或 `pipeline/orchestrator.py` — 始终通过 `app.py` 入口
 - **任何密钥都不得写入 `config/` 下的配置文件，也不得提交进版本库** — 腾讯云密钥只从 `.env` 或 `config/secrets.json` 读取（管理后台的翻译页已不再提供密钥输入框）
-- 评分阈值（stage1: 30, stage2: 80）改动需谨慎，影响报告条数质量
+- 评分阈值（stage1: 30, stage2: 80）改动需谨慎，影响报告条数质量；`min_strong_for_accept` 默认关闭（实测取 2 会误伤只命中 1 个强词的安全要闻，启用前须用真实数据回归）
+- 报告内条目按 `raw_score`（不截顶的证据强度）降序排列；截顶分 `confidence_score` 只用于门槛判断，两者不要混用
 - `config/source_config.yaml` 中 `enabled: false` 的信源不要删除，留作记录
 - `templates/weekly_report.html` 里的 `<!--DETAIL_PANEL_START-->` / `<!--DETAIL_PANEL_END-->` 标记供移动版转换定位详情面板，不要删除
 - `Output/`（本地交付物与备份目录）已加入 `.gitignore`，其中可能含修复前的仓库备份，**不要从版本库里移除这条忽略规则**

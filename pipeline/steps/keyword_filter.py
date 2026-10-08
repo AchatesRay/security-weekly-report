@@ -155,6 +155,8 @@ def run_stage2():
         # 完整评分
         result = scorer.score(item)
         item["confidence_score"] = result["score"]
+        # 不截顶的原始证据强度：用于报告内排序（截顶后大量条目同为 100 分）
+        item["raw_score"] = result["raw_score"]
         item["confidence_level"] = result["level"]
         item["filter_decision"] = result["decision"]
         item["category"] = result["category"]

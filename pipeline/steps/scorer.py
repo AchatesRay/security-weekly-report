@@ -475,6 +475,11 @@ class SecurityScorer:
             total = min(total, self.neg.get("negative_score_cap", 29))
             total = max(total, 10)
 
+        # 原始证据强度：**不截顶**。截顶后的分数用于门槛判断（语义是“≥门槛”），
+        # 但 100 分封顶后大量条目同为满分、彼此无法排序。保留原始值用于排序与
+        # 展示，让“证据更强”的条目能排在前面。
+        raw_score = round(max(0.0, total), 1)
+
         total = max(0, min(100, total))
         score_int = round(total)
 
@@ -489,7 +494,37 @@ class SecurityScorer:
         else:
             decision, level = "filtered", "non-security"
 
-        return score_int, level, decision, cat_details, has_negative, has_strong
+        # 收录的强证据门槛：仅靠少量强特征词到线时降为待复核。
+        # 由 config/scoring_keywords.json 的 thresholds.min_strong_for_accept 控制，
+        # **默认 0 = 不启用**。
+        #
+        # 为什么不默认启用：2026-10-08 用本轮 139 条真实数据实测，取 2 时会把
+        # 明确的安全要闻一并降级 —— 例如
+        #   「Citrix warns of actively exploited NetScaler flaw」（仅命中 threat actor）
+        #   「Police Target KillSec Ransomware Group with Arrests」（仅命中 ransomware）
+        # 根因是强词表以 AI 话题词为主，而 vulnerability / exploit / ransomware
+        # 这类经典安全事件词大多位于中词层，导致“按强词计数”惩罚了真安全新闻。
+        # 启用前请先按上面的方法用真实数据回归，确认不会误伤。
+        gate_note = ""
+        try:
+            min_strong = int(self.thresholds.get("min_strong_for_accept", 0) or 0)
+        except (TypeError, ValueError):
+            min_strong = 0
+        strong_count = len(strong_matched)
+        if min_strong > 0 and decision == "accepted" and strong_count < min_strong:
+            decision, level = "review", "medium"
+            gate_note = f"仅命中{strong_count}个强特征词（收录需≥{min_strong}个），降为待复核"
+
+        return {
+            "score": score_int,
+            "raw_score": raw_score,
+            "level": level,
+            "decision": decision,
+            "cat_details": cat_details,
+            "has_negative": has_negative,
+            "has_strong": has_strong,
+            "gate_note": gate_note,
+        }
 
     # ── 综合评分 ──
 
@@ -497,7 +532,8 @@ class SecurityScorer:
         """对单条资讯进行完整评分（使用全文可匹配文本）。
 
         返回:
-            score: 0-100 分
+            score: 0-100 分（截顶，用于与门槛比较）
+            raw_score: 不截顶的原始证据强度（用于排序，>100 说明证据叠加超过满分）
             level: "high" / "medium" / "low" / "non-security"
             decision: "accepted" / "review" / "filtered"
             category: 安全领域分类字符串
@@ -513,8 +549,11 @@ class SecurityScorer:
         medium_matched = self._filter_ambiguity(medium_matched, all_text)
         weak_matched = self._filter_ambiguity(weak_matched, all_text)
 
-        score_int, level, decision, cat_details, has_negative, _has_strong = self._evaluate(
-            item, strong_matched, medium_matched, weak_matched, all_text)
+        ev = self._evaluate(item, strong_matched, medium_matched, weak_matched, all_text)
+        score_int = ev["score"]
+        decision = ev["decision"]
+        level = ev["level"]
+        cat_details = ev["cat_details"]
 
         # 分类与元数据（合并所有匹配关键词）
         all_matched = {}
@@ -534,12 +573,17 @@ class SecurityScorer:
         if "pairing_rules" in self.config and cat_details:
             tiers_used = sorted({d["tier"] for d in cat_details.values()})
             reason_parts.append(f"梯度: {', '.join(tiers_used)}")
-        if has_negative:
+        if ev["has_negative"]:
             reason_parts.append("负向过滤规则命中")
+        if ev["gate_note"]:
+            reason_parts.append(ev["gate_note"])
         reason_parts.append(f"最终得分{score_int}")
+        if ev["raw_score"] > score_int:
+            reason_parts.append(f"证据强度{ev['raw_score']:g}")
 
         return {
             "score": score_int,
+            "raw_score": ev["raw_score"],
             "level": level,
             "decision": decision,
             "category": category,
@@ -574,8 +618,8 @@ class SecurityScorer:
         medium_matched = self._filter_ambiguity(medium_matched, all_text)
         weak_matched = self._filter_ambiguity(weak_matched, all_text)
 
-        score_int, _level, _decision, _cat_details, has_negative, _hs = self._evaluate(
-            item, strong_matched, medium_matched, weak_matched, all_text)
+        ev = self._evaluate(item, strong_matched, medium_matched, weak_matched, all_text)
+        score_int = ev["score"]
 
         drop_threshold = self.thresholds.get("stage1_drop_below", 30)
         drop = score_int < drop_threshold
@@ -583,11 +627,12 @@ class SecurityScorer:
         reason = ""
         if drop:
             reason = f"快速预筛得分{score_int}（<{drop_threshold}），提前丢弃"
-        elif has_negative:
+        elif ev["has_negative"]:
             reason = f"快速预筛得分{score_int}，命中负向规则但保留待完整评估"
 
         return {
             "score": score_int,
+            "raw_score": ev["raw_score"],
             "drop": drop,
             "reason": reason,
             "matched": {

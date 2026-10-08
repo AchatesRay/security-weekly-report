@@ -512,7 +512,12 @@ function _renderDetail(item) {
   if (!hasKw) {
     mHtml += '<div class="kw-empty">无匹配关键词</div>';
   }
-  mHtml += '<div class="detail-kw-scoreline">综合评分: ' + (item.confidence_score || 0) + '</div>';
+  // 综合评分为截顶分（与收录门槛同尺度）；证据强度为不截顶的原始分，
+  // 仅当超过满分时额外显示，用于区分同为 100 分的条目
+  var _sc = (item.confidence_score || 0);
+  var _raw = (typeof item.raw_score === 'number') ? item.raw_score : _sc;
+  mHtml += '<div class="detail-kw-scoreline">综合评分: ' + _sc
+         + (_raw > _sc ? '　·　证据强度: ' + _raw : '') + '</div>';
   dMatchedKw.innerHTML = mHtml;
 }
 

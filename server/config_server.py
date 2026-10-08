@@ -290,6 +290,13 @@ def validate_scoring_config(cfg: dict) -> None:
     if review > accept:
         raise ConfigValidationError(
             f"review_threshold({review}) 不能大于 accept_threshold({accept})")
+    min_strong = thresholds.get("min_strong_for_accept")
+    if min_strong is not None:
+        if isinstance(min_strong, bool) or not isinstance(min_strong, int):
+            raise ConfigValidationError("thresholds.min_strong_for_accept 必须是整数")
+        if not (0 <= min_strong <= 20):
+            raise ConfigValidationError(
+                "thresholds.min_strong_for_accept 必须在 0-20 之间（0 表示不启用该门槛）")
 
 
 def validate_llm_yaml(text: str) -> None:

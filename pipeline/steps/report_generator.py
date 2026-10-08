@@ -134,6 +134,8 @@ def build_json_items(items: list[dict]) -> list[dict]:
             "source_hue": _source_color(item.get("source_name", "")),
             "filter_decision": item.get("filter_decision", ""),
             "confidence_score": item.get("confidence_score", 0),
+            # 不截顶的证据强度，用于前端排序/展示（截顶分大量并列满分）
+            "raw_score": item.get("raw_score", item.get("confidence_score", 0)),
             "full_body": item.get("full_body") or "",
             # 供前端如实标注“未翻译”的内容
             "untranslated": bool(item.get("title_translated") is False
@@ -293,9 +295,21 @@ def generate_report():
     sunday = monday + timedelta(days=6)
     date_range = f"{monday.strftime('%Y.%m.%d')}-{sunday.strftime('%Y.%m.%d')}"
 
-    # 分离 accepted 和 review 条目
-    accepted_items = [i for i in items if i.get("filter_decision") != "review"]
-    review_items = [i for i in items if i.get("filter_decision") == "review"]
+    # 分离 accepted 和 review 条目，并按**证据强度**（不截顶的原始分）降序排列。
+    # 截顶后大量条目同为 100 分、彼此无法排序；原始分让证据更强的排在前面。
+    def _rank_key(it: dict) -> float:
+        v = it.get("raw_score")
+        if v is None:
+            v = it.get("confidence_score", 0)
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    accepted_items = sorted((i for i in items if i.get("filter_decision") != "review"),
+                            key=_rank_key, reverse=True)
+    review_items = sorted((i for i in items if i.get("filter_decision") == "review"),
+                          key=_rank_key, reverse=True)
 
     groups = group_by_category(accepted_items)
 

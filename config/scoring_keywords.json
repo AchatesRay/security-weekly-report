@@ -288,21 +288,9 @@
         ]
       },
       {
-        "text": "DSL",
-        "categories": [
-          "④ 政策法规与标准框架"
-        ]
-      },
-      {
         "text": "DSMM",
         "categories": [
           "④ 政策法规与标准框架"
-        ]
-      },
-      {
-        "text": "DeepSeek",
-        "categories": [
-          "① AI/LLM 安全"
         ]
       },
       {
@@ -775,12 +763,6 @@
       },
       {
         "text": "model security",
-        "categories": [
-          "① AI/LLM 安全"
-        ]
-      },
-      {
-        "text": "moonshot",
         "categories": [
           "① AI/LLM 安全"
         ]
@@ -3353,31 +3335,184 @@
           "⑥ 数据安全与隐私保护"
         ]
       },
-      {"text": "vulnerability", "type": "core", "categories": ["③ 漏洞态势与供应链安全"]},
-      {"text": "attacker", "type": "core", "categories": ["② 威胁情报与攻防对抗"]},
-      {"text": "attack", "type": "core", "categories": ["② 威胁情报与攻防对抗"]},
-      {"text": "threat", "type": "core", "categories": ["② 威胁情报与攻防对抗"]},
-      {"text": "phishing", "type": "core", "categories": ["② 威胁情报与攻防对抗"]},
-      {"text": "exploit", "type": "core", "categories": ["③ 漏洞态势与供应链安全"]},
-      {"text": "zero-day", "type": "core", "categories": ["③ 漏洞态势与供应链安全"]},
-      {"text": "breach", "type": "normal", "categories": ["② 威胁情报与攻防对抗", "⑥ 数据安全与隐私保护"]},
-      {"text": "patch", "type": "normal", "categories": ["③ 漏洞态势与供应链安全"]},
-      {"text": "cyber", "type": "normal", "categories": ["② 威胁情报与攻防对抗", "⑤ 产业动态与技术趋势"]},
-      {"text": "vulnérabilité", "type": "normal", "categories": ["③ 漏洞态势与供应链安全"]},
-      {"text": "vulnérabilités", "type": "normal", "categories": ["③ 漏洞态势与供应链安全"]},
-      {"text": "Kubernetes", "type": "core", "categories": ["⑤ 产业动态与技术趋势"]},
-      {"text": "prompt injection", "type": "core", "categories": ["① AI/LLM 安全"]},
-      {"text": "jailbreak", "type": "core", "categories": ["① AI/LLM 安全"]},
-      {"text": "red teaming", "type": "core", "categories": ["① AI/LLM 安全"]},
-      {"text": "LLM guardrails", "type": "core", "categories": ["① AI/LLM 安全"]},
-      {"text": "model alignment", "type": "core", "categories": ["① AI/LLM 安全"]},
-      {"text": "AI vulnerability", "type": "core", "categories": ["① AI/LLM 安全", "③ 漏洞态势与供应链安全"]},
-      {"text": "runtime security", "type": "core", "categories": ["⑤ 产业动态与技术趋势"]},
-      {"text": "AI risk", "type": "core", "categories": ["① AI/LLM 安全"]},
-      {"text": "agent security", "type": "core", "categories": ["① AI/LLM 安全"]},
-      {"text": "model hacking", "type": "normal", "categories": ["① AI/LLM 安全"]},
-      {"text": "benchmark安全", "type": "normal", "categories": ["① AI/LLM 安全"]},
-      {"text": "security benchmark", "type": "normal", "categories": ["⑤ 产业动态与技术趋势"]}
+      {
+        "text": "vulnerability",
+        "type": "core",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "attacker",
+        "type": "core",
+        "categories": [
+          "② 威胁情报与攻防对抗"
+        ]
+      },
+      {
+        "text": "attack",
+        "type": "core",
+        "categories": [
+          "② 威胁情报与攻防对抗"
+        ]
+      },
+      {
+        "text": "threat",
+        "type": "core",
+        "categories": [
+          "② 威胁情报与攻防对抗"
+        ]
+      },
+      {
+        "text": "phishing",
+        "type": "core",
+        "categories": [
+          "② 威胁情报与攻防对抗"
+        ]
+      },
+      {
+        "text": "exploit",
+        "type": "core",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "zero-day",
+        "type": "core",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "breach",
+        "type": "normal",
+        "categories": [
+          "② 威胁情报与攻防对抗",
+          "⑥ 数据安全与隐私保护"
+        ]
+      },
+      {
+        "text": "patch",
+        "type": "normal",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "cyber",
+        "type": "normal",
+        "categories": [
+          "② 威胁情报与攻防对抗",
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "vulnérabilité",
+        "type": "normal",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "vulnérabilités",
+        "type": "normal",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "Kubernetes",
+        "type": "core",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "prompt injection",
+        "type": "core",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "jailbreak",
+        "type": "core",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "red teaming",
+        "type": "core",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "LLM guardrails",
+        "type": "core",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "model alignment",
+        "type": "core",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "AI vulnerability",
+        "type": "core",
+        "categories": [
+          "① AI/LLM 安全",
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "runtime security",
+        "type": "core",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "AI risk",
+        "type": "core",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "agent security",
+        "type": "core",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "model hacking",
+        "type": "normal",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "benchmark安全",
+        "type": "normal",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "security benchmark",
+        "type": "normal",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      }
     ]
   },
   "weak": {
@@ -3666,6 +3801,24 @@
         "categories": [
           "① AI/LLM 安全"
         ]
+      },
+      {
+        "text": "DSL",
+        "categories": [
+          "④ 政策法规与标准框架"
+        ]
+      },
+      {
+        "text": "DeepSeek",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
+      },
+      {
+        "text": "moonshot",
+        "categories": [
+          "① AI/LLM 安全"
+        ]
       }
     ]
   },
@@ -3734,7 +3887,8 @@
   "thresholds": {
     "accept_threshold": 80,
     "review_threshold": 50,
-    "stage1_drop_below": 30
+    "stage1_drop_below": 30,
+    "min_strong_for_accept": 0
   },
   "lead_max_chars": 200,
   "tail_min_total_chars": 400,
