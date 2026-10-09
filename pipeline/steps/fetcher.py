@@ -46,12 +46,19 @@ USER_AGENTS = [
 ]
 
 
-# RSS-reader UAs for retry (less likely to be blocked than browser UAs)
+# 失败重试用的 UA：**只放真正的 RSS 阅读器**。
+# 踩过的坑（2026-10-09 实测）：这里原先第 0 个写的是浏览器 UA（与 USER_AGENTS[0] 重复），
+# 而部分站点恰恰"封浏览器 UA、放行阅读器 UA"（Aqua / Cynet / Jack Clark /
+# Microsoft AI Blog / OWASP LLM Top 10 / Qualys 实测：浏览器 UA 403、阅读器 UA 200）。
+# 旧代码只有一个浏览器 UA，恰好等于列表第 0 个，重试时能落到真正的阅读器；
+# 一旦给浏览器 UA 加了第二个（随机轮换），约一半概率重试又会取回浏览器 UA → 信源丢失。
+# 因此这里只允许出现阅读器 UA，重试按顺序逐个尝试。
 RSS_READER_UAS = [
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "NetNewsWire/6.1 (Mac; Intel Mac OS X 14.4)",
+    "FeedFetcher-Google; (+http://www.google.com/feedfetcher.html)",
 ]
+# 重试时统一带上的 Accept（有些站点按 Accept 判断是不是订阅客户端）
+_RSS_ACCEPT = "application/rss+xml, application/atom+xml, application/xml, text/xml"
 
 # 信源名 → API 平台（配置里未写 api_platform 时回补，使专用请求头/密钥生效）
 SOURCE_NAME_PLATFORMS = {
@@ -233,20 +240,25 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
     except httpx.RequestError as e:
         first_error = str(e)
 
-    # 重试：换用RSS reader UA + Accept头
-    try:
-        retry_ua = RSS_READER_UAS[0] if first_ua != RSS_READER_UAS[0] else RSS_READER_UAS[1]
-        alt_headers = {
-            "User-Agent": retry_ua,
-            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
-        }
-        resp2 = await client.get(feed_url, timeout=30.0, follow_redirects=True, headers=alt_headers)
-        resp2.raise_for_status()
-        return _result(source, feed_url, _truncate(resp2.text, name), None)
-    except Exception as e:
-        msg = str(e) or first_error or "请求失败"
-        print(f"  [FETCH ERROR] {name}: {msg}")
-        return _result(source, feed_url, "", msg)
+    # 重试：依次换用 RSS 阅读器 UA（跳过与首次相同的 UA）
+    last_error = None
+    for retry_ua in RSS_READER_UAS:
+        if retry_ua == first_ua:
+            continue
+        try:
+            resp2 = await client.get(
+                feed_url, timeout=30.0, follow_redirects=True,
+                headers={"User-Agent": retry_ua, "Accept": _RSS_ACCEPT})
+            resp2.raise_for_status()
+            if resp2.text.strip():
+                return _result(source, feed_url, _truncate(resp2.text, name), None)
+            last_error = "空响应"
+        except Exception as e:
+            last_error = str(e)
+
+    msg = last_error or first_error or "请求失败"
+    print(f"  [FETCH ERROR] {name}: {msg}")
+    return _result(source, feed_url, "", msg)
 
 
 async def fetch_api(client: httpx.AsyncClient, source: dict) -> dict:
