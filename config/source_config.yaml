@@ -11,6 +11,13 @@ sources:
   type: scraper
   language: zh
   enabled: true
+  # 抓取选择器来自服务器上正在生效的配置（本地仓库此前缺失，会导致该信源
+  # 一条都抓不到；上周它贡献了 87 条，是量最大的信源）
+  scraper_config:
+    article_selector: "li[id^=article]"
+    title_selector: "h3.post__title a"
+    summary_selector: "p.post__digest"
+    link_base: "https://360.net/"
 - name: AWS Security Blog
   group: 安全厂商
   url: https://aws.amazon.com/blogs/security/feed/
@@ -933,6 +940,9 @@ sources:
     title_selector: "a"
     link_selector: "a"
     link_selector: "a[href*='writing']"
+    # link_base 来自服务器上正在生效的配置；缺它时该站的相对链接只能靠页面
+    # 地址回退补全，链接容易失效
+    link_base: "https://nicholas.carlini.com/"
 
 # ── 标准 / 基准 / 社区 ──
 
