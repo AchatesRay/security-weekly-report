@@ -63,7 +63,7 @@ SecurityInfo/
 │   │   ├── deduplicator.py       # [步骤3] URL 精确去重 + 标题模糊去重
 │   │   ├── keyword_filter.py     # [步骤4+6] 两阶段评分过滤（调用 scorer）
 │   │   ├── scorer.py             # 评分引擎：词级加权 + 位置加成 + 组合校验
-│   │   ├── fulltext_extractor.py # [步骤5] 短摘要文章原文抓取（BS4 解析）
+│   │   ├── fulltext_extractor.py # [步骤5] 短摘要文章原文抓取 + 正文清洗（BS4 解析）
 │   │   ├── llm_processor.py      # [步骤7] 摘要（清洗噪声 + 最优连续窗口抽取；LLM 分支预留）
 │   │   ├── translator.py         # [步骤8] 非中文标题与摘要→中文（腾讯云 TMT）
 │   │   ├── report_generator.py   # [步骤9] Jinja2 HTML 报告生成
@@ -131,7 +131,7 @@ SecurityInfo/
 | 2 | parser | `raw_items.json` | `parsed_items.json` | XML→统一 dict，HTML 去标签，时间统一归一到 UTC | 中止 |
 | 3 | deduplicator | `parsed_items.json` | `deduped_items.json` | URL 规范化去重（剥追踪参数）+ rapidfuzz 标题相似去重（阈值 75%），过期过滤（>7 天） | 中止 |
 | 4 | keyword\_filter (stage1) | `deduped_items.json` | `parsed_items.json` | 标题+前200字快速评分，**<30 分提前丢弃**，减少全文抓取量 | 中止 |
-| 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(原地增强) | 摘要 <300 字的文章抓取全文（并发 8，上限 20000 字），**含 SSRF 防护** | 中止（单条失败仅记录状态） |
+| 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(原地增强) | 摘要 <300 字的文章抓取全文（并发 8，上限 20000 字），**含 SSRF 防护**；正文清洗为**先定位正文容器、再删模板**（删除时跳过正文容器及其祖先），只在块级标签边界换行以免把句子切碎 | 中止（单条失败仅记录状态） |
 | 6 | keyword\_filter (stage2) | `parsed_items.json` | `classified_items.json` | 完整评分 + 领域分类 + 内容类型。**≥80 收录，50-79 待复核，<50 丢弃** | 中止 |
 | 7 | llm\_processor | `classified_items.json` | `enhanced_items.json` | 抽取式摘要：先洗掉网页噪声（导航/署名/分享/日期/聚合壳），再摘取**最值得看的连续一段**，按句边界收尾；长度按分类分档（`summary` 段），结果附来源标记 `ai_summary_kind` | 中止 |
 | 8 | translator | `enhanced_items.json` | `translated_items.json` | 腾讯云 TMT，把**非中文的标题与摘要**翻译为中文；**正文不翻译**（范围见 settings 的 `translate.fields`）；翻译失败逐条标记 | 中止（无密钥时跳过并记录状态） |
@@ -313,6 +313,37 @@ SecurityInfo/
 > 每条摘要还会写入来源标记 `ai_summary_kind`：`extractive`（自动提炼）、
 > `fallback`（原文节选，例如原文只有寥寥几句）、`empty`（无可用文本）。
 > 报告「摘要」栏右上角据此显示「自动提炼 / 原文节选」，读者不必猜这段是改写还是摘抄。
+
+### 正文清洗（步骤 5，`pipeline/steps/fulltext_extractor.py`）
+
+摘要不足 300 字的文章会去抓原始网页，从导航/广告/评论框里认出真正的正文。清洗结果
+直接决定**报告右栏「正文」栏读者看到的内容**，同时也是自动摘要的输入。规则：
+
+| 环节 | 做法 | 为什么 |
+|---|---|---|
+| 定位正文 | 语义标签（`article`/`main`/`itemprop`）与常见正文类名全部参评，取「文本量达最大值 90% 以上者里 **HTML 最紧凑**的那个」 | 原先取第一个 `<article>` 就返回，页面里有多个文章小卡片时会抓错；只按"文本密度"打分又会偏爱又小又密的卡片 |
+| 删模板 | **先定位正文，再删**；删除任何元素前，先看它是不是正文容器或其祖先，是就跳过 | 这是"模板选择器误伤正文"的根治手段：实测 `[class*="sidebar"]` 会命中 WordPress 给整页加的 `no-sidebar`，把 47,518 字正文删成 363 字 |
+| 换行 | 只在块级标签（段落/标题/列表/表格行…）边界换行，内联标签之间不插换行 | 原先按**每个文本节点**换行，加粗/链接/行内代码会把一句话切成十几段；报告正文按换行分段，读者看到的就是碎句 |
+| 行级过滤 | 分两档：整行即模板的（版权/登录/订阅/来源/标签/裸域名/时间元信息…）任何长度都丢；含"搜索、评论、订阅"等词的**只在短行（≤60 字）**时丢 | 长句里出现这些词属正常内容。实测把阈值放宽到 80 字，会把正常内容句一起删掉 |
+| 重复收敛 | 同页重复 ≥3 次的整行只留一条；**同一行内连续重复 ≥3 次的短语**也收敛成一条 | 部分论坛把登录墙提示放在十几个行内 span 里重复，块级换行不会拆开它们，按整行比对抓不到 |
+
+> 已知取舍：少数站点会在正文前残留一两行分类面包屑（如「分类：智能体安全」），
+> 个别站点还会残留站内标签词（如 `Agent` / `AI` / `安全`，实测 102 篇中 2 篇）。
+> 这两类都是站方给的分类信息，**没有再追加规则去清**——继续加规则的边际收益在下降、
+> 误删正文的风险在上升。注意面包屑删除后个别条目的**分类**可能变化（评分不受影响）：
+> 实测 163 条中 1 条因此从「① AI/LLM 安全」落到「④ 政策法规与标准框架」。
+
+**改清洗逻辑后怎么做回归**（工作脚本在 `Output/文章清洗优化/Temp/`，gitignored）：
+
+```bash
+python Output/文章清洗优化/Temp/cache_html.py          # 1. 把真实页面缓存为固定基准
+python Output/文章清洗优化/Temp/compare.py --old <改动前的备份>   # 2. 噪音行/行长/耗时
+python Output/文章清洗优化/Temp/diff2.py 0 1 2 ...     # 3. 逐行核对被删内容有没有误伤正文
+python Output/文章清洗优化/Temp/scoring_regression.py  # 4. 同一份 HTML 下评分与收录判定 A/B
+```
+
+第 3 步必须**逐行看**"旧版有、新版没有"的内容，确认删掉的都是导航/相关文章/作者简介/
+聚合器元信息；第 4 步必须确认**没有条目被移出「收录」**。
 
 ### 摘要质量回归（`scripts/summary_quality_report.py`）
 

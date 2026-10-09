@@ -57,7 +57,7 @@ pipeline/
     deduplicator.py          URL 规范化去重 + 标题相似去重 + 过期过滤
     keyword_filter.py        stage1 预筛 / stage2 完整评分
     scorer.py                评分引擎（词级加权 + 位置加成 + 分类梯度）
-    fulltext_extractor.py    短摘要文章抓原文（并发 8；SSRF 防护）
+    fulltext_extractor.py    短摘要文章抓原文 + 正文清洗（并发 8；SSRF 防护）
     llm_processor.py         清洗噪声 + 最优连续窗口抽取式摘要（LLM 分支预留未实现）
     translator.py            非中文标题与摘要 → 中文（腾讯云 TMT；正文不翻）
     report_generator.py      Jinja2 → HTML；**渲染成功后才写数据文件**
@@ -89,7 +89,7 @@ docs/                        设计与历史计划文档
 | 2 | parser | `parsed_items.json` | XML → 统一结构；时间归一到 UTC 无时区 |
 | 3 | deduplicator | `deduped_items.json` | URL 规范化去重 + 标题相似去重 + 过期过滤（>7 天） |
 | 4 | keyword_filter(stage1) | `parsed_items.json` | 标题+前200字快速评分，<30 提前丢弃（省掉全文抓取） |
-| 5 | fulltext_extractor | 原地增强 `parsed_items.json` | 摘要过短的文章抓原文（并发 8、上限 20000 字） |
+| 5 | fulltext_extractor | 原地增强 `parsed_items.json` | 摘要过短的文章抓原文（并发 8、上限 20000 字）；**先定位正文容器、再删模板**，只在块级标签边界换行 |
 | 6 | keyword_filter(stage2) | `classified_items.json` | 完整评分 + 分类 + 内容类型 + 阈值判定 |
 | 7 | llm_processor | `enhanced_items.json` | 清洗噪声 → 最优连续窗口抽取式摘要 → `ai_summary` + `ai_summary_kind`（不做翻译） |
 | 8 | translator | `translated_items.json` | 非中文**标题与摘要** → 中文；正文不翻译 |
@@ -139,6 +139,13 @@ docs/                        设计与历史计划文档
 | 全文抓取并发 8 条 | 原先逐条串行、每条 15s 超时，数百条时耗时数十分钟 |
 | `pipeline/utils/__init__.py` 定义所有绝对路径 | 原先各模块用相对路径，换个工作目录就把数据写到别处甚至别的盘符根目录 |
 | 项目记忆文件是 `AGENTS.md` | 不再使用 Claude Code，故弃用 `CLAUDE.md`；`AGENTS.md` 是本 Harness 的 Agent 指令约定，且工具中立 |
+| 正文提取**只在块级标签边界换行**，内联标签之间不插换行 | 原先用 `get_text(separator="\n")`，它在**每个文本节点**之间都插换行，于是加粗/链接/行内代码把一句话切成十几段。实测某篇 621 行里只有约 270 句；周报正文按换行分段，读者看到的就是被切碎的句子 |
+| 先定位正文容器、再删模板；删除时**跳过正文容器及其所有祖先** | 这是"模板选择器误伤正文"的根治手段。原先先删后认，规则一旦命中正文的祖先就整页删光（实测 Unit42 因 `[class*="sidebar"]` 命中 WordPress `<body class="...no-sidebar...">`，47,518 字 → 363 字）。加了保护圈后，将来再加选择器也不会重演 |
+| 不删 `[class*="sidebar"]`、`[aria-hidden="true"]`、`textarea` | 三条都实测误伤过正文：`sidebar` 命中 WordPress 的 `no-sidebar`（整页删除）与 `container-wp--no-sidebar`（正文壳）；`aria-hidden` 命中轮播/选项卡的非当前面板（删掉 2,000 字客户证言）；`textarea` 是 Discuz 论坛（看雪）正文的真实存放位置 |
+| 正文容器打分 = "文本量达最大值 90% 以上者里取 HTML 最紧凑的" | 原先是"取第一个 `<article>` 直接返回"，页面里有多个 `<article>` 小卡片时就抓错；改成"文本量 × 密度²"又会偏爱又小又密的卡片（实测 219 字的 card-body 盖过 6,438 字的正文） |
+| 模板选择器用**单遍遍历 + 属性判断**，不用逐个 `select` | 逐条 `select` 会把整棵树扫 120 遍，实测占清洗总耗时 80%（27.6s/33s）；即使合并成一个大选择器组，soupsieve 也明显偏慢。选择器列表仍是唯一事实来源，由 `_compile_selector_rules()` 导入时编译为集合/子串表 |
+| 行级去噪分"任意长度"与"仅短行（≤60 字）"两档 | 长句里出现"搜索/评论/订阅"属正常内容。实测把短行阈值放宽到 80 字，会把正常内容句一起删掉（某页丢失率 13%→26%），只换来噪音行 358→311，得不偿失 |
+| 行内连续重复短语要收敛（不只是整行去重） | 部分论坛（实测奇安信攻防社区）把登录墙提示放在十几个行内 span 里重复，块级换行不拆开它们，于是并成"一行重复十遍"的垃圾；按整行比对抓不到。探测用"≥6 字片段近距离内再次出现"，收敛判据是"连续重复≥3 次" |
 
 ## 6. 已知取舍与无解项
 
@@ -179,7 +186,15 @@ python -m py_compile $(git ls-files '*.py')          # 语法
 | `test_scoring_dedup.py` | 阈值、多分类计分、阶段1/2 口径、过期过滤、去重 |
 | `test_link_fix.py` | 相对链接补全（单元 + 真实站点） |
 | `test_translate_scope.py` | 翻译范围（只翻标题与摘要） |
+| `Output/文章清洗优化/Temp/`（本次新增，gitignored） | 文章清洗回归：`cache_html.py` 把真实页面缓存为固定基准；`compare.py` 对比噪音行/行长/耗时；`diff2.py` 逐行核对被删内容；`bench.py` 性能；`test_edge.py` 边界；`scoring_regression.py` 同一份 HTML 下评分与收录判定 A/B |
 | `scripts/summary_quality_report.py`（**入库**） | 摘要质量体检与改动前后回归：半句截断率、网页噪声率、英文粘连、摘要与正文栏重复率、长度分布、来源标记分布，并逐条打印变化的摘要 |
+
+**调文章清洗逻辑的流程**（与调评分同等对待，不要凭感觉调）：
+
+1. 跑 `cache_html.py` 把最近一次运行的页面缓存到本地，作为**固定基准**（抓取波动会让跨轮对比不公平）
+2. 跑 `compare.py` 看噪音行、行长、耗时三项指标
+3. 跑 `diff2.py` **逐行核对"旧版有、新版没有"的内容**，确认删掉的都是导航/相关文章/作者简介/聚合器元信息，**没有误伤正文**
+4. 跑 `scoring_regression.py` 做受控 A/B（同一份 HTML，唯一变量是清洗实现），确认**没有条目被移出「收录」**；被移出的条目必须逐条看
 
 **调摘要逻辑的流程**（与调评分同等对待，不要凭感觉调）：
 
