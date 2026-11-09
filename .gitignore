@@ -10,7 +10,8 @@ reports/
 config/secrets.json
 docs/server_deployment.md
 
-# Agent 工作区与本地缓存（会话产物、临时克隆、多媒体缓存，禁止入库）
+# Agent 指令与工作区本地文件（随交付环境提供，不入库）
+AGENTS.md
 .qagent/
 .cache/
 

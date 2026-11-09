@@ -441,4 +441,3 @@ python scripts/summary_quality_report.py 改前.json 改后.json
 
 - [设计文档](docs/superpowers/specs/2026-06-22-security-weekly-report-design.md) — 分类体系、标签维度、布局规范
 - [API 采集设计](docs/superpowers/specs/2026-06-30-api-collector-design.md) — API 采集通道设计
-- [AGENTS.md](AGENTS.md) — 项目记忆 / Agent 指令：架构、硬约束、**已定型的决策与原因**、自检清单（改动前建议先读）
