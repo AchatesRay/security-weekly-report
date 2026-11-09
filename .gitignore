@@ -10,5 +10,9 @@ reports/
 config/secrets.json
 docs/server_deployment.md
 
+# Agent 工作区与本地缓存（会话产物、临时克隆、多媒体缓存，禁止入库）
+.qagent/
+.cache/
+
 # 本地交付物与备份目录（含修复前的 git 历史备份，禁止入库）
 Output/
