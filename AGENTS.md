@@ -93,7 +93,7 @@ python scripts/summary_quality_report.py 改前.json 改后.json   # 摘要回�
 - 部署方式：本地打包 `tar` → `scp` → 远端解压；远端为 Linux，定时任务每周一 08:00 触发
 - 具体主机地址、目录、凭据见 `docs/server_deployment.md`（**gitignored，禁止提交**）
 - 打包排除 `.git/ .qagent/ data/ reports/ .env`；`data/`、`reports/`、`.env`、`venv` 保留远端版本
-- **不要修改远端任务调度系统（Hermes）自身的配置**
+- **不要修改远端任务调度系统自身的配置**
 
 ---
 
