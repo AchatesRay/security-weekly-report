@@ -23,7 +23,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import yaml
+from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
+
+from .image_localizer import localize_items, prune_assets
 
 from ..utils import (DATA_DIR, REPORTS_DIR, SETTINGS_PATH, SOURCES_PATH,
                      TEMPLATES_DIR, atomic_write, atomic_write_text, precompress)
@@ -187,6 +190,40 @@ def _strip_summary_prefix(body: str, summary: str, min_overlap: int = 60) -> str
     return rest if len(rest) >= min_overlap else ""
 
 
+def _strip_html_summary_prefix(html_text: str, summary: str,
+                                min_overlap: int = 60) -> str:
+    """结构化正文以摘要开头时剥掉第一个块（摘要栏已展示过）。
+
+    纯文本链路的 _strip_summary_prefix() 处理不了标签；这里只看第一个
+    块级节点的可见文字，匹配则整块移除，避免同一段话在页面上出现两遍。
+    """
+    if not html_text or not summary:
+        return html_text
+    key = re.sub(r"\s+", "", summary).rstrip("….。！？!?")
+    if len(key) < min_overlap:
+        return html_text
+    try:
+        soup = BeautifulSoup(html_text, "html.parser")
+    except Exception:
+        return html_text
+
+    first = soup.find(["p", "h1", "h2", "h3", "h4", "h5", "h6",
+                       "blockquote", "li"])
+    if first is None:
+        return html_text
+    text = re.sub(r"\s+", "", first.get_text())
+    if not text:
+        return html_text
+
+    head = key[:min(len(key), 120)]
+    if text.startswith(head[:40]) or head.startswith(text[:40]):
+        first.decompose()
+        rest = str(soup).strip()
+        visible = re.sub(r"<[^>]+>", "", rest).strip()
+        return rest if len(visible) >= min_overlap else ""
+    return html_text
+
+
 def build_json_items(items: list[dict]) -> list[dict]:
     """预处理条目为前端 JSON 格式"""
     result = []
@@ -203,10 +240,12 @@ def build_json_items(items: list[dict]) -> list[dict]:
 
         ai_summary = item.get("ai_summary_zh") or item.get("ai_summary") or ""
         full_body = item.get("full_body") or ""
+        content_html = item.get("content_html") or ""
         # 第二档：摘要栏与正文栏不再把同一段话显示两遍
         if ai_summary:
             full_body = _strip_summary_prefix(full_body, ai_summary)
             summary = _strip_summary_prefix(summary, ai_summary)
+            content_html = _strip_html_summary_prefix(content_html, ai_summary)
 
         result.append({
             "title": item.get("title_zh") or item.get("title", ""),
@@ -243,6 +282,9 @@ def build_json_items(items: list[dict]) -> list[dict]:
             "score_breakdown": item.get("score_breakdown") or {},
             "series_hit": bool(item.get("series_hit")),
             "full_body": full_body,
+            # 结构化正文（白名单净化后的 HTML）；前端优先渲染它，
+            # 为空时回退到按纯文本分段的旧逻辑
+            "content_html": content_html,
             # 供前端如实标注“未翻译”的内容（只看报告实际展示的标题与摘要；
             # 正文按设计不翻译，不参与该标记）
             "untranslated": bool(item.get("title_translated") is False
@@ -419,6 +461,18 @@ def generate_report():
     groups = group_by_category(accepted_items)
 
     all_items = accepted_items + review_items
+
+    # 正文图片本地化：只处理最终展示的条目（不给被过滤掉的文章白下载图片）。
+    # 失败时保留原外链，不影响报告生成。
+    try:
+        img_stats = localize_items(all_items)
+        if img_stats.get("items_with_html"):
+            print(f"[IMAGES] 正文图片: 本地化 {img_stats['images_localized']} 张，"
+                  f"复用 {img_stats['images_reused']} 张，失败 {img_stats['images_failed']} 张"
+                  f"（新增 {img_stats['bytes'] / 1024:.0f} KB）")
+    except Exception as e:  # noqa: BLE001 — 图片是锦上添花，不能拖垮报告
+        print(f"[IMAGES] 图片本地化失败，保留原链: {type(e).__name__}: {e}")
+
     json_items = build_json_items(all_items)
 
     total_count = len(accepted_items)
@@ -476,6 +530,14 @@ def generate_report():
 
     print(f"[REPORT] 周报生成完成: {LATEST_REPORT}")
     print(f"[REPORT] 共 {total_count} 条（其中 {review_count} 条待复核）")
+
+    # 清理过期图片目录（保留当前条目引用的目录，避免误删正在用的图）
+    try:
+        removed = prune_assets(keep_ids={i.get("item_id") for i in all_items if i.get("item_id")})
+        if removed:
+            print(f"[IMAGES] 清理过期图片目录 {removed} 个")
+    except Exception as e:  # noqa: BLE001
+        print(f"[IMAGES] 清理过期目录失败: {type(e).__name__}: {e}")
 
     _precompress_reports(week_str)
 

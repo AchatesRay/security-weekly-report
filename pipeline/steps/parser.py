@@ -7,6 +7,8 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 from ..utils import DATA_DIR, atomic_write, parse_datetime_utc
+from ..utils.html_sanitize import sanitize_fragment
+from ..utils.textnorm import item_id
 
 RAW_ITEMS_PATH = DATA_DIR / "raw_items.json"
 PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
@@ -52,6 +54,7 @@ def parse_entry(source_info: dict, entry) -> dict:
 
     # 正文 = <content:encoded>（若有，否则与摘要同）
     full_body = ""
+    raw = ""
     content_list = entry.get("content", [])
     if content_list and isinstance(content_list, list) and len(content_list) > 0:
         raw = content_list[0].get("value", "") if hasattr(content_list[0], "get") else str(content_list[0])
@@ -82,9 +85,14 @@ def parse_entry(source_info: dict, entry) -> dict:
         "parse_time": datetime.now().isoformat(),
     }
 
-    # content:encoded 与 description 不同时存为 full_body
+    # content:encoded 与 description 不同时存为 full_body；
+    # 同时保留一份净化后的结构化 HTML（RSS 自带全文的条目无需再抓页面）
     if full_body and full_body != summary:
         result["full_body"] = full_body
+        if raw:
+            content_html = sanitize_fragment(raw, link)
+            if content_html:
+                result["content_html"] = content_html
 
     return result
 
@@ -515,6 +523,9 @@ def parse_all() -> list[dict]:
                     })
         except Exception as e:
             print(f"  [PARSE ERROR] {source['source_name']} feed: {e}")
+
+    for item in all_items:
+        item["item_id"] = item_id(item.get("url", ""))
 
     unparsable = _normalize_item_dates(all_items)
     print(f"[PARSER] 解析完成: {len(all_items)} 条"

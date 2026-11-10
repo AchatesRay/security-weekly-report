@@ -31,10 +31,10 @@ DETAIL_END = "<!--DETAIL_PANEL_END-->"
 
 # 详情字段（按需从 data_*.json 加载，不内联到页面）
 DESKTOP_SKIP_FIELDS = frozenset({
-    'full_body', 'summary', 'ai_summary', 'scoring_matched',
+    'full_body', 'summary', 'ai_summary', 'scoring_matched', 'content_html',
 })
 MOBILE_SKIP_FIELDS = frozenset({
-    'full_body', 'summary', 'ai_summary', 'scoring_matched',
+    'full_body', 'summary', 'ai_summary', 'scoring_matched', 'content_html',
 })
 
 
@@ -109,7 +109,7 @@ def _inject_detail_loader(html: str) -> str:
   function loadBody(idx) {
     var item = window._currentItems && window._currentItems[idx];
     if (!item) return;
-    if (item.full_body && item.full_body.length > 100) {
+    if ((item.full_body && item.full_body.length > 100) || item.content_html) {
       if (typeof window._renderDetail === 'function') {
         try { window._renderDetail(item); } catch(e) { console.error('[Loader] render error:', e); }
       }
@@ -128,6 +128,7 @@ def _inject_detail_loader(html: str) -> str:
       item.full_body = fullItem.full_body;
       item.summary = fullItem.summary;
       item.ai_summary = fullItem.ai_summary;
+      item.content_html = fullItem.content_html;
       item.scoring_matched = fullItem.scoring_matched;
       if (_currentSel === idx && typeof window._renderDetail === 'function') {
         try { window._renderDetail(item); }

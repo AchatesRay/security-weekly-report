@@ -5,6 +5,7 @@
 两边规则一旦漂移，就会出现“去重认为不同、台账认为相同”的静默不一致。
 """
 
+import hashlib
 import re
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -39,6 +40,18 @@ def normalize_title(title: str) -> str:
     text = _BRACKET_RE.sub(" ", text)
     text = _NON_WORD_RE.sub(" ", text)
     return " ".join(text.split())
+
+
+def item_id(url: str) -> str:
+    """稳定条目 ID：规范化 URL 的 sha1 前 16 位。
+
+    用途：图片目录、导出幂等台账、跨系统主键。URL 规范化口径与去重一致，
+    带 utm_* 参数或末尾斜杠的同一篇文章会得到同一个 ID。
+    """
+    key = normalize_url(url) or (url or "").strip()
+    if not key:
+        return ""
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
 
 
 def normalize_url(url: str) -> str:

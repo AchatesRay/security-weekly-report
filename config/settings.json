@@ -98,5 +98,13 @@
   },
   "fulltext": {
     "fallback_enabled": true
+  },
+  "images": {
+    "enabled": true,
+    "max_bytes": 5242880,
+    "max_per_article": 12,
+    "timeout": 10,
+    "concurrency": 4,
+    "retention_days": 56
   }
 }

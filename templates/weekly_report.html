@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 第二道保险：正文 HTML 已在服务端白名单净化，这里再限制可加载的资源类型 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: http: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'none'">
 <title>网络安全周报 · {{ week_str }}</title>
 <!-- 字体使用 微软雅黑 -->
 <style>
@@ -44,6 +46,22 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .nav-count { font-size:12px; color:var(--text-sidebar); opacity:0.6; font-variant-numeric:tabular-nums; }
 .nav-item.active .nav-count { opacity:0.9; }
 .sidebar-footer { padding:12px 16px; border-top:1px solid var(--border-light); font-size:10px; color:var(--text-muted); }
+.sidebar-fav-link { display:flex; align-items:center; gap:8px; margin:2px 8px 6px; padding:8px 10px; border-radius:var(--radius-sm); color:var(--text-sidebar); text-decoration:none; font-size:13px; font-weight:500; transition:background .15s; }
+.sidebar-fav-link:hover { background:var(--sidebar-hover); }
+.sidebar-fav-link .fav-star { color:#f59e0b; font-size:14px; }
+.sidebar-fav-count { margin-left:auto; font-size:11px; line-height:1; padding:3px 7px; border-radius:10px; background:var(--accent-soft); color:var(--accent); font-variant-numeric:tabular-nums; }
+
+/* 收藏按钮 */
+.detail-actions { display:flex; align-items:center; gap:10px; margin:-4px 0 16px; }
+.detail-fav-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border:1px solid var(--border); border-radius:20px; background:var(--surface); color:var(--text-secondary); font-size:13px; font-family:inherit; cursor:pointer; transition:background .15s,border-color .15s,color .15s; }
+.detail-fav-btn:hover { border-color:#f59e0b; color:#b45309; background:rgba(245,158,11,0.06); }
+.detail-fav-btn.active { border-color:#f59e0b; color:#b45309; background:rgba(245,158,11,0.12); }
+.detail-fav-btn:disabled { opacity:.6; cursor:default; }
+.detail-fav-tip { font-size:12px; color:var(--text-muted); }
+
+/* 轻提示 */
+.toast { position:fixed; left:50%; bottom:34px; transform:translateX(-50%) translateY(10px); max-width:80vw; padding:10px 18px; border-radius:8px; background:rgba(26,29,41,0.92); color:#fff; font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s,transform .2s; z-index:300; }
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 .sidebar-admin-link { display:flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:4px; color:var(--text-muted); text-decoration:none; font-size:14px; position:absolute; bottom:12px; right:12px; transition:opacity .15s,background .15s; }
 .sidebar-admin-link:hover { opacity:0.8; background:var(--sidebar-hover); }
 .sidebar { position:relative; }
@@ -131,6 +149,51 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .detail-summary a {
   color:var(--accent); text-underline-offset:2px;
 }
+/* 结构化正文（服务端白名单净化后的 HTML）：恢复标题/列表/代码/表格/图片的排版 */
+.detail-summary.detail-rich { font-size:15.5px; line-height:1.85; }
+.detail-summary.detail-rich p { text-indent:0; margin:0 0 1em; }
+.detail-summary.detail-rich h2,
+.detail-summary.detail-rich h3,
+.detail-summary.detail-rich h4 {
+  font-family:"Microsoft YaHei","微软雅黑",sans-serif; color:var(--text);
+  font-weight:700; line-height:1.45; margin:1.7em 0 .65em;
+}
+.detail-summary.detail-rich h1 { font-size:23px; padding-left:12px; border-left:3px solid var(--accent); }
+.detail-summary.detail-rich h2 { font-size:21px; padding-left:12px; border-left:3px solid var(--accent); }
+.detail-summary.detail-rich h3 { font-size:18px; }
+.detail-summary.detail-rich h4 { font-size:16px; color:var(--text-secondary); }
+.detail-summary.detail-rich ul,
+.detail-summary.detail-rich ol { margin:0 0 1em; padding-left:1.7em; }
+.detail-summary.detail-rich li { margin-bottom:.35em; }
+.detail-summary.detail-rich blockquote {
+  margin:0 0 1em; padding:.2em 0 .2em 1em;
+  border-left:3px solid var(--border); color:var(--text-muted);
+}
+.detail-summary.detail-rich pre {
+  margin:0 0 1em; padding:14px 16px; overflow-x:auto;
+  background:#0f172a; color:#e2e8f0; border-radius:var(--radius-md);
+  font-size:13px; line-height:1.65; text-indent:0;
+}
+.detail-summary.detail-rich pre code { background:none; color:inherit; padding:0; font-size:inherit; }
+.detail-summary.detail-rich table {
+  width:100%; margin:0 0 1.2em; border-collapse:collapse;
+  font-size:14px; line-height:1.6;
+}
+.detail-summary.detail-rich th,
+.detail-summary.detail-rich td {
+  border:1px solid var(--border); padding:8px 10px;
+  text-align:left; vertical-align:top;
+}
+.detail-summary.detail-rich th { background:var(--bg); font-weight:600; }
+.detail-summary.detail-rich img {
+  display:block; max-width:100%; height:auto; margin:1.1em auto;
+  border-radius:var(--radius-md); background:var(--bg);
+}
+.detail-summary.detail-rich figure { margin:0 0 1.2em; }
+.detail-summary.detail-rich figcaption {
+  margin-top:6px; font-size:12px; color:var(--text-muted); text-align:center;
+}
+.detail-summary.detail-rich hr { border:0; border-top:1px solid var(--border); margin:1.6em 0; }
 .detail-matched-kw { margin-top:24px; padding:16px 20px; background:var(--bg); border-radius:var(--radius-md); }
 .detail-matched-kw-header { font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
 .detail-matched-kw-group { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:6px; }
@@ -263,6 +326,11 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
         <span class="nav-count" id="navReviewCount">{{ review_count }}</span>
       </div>
     </nav>
+    <a href="/bookmarks" class="sidebar-fav-link" id="sidebarFavLink" title="查看我的收藏">
+      <span class="fav-star">★</span>
+      <span>我的收藏</span>
+      <span class="sidebar-fav-count" id="favCount">0</span>
+    </a>
     {% if source_alerts %}
     <div class="source-alerts-bar{% if source_alerts | selectattr('severity', 'equalto', 'high') | list %} has-high{% endif %}" id="sourceAlertsBar" onclick="toggleSourceAlerts()">
       <span class="source-alerts-bar-icon">&#x26A0;</span>
@@ -315,6 +383,10 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
     <div class="detail-content" id="detailContent" style="display:none">
       <div class="detail-meta" id="detailMeta"></div>
       <h1 class="detail-title" id="detailTitle"></h1>
+      <div class="detail-actions" id="detailActions" style="display:none">
+        <button type="button" class="detail-fav-btn" id="detailFavBtn">☆ 收藏</button>
+        <span class="detail-fav-tip" id="detailFavTip"></span>
+      </div>
       <div class="detail-divider"></div>
       <div class="detail-ai-summary" id="detailAiSummary" style="display:none">
         <div class="detail-ai-summary-header">摘要<span class="detail-ai-summary-tag" id="detailAiSummaryTag"></span></div>
@@ -332,6 +404,8 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
   <!--DETAIL_PANEL_END-->
 
 </div>
+
+<div class="toast" id="toast"></div>
 
 <script>
 // ── Data ──
@@ -376,6 +450,19 @@ var dLink = document.getElementById('detailLink');
 var loading = document.getElementById('loading');
 var navAllCount = document.getElementById('navAllCount');
 var sidebarFooter = document.getElementById('sidebarFooter');
+var favLink = document.getElementById('sidebarFavLink');
+var favCountEl = document.getElementById('favCount');
+var detailActions = document.getElementById('detailActions');
+var detailFavBtn = document.getElementById('detailFavBtn');
+var detailFavTip = document.getElementById('detailFavTip');
+var toastEl = document.getElementById('toast');
+
+// ── 收藏状态 ──
+// 只有通过管理服务打开周报时才能保存到服务器；file:// 直接打开时隐藏入口
+var _favEnabled = window.location.protocol !== 'file:';
+var _favMap = {};          // url => 收藏元信息
+var _favLoaded = false;
+var _favCurrent = null;    // 当前详情对应的条目
 
 function esc(s) { return (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escAttr(s) { return (''+s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
@@ -506,7 +593,18 @@ function _renderDetail(item) {
       ? (item.ai_summary_kind === 'fallback' ? '原文节选' : '自动提炼')
       : '';
   }
-  dSummary.innerHTML = formatSummary(item.full_body || item.summary);
+  if (item.content_html && item.content_html.trim()) {
+    // 结构化正文：保留原文的标题/列表/代码/表格/图片
+    dSummary.className = 'detail-summary detail-rich';
+    dSummary.innerHTML = item.content_html;
+    dSummary.querySelectorAll('img').forEach(function(im) {
+      im.addEventListener('error', function() { this.style.display = 'none'; });
+    });
+  } else {
+    // 没有结构化正文（未抓到全文）时退回旧的纯文本分段
+    dSummary.className = 'detail-summary';
+    dSummary.innerHTML = formatSummary(item.full_body || item.summary);
+  }
   dLink.href = item.url;
 
   var tags = '';
@@ -571,7 +669,118 @@ function _renderDetail(item) {
       + '<div class="detail-score-header">入选依据</div>' + sbRows.join('') + '</div>';
   }
   dMatchedKw.innerHTML = mHtml;
+
+  _favCurrent = item;
+  _syncFavBtn(item);
 }
+
+// ── 收藏交互 ──
+function _favApi(method, url, body) {
+  var opts = {
+    method: method,
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  };
+  if (body !== undefined) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  return fetch(url, opts).then(function(resp) {
+    return resp.json().catch(function() { return {}; }).then(function(data) {
+      if (!resp.ok || data.ok === false) {
+        throw new Error(data.error || ('请求失败（' + resp.status + '）'));
+      }
+      return data;
+    });
+  });
+}
+
+function _toast(message) {
+  if (!toastEl) return;
+  toastEl.textContent = message;
+  toastEl.classList.add('show');
+  clearTimeout(_toast._timer);
+  _toast._timer = setTimeout(function() { toastEl.classList.remove('show'); }, 2600);
+}
+
+function _favPayload(item) {
+  return {
+    url: item.url, title: item.title, source_name: item.source_name,
+    published_date: item.published_date, category: item.category,
+    content_type: item.content_type, source_type: item.source_type,
+    summary: item.summary, ai_summary: item.ai_summary,
+    full_body: item.full_body, content_html: item.content_html,
+    scoring_matched: item.scoring_matched, source_hue: item.source_hue,
+    confidence_score: item.confidence_score, raw_score: item.raw_score,
+    week: _currentWeek
+  };
+}
+
+function _syncFavBtn(item) {
+  if (!detailActions || !detailFavBtn) return;
+  if (!_favEnabled || !item) {
+    detailActions.style.display = 'none';
+    return;
+  }
+  detailActions.style.display = 'flex';
+  var fav = item.url ? _favMap[item.url] : null;
+  detailFavBtn.disabled = !_favLoaded;
+  detailFavBtn.textContent = fav ? '★ 已收藏' : '☆ 收藏';
+  detailFavBtn.classList.toggle('active', !!fav);
+  detailFavTip.textContent = !_favLoaded ? '正在同步收藏状态…'
+    : (fav ? ('收藏于 ' + String(fav.saved_at || '').slice(0, 10)) : '');
+}
+
+function _updateFavUi() {
+  if (favLink) favLink.style.display = _favEnabled ? '' : 'none';
+  window._favCount = Object.keys(_favMap).length;
+  if (favCountEl) favCountEl.textContent = window._favCount;
+  if (window._currentItems && _favCurrent) _syncFavBtn(_favCurrent);
+}
+
+function loadFavoriteState() {
+  if (!_favEnabled) { _updateFavUi(); return; }
+  _favApi('GET', '/api/favorites').then(function(data) {
+    _favMap = {};
+    (data.items || []).forEach(function(it) { if (it.url) _favMap[it.url] = it; });
+    _favLoaded = true;
+    _updateFavUi();
+  }).catch(function() {
+    // 接口不可用（未启动服务/未登录）时隐藏入口，不影响周报阅读
+    _favEnabled = false;
+    _favLoaded = false;
+    _updateFavUi();
+  });
+}
+
+// 用事件委托绑定：手机版详情面板是后创建的，直接绑按钮会绑不到
+document.addEventListener('click', function(e) {
+    var btn = e.target && e.target.closest ? e.target.closest('#detailFavBtn') : null;
+    if (!btn) return;
+    var item = _favCurrent;
+    if (!_favEnabled || !item || !_favLoaded) return;
+    var existing = item.url ? _favMap[item.url] : null;
+    if (existing) {
+      if (!confirm('取消收藏这篇文章？')) return;
+      detailFavBtn.disabled = true;
+      _favApi('DELETE', '/api/favorites/' + existing.id).then(function() {
+        delete _favMap[item.url];
+        _updateFavUi();
+        _toast('已取消收藏');
+      }).catch(function(err) {
+        _toast('取消收藏失败：' + err.message);
+      }).then(function() { detailFavBtn.disabled = false; });
+      return;
+    }
+    detailFavBtn.disabled = true;
+    _favApi('POST', '/api/favorites', { item: _favPayload(item) }).then(function(data) {
+      if (data.item && data.item.url) _favMap[data.item.url] = data.item;
+      _updateFavUi();
+      _toast(data.created ? '已收藏，可在“我的收藏”中修改标签' : '已更新收藏');
+    }).catch(function(err) {
+      _toast('收藏失败：' + err.message);
+    }).then(function() { detailFavBtn.disabled = false; });
+});
 
 function selectItem(idx) {
   _currentSel = idx;
@@ -706,6 +915,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
   renderList();
+  loadFavoriteState();
 });
 </script>
 </body>

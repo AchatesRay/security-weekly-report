@@ -23,6 +23,7 @@
 
 import json
 import os
+import re
 import sys
 import gzip
 import hmac
@@ -55,6 +56,7 @@ _SCORING_KEYWORDS_PATH = None
 _PIPELINE_LOG_PATH = None
 
 _pipeline_proc: "subprocess.Popen | None" = None
+_FAVORITES = None          # FavoritesStore，在 _init_paths 中创建
 
 # ── 常量 ──
 MAX_BODY_BYTES = 4 * 1024 * 1024          # 单个请求体上限 4MB
@@ -62,14 +64,14 @@ MAX_AUTH_FAILURES = 10                    # 同一 IP 连续认证失败上限
 AUTH_LOCKOUT_SECONDS = 300                # 触发上限后的锁定时长
 
 # 静态文件白名单：仅这些前缀/文件可被直接下载
-_STATIC_ALLOW_EXACT = frozenset({"server/config.html"})
+_STATIC_ALLOW_EXACT = frozenset({"server/config.html", "server/bookmarks.html"})
 _STATIC_ALLOW_PREFIXES = ("reports/", "pipeline/assets/")
 
 
 def _init_paths(project_dir: str | None = None):
     global _PROJECT_DIR, _CONFIG_DIR, _DATA_DIR, _REPORT_DIR
     global _SETTINGS_PATH, _SOURCES_PATH, _LLM_PATH
-    global _PIPELINE_LOG_PATH, _SCORING_KEYWORDS_PATH
+    global _PIPELINE_LOG_PATH, _SCORING_KEYWORDS_PATH, _FAVORITES
 
     _PROJECT_DIR = Path(project_dir).resolve() if project_dir else SERVER_DIR.parent
     # 确保 pipeline 模块可导入
@@ -83,6 +85,21 @@ def _init_paths(project_dir: str | None = None):
     _LLM_PATH = _CONFIG_DIR / "llm_config.yaml"
     _SCORING_KEYWORDS_PATH = _CONFIG_DIR / "scoring_keywords.json"
     _PIPELINE_LOG_PATH = _DATA_DIR / "pipeline_run.log"
+
+    # 收藏模块：独立目录 + 规则文件；图片上限沿用 settings.images.max_bytes
+    from favorites import FavoritesStore
+    max_image_bytes = 5 * 1024 * 1024
+    try:
+        images_cfg = json.loads(_SETTINGS_PATH.read_text(encoding="utf-8")).get("images") or {}
+        max_image_bytes = int(images_cfg.get("max_bytes", max_image_bytes))
+    except (OSError, ValueError, TypeError):
+        pass
+    _FAVORITES = FavoritesStore(
+        favorites_dir=_DATA_DIR / "favorites",
+        rules_path=_CONFIG_DIR / "favorite_tags.json",
+        reports_dir=_REPORT_DIR,
+        max_image_bytes=max_image_bytes,
+    )
 
 
 # ── Read/Write helpers ──
@@ -141,6 +158,15 @@ def send_json(handler, data, status=200):
         handler.wfile.write(body)
     except OSError:
         pass  # 客户端断开连接，忽略
+
+
+_FAVORITE_PATH_RE = re.compile(r"^/api/favorites/([0-9a-f]{16})$")
+
+
+def _favorite_id_from_path(path: str) -> str | None:
+    """从 /api/favorites/<16 位编号> 中取出编号；不匹配返回 None"""
+    match = _FAVORITE_PATH_RE.match(path or "")
+    return match.group(1) if match else None
 
 
 def read_body(handler) -> str:
@@ -220,6 +246,10 @@ _ALLOWED_SETTINGS_SPEC = {
               "max_per_host_concurrency": int},
     # 正文抽取兜底开关：关闭后完全走现有自研五层清洗
     "fulltext": {"fallback_enabled": bool},
+    # 正文图片本地化：开关、体积/数量/并发限制与本地保留天数
+    "images": {"enabled": bool, "max_bytes": int, "max_per_article": int,
+               "timeout": (int, float), "concurrency": int,
+               "retention_days": int},
     "translate": {"timeout": (int, float), "fields": list},
     # 摘要长度（报告「摘要」栏）。short_categories 里的分类用 short_max_chars，
     # 其余用 max_chars；min_chars 低于则退化为"原文节选"。
@@ -292,6 +322,18 @@ def sanitize_settings(raw: dict) -> dict:
         dval = dedup.get(dkey)
         if dval is not None and not (lo <= dval <= hi):
             raise ConfigValidationError(f"dedup.{dkey} 必须在 {lo}-{hi} 之间")
+
+    images_cfg = out.get("images", {})
+    for ikey, lo, hi in (("max_bytes", 64 * 1024, 20 * 1024 * 1024),
+                         ("max_per_article", 0, 50),
+                         ("concurrency", 1, 16),
+                         ("retention_days", 1, 365)):
+        ival = images_cfg.get(ikey)
+        if ival is not None and not (lo <= ival <= hi):
+            raise ConfigValidationError(f"images.{ikey} 必须在 {lo}-{hi} 之间")
+    itimeout = images_cfg.get("timeout")
+    if itimeout is not None and not (1 <= itimeout <= 60):
+        raise ConfigValidationError("images.timeout 必须在 1-60 之间")
 
     fetch_cfg = out.get("fetch", {})
     interval = fetch_cfg.get("min_host_interval_seconds")
@@ -507,7 +549,7 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
     def do_OPTIONS(self):
         # 管理页面与接口同源，无需跨域许可；不再回 Access-Control-Allow-Origin: *
         self.send_response(204)
-        self.send_header("Allow", "GET, PUT, POST, OPTIONS")
+        self.send_header("Allow", "GET, PUT, POST, DELETE, OPTIONS")
         self.end_headers()
 
     def _safe_call(self, fn):
@@ -713,6 +755,9 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         self._safe_call(self._do_post_impl)
 
+    def do_DELETE(self):
+        self._safe_call(self._do_delete_impl)
+
     def _do_get_impl(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/")
@@ -734,6 +779,13 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(302)
             self.send_header("Location", "/server/config.html")
             self.end_headers()
+            return
+
+        # /bookmarks 快捷路径（收藏页）
+        if path == "/bookmarks":
+            bookmarks = _PROJECT_DIR / "server" / "bookmarks.html"
+            if not self._serve_file(bookmarks):
+                self.send_error(404, "Not Found")
             return
 
         # /config.html 快捷路径
@@ -776,6 +828,17 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/api/config/scoring_keywords/save":
             return self._put_scoring_keywords()
 
+        # ── 收藏 API ──
+        if path == "/api/favorites":
+            return self._get_favorites()
+        if path == "/api/favorites/export":
+            return self._export_favorites(parsed)
+        if path.startswith("/api/favorites/assets/"):
+            return self._get_favorite_asset(path)
+        favorite_id = _favorite_id_from_path(path)
+        if favorite_id:
+            return self._get_favorite(favorite_id)
+
         # ── favicon.ico ──
         if path == "/favicon.ico":
             self.send_response(204)
@@ -802,6 +865,10 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/api/config/scoring_keywords":
             return self._put_scoring_keywords()
 
+        favorite_id = _favorite_id_from_path(path)
+        if favorite_id:
+            return self._put_favorite(favorite_id)
+
         send_json(self, {"error": "Not found"}, 404)
 
     def _do_post_impl(self):
@@ -810,6 +877,18 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/pipeline/run":
             return self._run_pipeline()
+        if path == "/api/favorites":
+            return self._post_favorite()
+
+        send_json(self, {"error": "Not found"}, 404)
+
+    def _do_delete_impl(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip("/")
+
+        favorite_id = _favorite_id_from_path(path)
+        if favorite_id:
+            return self._delete_favorite(favorite_id)
 
         send_json(self, {"error": "Not found"}, 404)
 
@@ -972,6 +1051,144 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         t.start()
 
         send_json(self, {"ok": True, "message": "管道已启动"})
+
+    # ── 收藏 API ──
+
+    def _require_same_origin_write(self) -> bool:
+        """收藏的写接口要求同源 + 自定义头，阻断跨站伪造请求"""
+        if self.headers.get("X-Requested-With") != "XMLHttpRequest":
+            send_json(self, {"ok": False, "error": "缺少同源请求标识"}, 403)
+            return False
+        origin = self.headers.get("Origin")
+        if origin:
+            try:
+                origin_host = urllib.parse.urlsplit(origin).netloc
+            except ValueError:
+                origin_host = ""
+            if origin_host != self.headers.get("Host", ""):
+                send_json(self, {"ok": False, "error": "拒绝跨站请求"}, 403)
+                return False
+        return True
+
+    @staticmethod
+    def _read_json_body(handler) -> dict:
+        raw = read_body(handler)
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+        except ValueError as e:
+            raise ConfigValidationError(f"JSON 格式错误: {e}") from e
+        if not isinstance(data, dict):
+            raise ConfigValidationError("请求体必须是 JSON 对象")
+        return data
+
+    def _get_favorites(self):
+        items, tags = _FAVORITES.list_meta()
+        send_json(self, {"ok": True, "total": len(items), "items": items, "tags": tags})
+
+    def _get_favorite(self, favorite_id: str):
+        record = _FAVORITES.get(favorite_id)
+        if record is None:
+            send_json(self, {"ok": False, "error": "收藏不存在"}, 404)
+            return
+        send_json(self, {"ok": True, "item": record})
+
+    def _post_favorite(self):
+        if not self._require_same_origin_write():
+            return
+        payload = self._read_json_body(self)
+        item = payload.get("item")
+        if not isinstance(item, dict):
+            raise ConfigValidationError("缺少 item 字段")
+        try:
+            record, created = _FAVORITES.save(item)
+        except ValueError as e:
+            raise ConfigValidationError(str(e)) from e
+        send_json(self, {"ok": True, "created": created,
+                         "item": _FAVORITES.meta(record)}, 201 if created else 200)
+
+    def _put_favorite(self, favorite_id: str):
+        if not self._require_same_origin_write():
+            return
+        payload = self._read_json_body(self)
+        tags = payload.get("tags") if "tags" in payload else None
+        note = payload.get("note") if "note" in payload else None
+        if tags is not None and not isinstance(tags, list):
+            raise ConfigValidationError("tags 必须是数组")
+        if note is not None and not isinstance(note, str):
+            raise ConfigValidationError("note 必须是字符串")
+        try:
+            record = _FAVORITES.update(favorite_id, tags=tags, note=note)
+        except KeyError:
+            send_json(self, {"ok": False, "error": "收藏不存在"}, 404)
+            return
+        send_json(self, {"ok": True, "item": _FAVORITES.meta(record)})
+
+    def _delete_favorite(self, favorite_id: str):
+        if not self._require_same_origin_write():
+            return
+        if not _FAVORITES.delete(favorite_id):
+            send_json(self, {"ok": False, "error": "收藏不存在"}, 404)
+            return
+        send_json(self, {"ok": True, "removed": True})
+
+    def _get_favorite_asset(self, path: str):
+        raw = path[len("/api/favorites/assets/"):]
+        parts = raw.split("/")
+        if len(parts) != 2:
+            self.send_error(404, "Not Found")
+            return
+        favorite_id, filename = urllib.parse.unquote(parts[0]), urllib.parse.unquote(parts[1])
+        try:
+            asset = _FAVORITES.asset_path(favorite_id, filename)
+        except ValueError:
+            self.send_error(404, "Not Found")
+            return
+        if not asset.is_file():
+            self.send_error(404, "Not Found")
+            return
+        try:
+            data = asset.read_bytes()
+        except OSError:
+            self.send_error(404, "Not Found")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", _FAVORITES.asset_content_type(filename))
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "private, max-age=31536000")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        try:
+            self.wfile.write(data)
+        except OSError:
+            pass
+
+    def _export_favorites(self, parsed):
+        query = urllib.parse.parse_qs(parsed.query)
+        fmt = (query.get("format") or ["md"])[0].lower()
+        stamp = datetime.now().strftime("%Y%m%d")
+        if fmt == "json":
+            body = _FAVORITES.export_json().encode("utf-8")
+            ctype = "application/json; charset=utf-8"
+            filename = f"favorites_{stamp}.json"
+        elif fmt in ("md", "markdown"):
+            body = _FAVORITES.export_markdown().encode("utf-8")
+            ctype = "text/markdown; charset=utf-8"
+            filename = f"favorites_{stamp}.md"
+        else:
+            send_json(self, {"ok": False, "error": "不支持的导出格式"}, 400)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except OSError:
+            pass
 
 
 class ConfigHTTPServer(http.server.ThreadingHTTPServer):

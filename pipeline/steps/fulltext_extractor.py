@@ -56,6 +56,9 @@ except ImportError:  # pragma: no cover
 
 from ..utils import (DATA_DIR, SETTINGS_PATH, UnsafeURLError, atomic_write,
                      safe_get)
+from ..utils.html_sanitize import (count_blocks, count_images,
+                                   fragment_text_length, sanitize_fragment)
+from ..utils.textnorm import item_id
 
 PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
 
@@ -781,6 +784,127 @@ def _looks_like_navigation(text: str) -> bool:
     return short / len(lines) > SECOND_OPINION_SHORT_LINE_RATIO
 
 
+_DATE_ONLY_RE = re.compile(
+    r"^\s*\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?\s*(?:\d{1,2}:\d{2})?\s*$")
+
+
+def _clean_leading_blocks(container, title: str = "") -> None:
+    """去掉正文开头的重复标题与开头元信息（日期、栏目名、作者行）。
+
+    纯文本链路靠行级噪声过滤器处理这些内容；HTML 链路保留结构后没法按行删，
+    因此在容器层面做一次保守清理：只动开头连续 ≤3 个短块。
+    """
+    if title:
+        target = re.sub(r"\s+", "", title)
+        for heading in container.find_all(["h1", "h2"]):
+            if re.sub(r"\s+", "", heading.get_text()) == target:
+                heading.decompose()
+                break
+
+    removed = 0
+    for child in list(container.children):
+        if removed >= 3:
+            break
+        if not isinstance(child, Tag):
+            continue
+        text = child.get_text(" ", strip=True)
+        if not text:
+            child.decompose()
+            continue
+
+        # 只有分类/标签链接的开头段落（面包屑）
+        only_link = child.find("a")
+        if (child.name == "p" and only_link is not None
+                and len(text) <= 40
+                and re.search(r"/(?:category|tag|topic|channel)/",
+                              only_link.get("href") or "", re.IGNORECASE)):
+            child.decompose()
+            removed += 1
+            continue
+
+        looks_meta = (_DATE_ONLY_RE.match(text) or _is_metadata_run(text)
+                      or re.search(r"\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}", text)
+                      or text in ("登录", "注册", "分享", "收藏"))
+        if len(text) <= 40 and looks_meta:
+            child.decompose()
+            removed += 1
+            continue
+        break
+
+
+def _custom_content_html(html_text: str, base_url: str, title: str = "") -> str:
+    """复用自研“定位正文 → 去模板”的结果，序列化为净化后的 HTML。
+
+    与纯文本链路共用同一套容器选择与去噪规则，保证“哪种抽取结果被信任”
+    在两个视图上口径一致；只有最后的输出形式不同（text / html）。
+    """
+    try:
+        soup = BeautifulSoup(html_text, "lxml")
+        _prepare_pre_blocks(soup)
+        guarded = _locate_content(soup)
+        _remove_boilerplate_elements(soup, _protected_ids(guarded))
+        container = _locate_content(soup) or guarded or soup.body or soup
+        try:
+            _clean_leading_blocks(container, title)
+        except Exception:
+            pass
+        return sanitize_fragment(str(container), base_url)
+    except Exception:
+        return ""
+
+
+def _trafilatura_html(html_text: str, base_url: str) -> str:
+    """trafilatura 的 HTML 输出（含图片/链接/表格），同样过白名单净化。"""
+    if trafilatura is None:
+        return ""
+    try:
+        out = trafilatura.extract(
+            html_text,
+            output_format="html",
+            include_comments=False,
+            include_tables=True,
+            include_images=True,
+            include_links=True,
+            include_formatting=True,
+            favor_recall=True,
+            url=base_url or None,
+        )
+    except Exception:
+        return ""
+    return sanitize_fragment(out, base_url) if out else ""
+
+
+def extract_html_cascade(html_text: str, base_url: str = "",
+                         title: str = "") -> tuple[str, str]:
+    """返回 (结构化正文 HTML, 策略标签)。
+
+    优先相信自研结果（中文站/论坛排版更稳）；只有“自研结果偏短或明显缺图”
+    且 trafilatura 结果显著更好时才采用后者——与纯文本第二意见同一思路。
+    """
+    custom = _custom_content_html(html_text, base_url, title)
+    if not html_text:
+        return custom, "custom"
+
+    custom_len = fragment_text_length(custom)
+    custom_blocks = count_blocks(custom)
+    if custom_len >= 300 and custom_blocks >= 3:
+        return custom, "custom"
+    if not _fallback_enabled():
+        return custom, "custom"
+
+    rescued = _trafilatura_html(html_text, base_url)
+    rescued_len = fragment_text_length(rescued)
+    if rescued_len < 300:
+        return custom, "custom"
+
+    # 文本明显更长，或长度接近但多救回至少两张图（图站常见）
+    if (rescued_len >= custom_len * 1.2
+            or (count_images(rescued) >= count_images(custom) + 2
+                and rescued_len >= custom_len * 0.8)):
+        return rescued, "trafilatura"
+    return custom, "custom"
+
+
 def extract_text_cascade(html_text: str) -> tuple[str, str]:
     """自研抽取 + trafilatura 第二意见，返回 (正文, 策略标签)。
 
@@ -800,10 +924,11 @@ def extract_text_cascade(html_text: str) -> tuple[str, str]:
     return custom, "custom"
 
 
-def fetch_article_text(url: str) -> tuple[str | None, str, str]:
-    """抓取文章 URL 并提取纯文本。
+def fetch_article_content(url: str, title: str = "") -> tuple[str | None, str, str, str, str]:
+    """抓取文章并同时产出纯文本与结构化 HTML。
 
-    返回 (正文或 None, 状态说明, 抽取策略)。状态用于统计被安全策略拦下的条目数。
+    返回 (正文文本或 None, 正文 HTML, 状态说明, 文本抽取策略, HTML 抽取策略)。
+    HTML 只用于展示与后续导出；评分/摘要/指纹仍走纯文本，避免行为变化。
     """
     try:
         resp = safe_get(
@@ -813,24 +938,36 @@ def fetch_article_text(url: str) -> tuple[str | None, str, str]:
             max_bytes=MAX_RESPONSE_BYTES,
         )
     except UnsafeURLError as e:
-        return None, f"blocked:{e}", "custom"
+        return None, "", f"blocked:{e}", "custom", "custom"
     except Exception as e:
-        return None, f"error:{type(e).__name__}", "custom"
+        return None, "", f"error:{type(e).__name__}", "custom", "custom"
 
     content_type = resp.header("content-type", "")
     if "html" not in content_type.lower():
-        return None, "skipped_content_type", "custom"
+        return None, "", "skipped_content_type", "custom", "custom"
 
     text, strategy = extract_text_cascade(resp.text)
+    content_html, html_source = extract_html_cascade(resp.text, resp.url or url, title)
+
     if len(text) < 200:
-        return None, "too_short", strategy
-    return text[:MAX_BODY_LENGTH], ("truncated" if resp.truncated else "ok"), strategy
+        # 文本抽取失败但 HTML 成功时，用 HTML 的可见文字兜底，避免整条丢弃
+        if fragment_text_length(content_html) >= 200:
+            try:
+                text = BeautifulSoup(content_html, "lxml").get_text("\n")
+            except Exception:
+                text = ""
+        if len(text) < 200:
+            return None, "", "too_short", strategy, html_source
+
+    return (text[:MAX_BODY_LENGTH], content_html,
+            ("truncated" if resp.truncated else "ok"), strategy, html_source)
 
 
-def _fetch_one(item: dict) -> tuple[dict, str | None, str, str]:
+def _fetch_one(item: dict) -> tuple[dict, str | None, str, str, str, str]:
     url = item.get("url", "") or ""
-    body, status, strategy = fetch_article_text(url)
-    return item, body, status, strategy
+    body, content_html, status, strategy, html_source = fetch_article_content(
+        url, item.get("title", "") or "")
+    return item, body, content_html, status, strategy, html_source
 
 
 def run():
@@ -865,11 +1002,14 @@ def run():
             futures = [pool.submit(_fetch_one, it) for it in targets]
             done = 0
             for fut in as_completed(futures):
-                item, body, status, strategy = fut.result()
+                item, body, content_html, status, strategy, html_source = fut.result()
                 done += 1
                 key = status.split(":", 1)[0]
                 status_counter[key] = status_counter.get(key, 0) + 1
                 strategy_counter[strategy] = strategy_counter.get(strategy, 0) + 1
+                if content_html:
+                    strategy_counter["html:" + html_source] = (
+                        strategy_counter.get("html:" + html_source, 0) + 1)
                 if key == "blocked":
                     blocked_count += 1
                     print(f"  [FULLTEXT] 已拦截不安全链接: {item.get('url','')[:80]}"
@@ -880,12 +1020,20 @@ def run():
                     item["summary"] = body
                     item["fulltext_fetched"] = True
                     item["extract_strategy"] = strategy
+                    if content_html:
+                        item["content_html"] = content_html
+                        item["content_html_source"] = html_source
                     fetched_count += 1
                 else:
                     item["fulltext_fetched"] = False
 
                 if done % 20 == 0:
                     print(f"  [FULLTEXT] 进度: {done}/{len(targets)}")
+
+    # 条目稳定主键：图片目录与后续导出幂等都要用，缺失时补算
+    for item in items:
+        if not item.get("item_id"):
+            item["item_id"] = item_id(item.get("url", ""))
 
     atomic_write(PARSED_ITEMS_PATH, items, indent=2)
 

@@ -105,6 +105,10 @@
       + '<div class="detail-content" id="detailContent" style="display:none">'
         + '<div class="detail-meta" id="detailMeta"></div>'
         + '<h1 class="detail-title" id="detailTitle"></h1>'
+        + '<div class="detail-actions" id="detailActions" style="display:none">'
+          + '<button type="button" class="detail-fav-btn" id="detailFavBtn">☆ 收藏</button>'
+          + '<span class="detail-fav-tip" id="detailFavTip"></span>'
+        + '</div>'
         + '<div class="detail-divider"></div>'
         + '<div class="detail-ai-summary" id="detailAiSummary" style="display:none">'
           + '<div class="detail-ai-summary-header">摘要<span class="detail-ai-summary-tag" id="detailAiSummaryTag"></span></div>'
@@ -133,6 +137,10 @@
     window.dTags = document.getElementById('detailTags');
     window.dMatchedKw = document.getElementById('detailMatchedKw');
     window.dLink = document.getElementById('detailLink');
+    window.detailActions = document.getElementById('detailActions');
+    window.detailFavBtn = document.getElementById('detailFavBtn');
+    window.detailFavTip = document.getElementById('detailFavTip');
+    window.toastEl = document.getElementById('toast');
 
     // 创建返回按钮
     if (!document.getElementById(BACK_BTN_ID)) {
@@ -188,6 +196,10 @@
         + '<span class="mobile-cat-label">待复核</span>'
         + '<span class="mobile-cat-count">' + reviewCount + '</span></div>';
     }
+    // 收藏入口：与周报共用登录态，直接跳收藏页
+    html += '<a class="mobile-cat-fav" href="/bookmarks">'
+      + '<span class="mobile-cat-fav-label">★ 我的收藏</span>'
+      + '<span class="mobile-cat-count">' + (window._favCount || 0) + '</span></a>';
     var body = document.getElementById(CAT_BODY_ID);
     if (body) body.innerHTML = html;
   }

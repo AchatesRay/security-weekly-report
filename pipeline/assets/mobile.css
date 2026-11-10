@@ -161,6 +161,22 @@
   .is-mobile .detail-content { padding: 16px; max-width: 100%; animation: none !important; }
   .is-mobile .detail-summary { padding: 12px 0; margin: 0; }
   .is-mobile .detail-summary p { text-indent: 0; margin-bottom: 12px; text-align: left; }
+
+  /* 结构化正文（标题/列表/代码/表格/图片）在小屏下的紧凑排版 */
+  .is-mobile .detail-summary.detail-rich { font-size: 14px; line-height: 1.75; }
+  .is-mobile .detail-summary.detail-rich h1 { font-size: 19px; margin: 1.5em 0 .5em; }
+  .is-mobile .detail-summary.detail-rich h2 { font-size: 18px; margin: 1.4em 0 .5em; }
+  .is-mobile .detail-summary.detail-rich h3 { font-size: 16px; margin: 1.2em 0 .45em; }
+  .is-mobile .detail-summary.detail-rich h4 { font-size: 14.5px; }
+  .is-mobile .detail-summary.detail-rich ul,
+  .is-mobile .detail-summary.detail-rich ol { padding-left: 1.4em; }
+  .is-mobile .detail-summary.detail-rich pre { padding: 10px 12px; font-size: 12px; }
+  .is-mobile .detail-summary.detail-rich table {
+    display: block; overflow-x: auto; font-size: 12px; white-space: nowrap;
+  }
+  .is-mobile .detail-summary.detail-rich th,
+  .is-mobile .detail-summary.detail-rich td { padding: 6px 8px; }
+  .is-mobile .detail-summary.detail-rich img { margin: .8em auto; }
   .is-mobile .detail-matched-kw { padding: 12px 0; margin: 12px 0; }
   .is-mobile .detail-score-breakdown { margin-top: 10px; padding-top: 10px; }
   .is-mobile .detail-score-row { font-size: 11px; }
@@ -186,3 +202,16 @@
   .is-mobile .detail-content { padding: 10px; }
   .is-mobile .detail-back-btn { bottom: 24px; right: 14px; width: 34px; height: 34px; font-size: 15px; }
 }
+/* ── 收藏入口与按钮（移动端） ── */
+.is-mobile .mobile-cat-fav {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 10px; padding: 12px 14px; border-top: 1px dashed var(--border);
+  color: #b45309; font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.is-mobile .mobile-cat-fav:active { background: #fdf3e7; }
+.is-mobile .mobile-cat-fav .mobile-cat-count {
+  background: rgba(245, 158, 11, 0.15); color: #b45309;
+}
+.is-mobile .detail-actions { margin: 0 0 12px; }
+.is-mobile .detail-fav-btn { padding: 6px 13px; font-size: 12px; }
+.is-mobile .detail-fav-tip { font-size: 11px; }

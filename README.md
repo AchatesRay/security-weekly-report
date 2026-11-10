@@ -11,6 +11,7 @@
 - **自动翻译** — 非中文的**标题与摘要**自动翻译为中文（腾讯云 TMT API；**正文保持原文**）
 - **双端自适应** — 桌面端完整版 + 移动端轻量版，服务端根据 UA 自动切换
 - **管理后台** — Web 界面管理信源、评分关键词、分类排序、管道启停
+- **文章收藏** — 详情页一键收藏，自动生成标签（分类 / CVE / 领域词 / 关键词），收藏内容以完整快照独立存放，可在「我的收藏」页搜索、筛选、改标签、写备注、删除与导出
 - **预压缩** — HTML 和数据文件自动 gzip 预压缩，减少传输体积
 
 ## 快速开始
@@ -28,6 +29,8 @@ python app.py --run
 
 # 4. 启动管理后台（默认 8090 端口）
 python app.py server 8090
+#    周报：http://localhost:8090/
+#    我的收藏：http://localhost:8090/bookmarks
 ```
 
 ### 其他命令
@@ -77,7 +80,9 @@ SecurityInfo/
 │
 ├── server/                       # 管理后台
 │   ├── config_server.py          # REST API + 静态文件服务（SimpleHTTPRequestHandler）
-│   └── config.html               # 管理后台 Web 界面
+│   ├── config.html               # 管理后台 Web 界面
+│   ├── favorites.py              # 收藏存储、自动标签、图片快照与导出（不依赖 HTTP）
+│   └── bookmarks.html            # 「我的收藏」页面
 │
 ├── config/                       # 配置文件（全部位于此目录，平铺管理）
 │   ├── source_config.yaml        # 信源配置（141 个信源、启用 107 个；含 RSS/API/Scraper 三种类型）
@@ -85,6 +90,7 @@ SecurityInfo/
 │   ├── keywords.json             # 历史遗留，当前代码未读取（保留备查）
 │   ├── llm_config.yaml           # LLM 摘要配置（抽取式/API 模式切换）
 │   ├── settings.json             # 管理后台全局设置
+│   ├── favorite_tags.json        # 收藏自动标签规则（分类短名 / 领域词表 / 泛词黑名单）
 │   └── secrets.json              # API 密钥（gitignored，建议改用 .env）
 │
 ├── templates/                    # Jinja2 模板
@@ -111,7 +117,8 @@ SecurityInfo/
 │   ├── fetch_status.json         # 信源抓取状态
 │   ├── source_health.json        # 信源健康记录
 │   ├── scoring_stats.json        # 评分统计
-│   └── scoring_history/          # 评分统计归档（用于周对比）
+│   ├── scoring_history/          # 评分统计归档（用于周对比）
+│   └── favorites/                # 文章收藏（一篇一个快照 + assets/ 图片副本，gitignored）
 │
 └── docs/                         # 文档
     └── superpowers/specs/
@@ -131,7 +138,7 @@ SecurityInfo/
 | 2 | parser | `raw_items.json` | `parsed_items.json` | XML→统一 dict，HTML 去标签，时间统一归一到 UTC | 中止 |
 | 3 | deduplicator | `parsed_items.json` | `deduped_items.json` | URL 规范化去重（剥追踪参数）+ rapidfuzz 标题相似去重（阈值 75%），过期过滤（>7 天） | 中止 |
 | 4 | keyword\_filter (stage1) | `deduped_items.json` | `parsed_items.json` | 标题+前200字快速评分，**<30 分提前丢弃**，减少全文抓取量 | 中止 |
-| 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(原地增强) | 摘要 <300 字的文章抓取全文（并发 8，上限 20000 字），**含 SSRF 防护**；正文清洗为**先定位正文容器、再删模板**（删除时跳过正文容器及其祖先），只在块级标签边界换行以免把句子切碎；自研结果明显偏短时用 trafilatura 做**第二意见**（≥300 字、≥自研 1.5 倍才采用）；随后执行 **5.5 正文指纹去重 + 跨周台账过滤**（SimHash，Hamming≤3，72h 窗） | 中止（单条失败仅记录状态） |
+| 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(原地增强) | 摘要 <300 字的文章抓取全文（并发 8，上限 20000 字），**含 SSRF 防护**；正文清洗为**先定位正文容器、再删模板**（删除时跳过正文容器及其祖先），只在块级标签边界换行以免把句子切碎；自研结果明显偏短时用 trafilatura 做**第二意见**（≥300 字、≥自研 1.5 倍才采用）；**同时产出白名单净化后的结构化正文 `content_html`**（供详情页渲染，图片在报告阶段本地化）；随后执行 **5.5 正文指纹去重 + 跨周台账过滤**（SimHash，Hamming≤3，72h 窗） | 中止（单条失败仅记录状态） |
 | 6 | keyword\_filter (stage2) | `parsed_items.json` | `classified_items.json` | 完整评分 + 领域分类 + 内容类型。**≥80 收录，50-79 待复核，<50 丢弃** | 中止 |
 | 7 | llm\_processor | `classified_items.json` | `enhanced_items.json` | 抽取式摘要：先洗掉网页噪声（导航/署名/分享/日期/聚合壳），再摘取**最值得看的连续一段**，按句边界收尾；长度按分类分档（`summary` 段），结果附来源标记 `ai_summary_kind` | 中止 |
 | 8 | translator | `enhanced_items.json` | `translated_items.json` | 腾讯云 TMT，把**非中文的标题与摘要**翻译为中文；**正文不翻译**（范围见 settings 的 `translate.fields`）；翻译失败逐条标记 | 中止（无密钥时跳过并记录状态） |
@@ -247,6 +254,32 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
 
 ---
 
+## 文章收藏
+
+周报详情页提供「☆ 收藏」按钮；收藏后可在 `/bookmarks` 统一查看。收藏与周报生产链路完全解耦：
+
+- **完整快照**：标题、摘要、正文 HTML、纯文本正文与图片副本都存进 `data/favorites/`，不依赖每周被覆盖的 `reports/data_*.json`；原文失效或图片过期也能回看。
+- **独立目录**：一篇收藏一个 JSON（`<链接哈希>.json`），图片副本在 `data/favorites/assets/<id>/`；周报每轮只清理固定中间文件，不会动收藏目录。
+- **自动标签**：按「主题分类短名 → CVE 编号 → 领域词表 → 具体命中关键词 → 内容类型」生成，最多 6 个；规则在 `config/favorite_tags.json`，可人工调整。
+- **可编辑**：收藏页支持增删标签、写备注（失焦自动保存）、按标签筛选、关键词搜索、删除与导出 Markdown / JSON。
+- **安全**：收藏页与后台共用同一套 Basic Auth；正文入库前用 `sanitize_fragment()` 白名单再净化；图片经专用接口读取并校验路径，不直接暴露目录。
+
+收藏接口（均需登录；写操作要求 `X-Requested-With: XMLHttpRequest` 同源头）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/favorites` | 清单与标签统计 |
+| GET | `/api/favorites/<id>` | 单篇完整快照 |
+| POST | `/api/favorites` | 新增收藏（服务端净化、自动标签、复制图片） |
+| PUT | `/api/favorites/<id>` | 修改标签 / 备注 |
+| DELETE | `/api/favorites/<id>` | 删除收藏 |
+| GET | `/api/favorites/assets/<id>/<file>` | 收藏图片副本 |
+| GET | `/api/favorites/export?format=md\|json` | 导出全部收藏 |
+
+> 收藏只存服务器端，`data/` 已 gitignored；升级部署会保留 `data/`，仍建议定期用 JSON 导出做备份。
+
+---
+
 ## 配置参考
 
 ### 信源配置 (`config/source_config.yaml`)
@@ -313,6 +346,18 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
 
 每个关键词可选字段：`word`(匹配词), `score`(权重), `category`(分类), `content_type`(内容类型), `region`(地域)。
 
+### 收藏标签 (`config/favorite_tags.json`)
+
+控制收藏时自动生成的标签，改完无需重启服务（每次收藏时读取）：
+
+- `category_tags`：主题分类 → 标签短名；
+- `topic_rules`：领域词表（勒索软件 / 供应链攻击 / 零日漏洞 / 数据泄露 等），每条 `tag` + `any` 关键词；
+- `generic_keywords`：`漏洞 / 攻击 / 安全` 等泛词，不作为独立标签；
+- `keyword_aliases`：把英文或别名词归一到一个标签；
+- `max_tags` / `max_cve_tags` / `max_topic_tags` / `max_keyword_tags` / `max_tag_chars`：数量与长度上限。
+
+用户手动编辑过的标签优先于自动标签，系统不会在后续收藏或重跑时覆盖。
+
 ### 全局设置 (`config/settings.json`)
 
 ```json
@@ -362,6 +407,14 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
   },
   "fulltext": {
     "fallback_enabled": true           // trafilatura 第二意见总开关
+  },
+  "images": {
+    "enabled": true,                   // 正文图片本地化总开关
+    "max_bytes": 5242880,              // 单张图片上限（字节）
+    "max_per_article": 12,             // 单篇最多保留多少张图
+    "timeout": 10,                     // 单张下载超时（秒）
+    "concurrency": 4,                  // 下载并发
+    "retention_days": 56               // 本地图片保留天数
   }
 }
 ```
@@ -414,6 +467,28 @@ python Output/文章清洗优化/Temp/scoring_regression.py  # 4. 同一份 HTML
 
 第 3 步必须**逐行看**"旧版有、新版没有"的内容，确认删掉的都是导航/相关文章/作者简介/
 聚合器元信息；第 4 步必须确认**没有条目被移出「收录」**。
+
+### 正文结构化与图片本地化（步骤 5 / 9）
+
+报告详情页原先只展示纯文本：标题层级、列表、代码块、表格在抽取阶段就丢了，图片也不存在，
+模板只能按句号硬分段，读者看到的是“排版碎、没图”的正文。现在改为：
+
+| 环节 | 做法 | 为什么 |
+|---|---|---|
+| 结构化抽取 | 复用“定位正文 → 去模板”的结果，序列化为 HTML；自研结果偏短或明显缺图时用 trafilatura 的 HTML 输出兜底 | 与纯文本链路共用同一套容器选择规则，不维护两套正文识别逻辑 |
+| 白名单净化 | 只保留 `h1-h6/p/ul/ol/li/blockquote/pre/code/table/figure/img/a/strong/em/br/hr` 等语义标签；属性只留 `a[href]`、`img[src/alt/title]`、`td/th[colspan/rowspan]` | 正文来自外部网站，而报告页与后台配置接口同源；不净化就等于把 `/api/config/*` 写接口交给外部内容方 |
+| 危险内容 | 剔除 `script/style/iframe/form/svg/video`、所有 `on*` 事件属性、`javascript:` 链接；`.svg` 图片与 1×1 跟踪像素直接丢弃 | SVG 可内嵌脚本；跟踪像素会泄漏读者 IP |
+| 图片本地化 | 只对最终展示的条目下载正文图片，存 `reports/assets/img/<item_id>/`，正文改写为站内绝对路径 `/reports/assets/img/...`；单图 ≤5MB、单篇 ≤12 张，并发 4 | 热链图片会 404/被防盗链，离线打开与后续导出都不可用；不给被过滤掉的文章白下载 |
+| 失败兜底 | 下载失败的图片保留原始 URL（带 `referrerpolicy=no-referrer`），前端 `onerror` 隐藏裂图 | 图片是锦上添花，单张失败不能阻断报告生成 |
+| 清理 | 按 `images.retention_days` 清理过期图片目录，当前条目引用的目录始终保留 | 避免磁盘无限增长 |
+
+配套约束：
+
+- `content_html` **只用于展示**；评分、摘要、正文指纹仍走纯文本（`summary` / `full_body`），行为与改动前一致。
+- 渲染时优先用 `content_html`，为空（未抓到全文）才回退到旧的纯文本分段。
+- 报告页加了 CSP：`img-src` 限定 `self/https/http/data`，`object-src 'none'`，作为净化之外的第二道保险。
+- 移动端同样渲染结构化正文，表格在小屏可横向滚动。
+- 图片目录与 `item_id`（规范化 URL 的 sha1 前 16 位）绑定，同一篇文章重跑不会重复下载。
 
 ### 摘要质量回归（`scripts/summary_quality_report.py`）
 

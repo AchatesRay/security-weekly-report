@@ -244,12 +244,15 @@ def validate_public_url(url: str) -> str:
 class SafeResponse:
     """safe_get 的结果对象（响应流已关闭，只保留必要字段）"""
 
-    __slots__ = ("status_code", "headers", "text", "url", "truncated")
+    __slots__ = ("status_code", "headers", "text", "content", "url", "truncated")
 
-    def __init__(self, status_code: int, headers: dict, text: str, url: str, truncated: bool):
+    def __init__(self, status_code: int, headers: dict, text: str, url: str,
+                 truncated: bool, content: bytes = b""):
         self.status_code = status_code
         self.headers = headers
         self.text = text
+        # 原始字节：图片等二进制资源用 text 解码会损坏，必须保留原样
+        self.content = content
         self.url = url
         self.truncated = truncated
 
@@ -317,6 +320,7 @@ def safe_get(url: str, *, headers: dict | None = None, timeout: float = DEFAULT_
                     text=_decode_body(body, content_type),
                     url=current,
                     truncated=truncated,
+                    content=body,
                 )
 
         raise UnsafeURLError(f"重定向次数超过上限 {max_redirects}: {url}")
