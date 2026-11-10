@@ -26,6 +26,20 @@ python-dotenv==1.2.4
 jieba==0.42.1
 numpy==2.3.5
 
+# ── 正文抽取兜底（trafilatura，P0-1）──
+# 只对 safe_get() 已抓回的 HTML 调用 extract()，禁止使用 trafilatura.fetch_url()。
+trafilatura==2.3.1
+courlan==1.4.0
+htmldate==1.11.0
+justext==3.0.2
+lxml_html_clean==0.4.6
+# 下列为 trafilatura 的传递依赖，一并锁定以保证构建可复现
+babel==2.18.0
+dateparser==1.5.0
+pytz==2026.6
+tld==0.13.2
+tzlocal==5.4.5
+
 # ── 翻译（腾讯云 TMT）──
 # 代码按 3.0.x 的 TextTranslate 接口编写，故保持在 3.0.x 区间内。
 # 未锁到具体小版本：3.0.x 发版极为频繁，具体版本按部署环境取该区间最新即可。
