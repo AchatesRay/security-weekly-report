@@ -1202,6 +1202,8 @@ def main():
     parser = argparse.ArgumentParser(description="安全管理后台配置服务器")
     parser.add_argument("--project-dir", default=None,
                         help="项目根目录路径（默认自动检测）")
+    parser.add_argument("--host", default="0.0.0.0",
+                        help="监听地址（默认 0.0.0.0；置于反向代理后建议 127.0.0.1）")
     parser.add_argument("port", nargs="?", default=8090, type=int,
                         help="监听端口（默认 8090）")
     args = parser.parse_args()
@@ -1230,7 +1232,8 @@ def main():
     if _PROJECT_DIR != SERVER_DIR.parent:
         print(f"[CONFIG] 注意: 项目目录被指定为 {_PROJECT_DIR}")
 
-    server = ConfigHTTPServer(("0.0.0.0", port), ConfigHandler)
+    server = ConfigHTTPServer((args.host, port), ConfigHandler)
+    print(f"[CONFIG] 监听地址: {args.host}:{port}")
     print(f"[CONFIG] 管理后台: http://localhost:{port}/config.html")
     print(f"[CONFIG] 项目目录: {_PROJECT_DIR}")
     print(f"[CONFIG] API:       http://localhost:{port}/api/config/sources")

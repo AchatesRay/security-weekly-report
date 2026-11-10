@@ -31,6 +31,9 @@ python app.py --run
 python app.py server 8090
 #    周报：http://localhost:8090/
 #    我的收藏：http://localhost:8090/bookmarks
+
+# 直接启动并仅监听回环地址（置于 Caddy/Nginx 反向代理后时使用）
+python server/config_server.py --project-dir . --host 127.0.0.1 8090
 ```
 
 ### 其他命令
