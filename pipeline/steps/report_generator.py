@@ -437,12 +437,18 @@ def generate_report():
     review_items = sorted((i for i in items if i.get("filter_decision") == "review"),
                           key=_rank_key, reverse=True)
 
+    # 两个维度并存：
+    #   groups      —— 主题分类（①~⑦），供侧栏导航、分类计数与分类 JSON 使用；
+    #   item.section —— 栏目（★ 深度 / ● 要闻），供正文列表分栏与卡片标签使用。
+    # 二者不能共用同一个字典：把 groups 换成两个栏目，会让侧栏分类
+    # 静默退化成两类（前端不报错，只是分类消失）。
     deep_items, news_items = _split_sections(accepted_items)
-    groups = {}
-    if deep_items:
-        groups["★ 架构与技术深度"] = deep_items
-    if news_items:
-        groups["● 本周安全要闻"] = news_items
+    groups = group_by_category(accepted_items)
+    section_counts = {
+        "deep": len(deep_items),
+        "news": len(news_items),
+        "all": len(accepted_items),
+    }
 
     all_items = accepted_items + review_items
     json_items = build_json_items(all_items)
@@ -464,11 +470,10 @@ def generate_report():
         except Exception:
             pass
 
-    # 栏目标题与数量（用于三栏模板的侧边栏）
+    # 主题分类标题与数量（侧栏导航；前缀由模板统一加，这里只保留分类名）
     cat_names = []
     cat_counts = []
     for cat in groups:
-        # 去掉 "★ ", "● ", "① " 等前缀
         name = re.sub(r"^[★●◐①②③④⑤⑥⑦]\s*", "", cat)
         cat_names.append(name)
         cat_counts.append(len(groups[cat]))
@@ -488,6 +493,7 @@ def generate_report():
         translation_warning=translation_warning,
         cat_names=cat_names,
         cat_counts=cat_counts,
+        section_counts=section_counts,
     )
 
     # ── 渲染成功后才落盘 ──

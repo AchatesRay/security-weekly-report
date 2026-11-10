@@ -20,8 +20,9 @@
   var _fullData = {};     /* catIdx => {url: fullItem} */
   var _fetchP = {};       /* catIdx => Promise */
 
-  /* 独立跟踪移动端分类选择，与桌面端 _currentCat 隔离 */
-  var _mobileCat = window._currentCat !== undefined ? window._currentCat : 0;
+  /* 独立跟踪移动端分类选择，与桌面端 _currentCat 隔离；
+     默认与桌面一致：-1=全部分类（0 会把首类当成初始视图）。 */
+  var _mobileCat = window._currentCat !== undefined ? window._currentCat : -1;
 
   function _fetchCatData(catIdx) {
     if (_fullData[catIdx] || _fetchP[catIdx]) return;
@@ -287,6 +288,9 @@
   var _origAWD = window.applyWeekData;
   window.applyWeekData = function(week) {
     if (typeof _origAWD === 'function') _origAWD(week);
+    // applyWeekData 会把 _currentCat 重置为 -1；移动端计数器必须同步，
+    // 否则切换周后分类面板高亮与实际列表不一致。
+    _mobileCat = window._currentCat !== undefined ? window._currentCat : -1;
     buildCatList();
     _fullData = {};
     _fetchP = {};
