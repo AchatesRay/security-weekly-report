@@ -1,0 +1,152 @@
+[
+  {
+    "id": "cisa_kev_fortinet",
+    "source_name": "CISA Alerts",
+    "title": "CISA Adds Actively Exploited Fortinet FortiOS Vulnerability to KEV Catalog",
+    "summary": "CISA has added CVE-2026-12345 to its Known Exploited Vulnerabilities catalog. The vulnerability is a critical remote code execution flaw in Fortinet FortiOS SSL VPN. An unauthenticated attacker can exploit the flaw to execute arbitrary code and gain initial access. CISA urges organizations to apply vendor patches immediately, monitor for exploitation attempts, and report incidents. The advisory includes detection guidance and mitigation steps for exposed VPN gateways."
+  },
+  {
+    "id": "project_zero_exploit",
+    "source_name": "Google Project Zero",
+    "title": "Exploiting a Zero-Day in the Wild: A Technical Deep Dive",
+    "summary": "This post walks through the root cause of a recently exploited zero-day vulnerability in a widely used browser engine. We analyze the memory corruption primitive, the exploit chain, and the sandbox escape. The article includes reverse engineering notes, crash analysis, heap grooming details, and a proof-of-concept that demonstrates reliable code execution. We also discuss the patch diff, why the fix is complete, and what detection teams can look for in telemetry."
+  },
+  {
+    "id": "unit42_ransomware",
+    "source_name": "Unit 42",
+    "title": "Inside a Ransomware Campaign: From Initial Access to Exfiltration",
+    "summary": "Unit 42 researchers tracked a ransomware operator from initial access through lateral movement, credential theft, and data exfiltration. The campaign used a phishing lure, a malicious loader, and living-off-the-land binaries. We document the command-and-control infrastructure, the encryption routine, and the leak site. The report maps activity to MITRE ATT&CK techniques and provides detection rules, indicators of compromise, and incident response recommendations."
+  },
+  {
+    "id": "msrc_patch_tuesday",
+    "source_name": "Microsoft Security Blog",
+    "title": "Microsoft Patch Tuesday: 120 Vulnerabilities, 5 Zero-Days",
+    "summary": "Microsoft released security updates addressing 120 vulnerabilities, including five zero-day flaws exploited in the wild. The updates cover Windows, Exchange Server, SharePoint, and Azure. The most severe issues allow remote code execution and privilege escalation. Administrators should prioritize internet-facing systems, review the advisory, test the patches, and monitor for exploitation. The post includes affected versions, mitigation guidance, and detection queries."
+  },
+  {
+    "id": "nist_csf_update",
+    "source_name": "NIST Cybersecurity Insights",
+    "title": "NIST Releases Updated Cybersecurity Framework Guidance for Critical Infrastructure",
+    "summary": "NIST has published updated guidance for implementing the Cybersecurity Framework across critical infrastructure sectors. The document explains governance, risk assessment, supply chain security, and continuous monitoring. It provides implementation examples for small and large organizations, maps controls to existing standards, and describes how to measure program maturity. The guidance is intended for security leaders, auditors, and policy teams."
+  },
+  {
+    "id": "anthropic_prompt_injection",
+    "source_name": "Anthropic Red Team",
+    "title": "Anthropic Researchers Demonstrate Prompt Injection Attack Against Agentic AI",
+    "summary": "Researchers demonstrate a prompt injection attack that manipulates an AI agent into leaking sensitive data and invoking tools without authorization. The paper analyzes the attack surface of LLM agents, including tool use, retrieval augmented generation, and multi-turn context. It proposes defenses such as instruction hierarchy, input sanitization, least privilege, and human approval for high-risk actions. The work includes a threat model and evaluation results."
+  },
+  {
+    "id": "vendor_launch_platform",
+    "source_name": "Acme Security Blog",
+    "title": "Introducing the Acme AI Security Platform: Now Available in AWS Marketplace",
+    "summary": "Acme is excited to announce the launch of its new AI security platform, now available in AWS Marketplace. The platform provides visibility, governance, and protection for enterprise AI applications. It integrates with leading cloud providers and offers a simple deployment experience. Request a demo today to learn how Acme can help your organization adopt AI securely and confidently."
+  },
+  {
+    "id": "gartner_award",
+    "source_name": "Acme Security Blog",
+    "title": "Acme Named a Leader in the 2026 Gartner Magic Quadrant for CNAPP",
+    "summary": "Acme has been recognized as a Leader in the 2026 Gartner Magic Quadrant for Cloud-Native Application Protection Platforms. We believe this recognition reflects our commitment to innovation and customer success. Download the report to learn why Acme is positioned highest for ability to execute. The platform helps customers secure cloud workloads, containers, and Kubernetes at scale."
+  },
+  {
+    "id": "funding_round",
+    "source_name": "SecurityWeek",
+    "title": "Acme Security Raises $200M Series C at $2B Valuation",
+    "summary": "Acme Security has raised $200 million in Series C funding at a $2 billion valuation. The company plans to use the investment to expand its sales team, accelerate product development, and grow internationally. The round was led by a major venture capital firm, with participation from existing investors. Acme says demand for its cloud security platform continues to grow rapidly."
+  },
+  {
+    "id": "checkpoint_roundup",
+    "source_name": "Check Point Research",
+    "title": "Check Point Research: Weekly Cybersecurity Roundup, Week 45",
+    "summary": "This week's roundup covers the latest malware campaigns, vulnerability disclosures, and threat actor activity. We highlight a new phishing kit, a ransomware variant, and several exploited vulnerabilities. The report includes indicators of compromise and mitigation advice. Subscribe to receive the weekly newsletter and stay informed about the evolving threat landscape."
+  },
+  {
+    "id": "npm_supply_chain",
+    "source_name": "BleepingComputer",
+    "title": "Malicious npm Package Steals Credentials from Developers",
+    "summary": "A malicious npm package has been downloaded thousands of times and steals credentials from developer machines. The package uses a post-install script to exfiltrate environment variables, SSH keys, and cloud tokens to a remote server. Researchers identified the campaign and reported it to the registry, which removed the package. Developers should rotate credentials, audit dependencies, and enable provenance checks."
+  },
+  {
+    "id": "aws_imds",
+    "source_name": "AWS Security Blog",
+    "title": "AWS Security Bulletin: IMDSv1 Disabled by Default for New Instances",
+    "summary": "AWS has changed the default behavior for new EC2 instances to require IMDSv2 and disable IMDSv1. The change reduces the risk of server-side request forgery attacks that abuse the instance metadata service to steal credentials. The bulletin explains how to audit existing instances, update SDKs and agents, and monitor for compatibility issues. Customers should test workloads before the enforcement date."
+  },
+  {
+    "id": "siemens_ics",
+    "source_name": "CISA Alerts",
+    "title": "CISA Warns of Exploitable Flaw in Siemens PLCs Used in Critical Infrastructure",
+    "summary": "CISA published an advisory for a critical vulnerability in Siemens industrial control systems. The flaw allows an unauthenticated attacker to execute code on affected PLCs. Siemens has released firmware updates and mitigations. CISA recommends isolating control networks, restricting access, and monitoring for unusual activity. The advisory includes affected product versions and CVSS severity."
+  },
+  {
+    "id": "moveit_zero_day",
+    "source_name": "BleepingComputer",
+    "title": "MOVEit Transfer Zero-Day Exploited to Steal Data from Hundreds of Organizations",
+    "summary": "A zero-day vulnerability in MOVEit Transfer is being actively exploited to steal data from hundreds of organizations. The flaw allows unauthenticated SQL injection and remote code execution. Clop ransomware group has claimed responsibility. Progress Software released patches and mitigation guidance. Security teams should apply the update, hunt for webshells, review access logs, and notify affected customers."
+  },
+  {
+    "id": "chrome_zero_day",
+    "source_name": "BleepingComputer",
+    "title": "Google Chrome Zero-Day CVE-2026-67890 Exploited in the Wild",
+    "summary": "Google has released an emergency Chrome update for CVE-2026-67890, a type confusion vulnerability in the V8 JavaScript engine that is being exploited in the wild. An attacker can trigger the flaw with a crafted web page and execute arbitrary code in the browser sandbox. Users should update immediately. Google Threat Analysis Group attributes the exploitation to a commercial spyware vendor."
+  },
+  {
+    "id": "k8s_ingress",
+    "source_name": "Kubernetes Security Blog",
+    "title": "Kubernetes Privilege Escalation via Ingress-nginx Admission Controller",
+    "summary": "A privilege escalation vulnerability in the ingress-nginx admission controller allows an attacker with the ability to create Ingress objects to obtain the controller's service account token. The token can be used to read secrets and pivot to other workloads. The maintainers released patched versions and a mitigation that restricts admission webhook permissions. Cluster administrators should upgrade and audit RBAC."
+  },
+  {
+    "id": "llm_jailbreak",
+    "source_name": "AI Hot",
+    "title": "New Jailbreak Technique Bypasses Safety Filters in Production LLMs",
+    "summary": "Researchers disclosed a new jailbreak technique that bypasses safety filters in several production large language models. The attack uses multi-turn prompting and encoding tricks to elicit harmful instructions. The paper evaluates defenses including adversarial training, input filtering, and output moderation. Vendors have started rolling out mitigations. The findings highlight the need for continuous red teaming of AI systems."
+  },
+  {
+    "id": "eu_ai_act",
+    "source_name": "NIST Cybersecurity Insights",
+    "title": "EU AI Act Enforcement Begins: What Security Teams Need to Know",
+    "summary": "The EU AI Act's first enforcement obligations take effect this year. The regulation introduces risk categories, transparency requirements, and security obligations for high-risk AI systems. Security teams should inventory AI systems, assess supply chain risk, document model governance, and prepare incident response procedures. The article summarizes key deadlines and maps requirements to existing cybersecurity frameworks."
+  },
+  {
+    "id": "openssh_rce",
+    "source_name": "BleepingComputer",
+    "title": "Critical OpenSSH Vulnerability Allows Unauthenticated Remote Code Execution",
+    "summary": "A critical vulnerability in OpenSSH can allow unauthenticated remote code execution on affected servers. The flaw is caused by a race condition in signal handling and can be triggered by a crafted SSH handshake. Patches are available. Administrators should update immediately, restrict SSH exposure, and monitor for exploitation. The advisory includes affected versions and workarounds."
+  },
+  {
+    "id": "macos_re",
+    "source_name": "Google Project Zero",
+    "title": "Reverse Engineering a macOS Kernel Extension: A Practical Guide",
+    "summary": "This technical guide walks through reverse engineering a macOS kernel extension. We cover binary analysis, symbol recovery, driver interfaces, and debugging with a hypervisor. The article explains how to identify attack surface, audit memory safety, and build a proof-of-concept for a local privilege escalation. It includes code snippets and lessons learned from a real vulnerability research project."
+  },
+  {
+    "id": "news_roundup",
+    "source_name": "SecurityWeek",
+    "title": "Security News Roundup: This Week's Top Stories",
+    "summary": "This week's security news roundup covers the latest headlines from across the industry. Read about new product announcements, executive appointments, partnership news, and upcoming events. Subscribe to our newsletter for daily updates. The roundup also includes a selection of opinion pieces and webinars from our sponsors."
+  },
+  {
+    "id": "siem_buyers_guide",
+    "source_name": "Acme Security Blog",
+    "title": "How to Choose the Right SIEM Solution for Your Business",
+    "summary": "Choosing a SIEM solution can be overwhelming. This buyer's guide explains the key features to look for, including log collection, correlation, alerting, and compliance reporting. Learn how Acme's SIEM platform can help your organization reduce risk and improve operational efficiency. Download the guide or request a demo to get started."
+  },
+  {
+    "id": "fin7_zero_day",
+    "source_name": "Mandiant / Google Cloud Threat Intel",
+    "title": "FIN7 Exploits Windows Zero-Day to Deploy Ransomware",
+    "summary": "Mandiant observed FIN7 exploiting a Windows zero-day vulnerability to deploy ransomware in targeted intrusions. The attackers used spear-phishing, a malicious loader, and privilege escalation. The report includes indicators of compromise, MITRE ATT&CK mapping, and detection guidance. Organizations should patch affected systems, block known infrastructure, and hunt for persistence mechanisms."
+  },
+  {
+    "id": "nsa_zero_trust",
+    "source_name": "CISA Alerts",
+    "title": "NSA Publishes Guidance on Zero Trust Implementation for National Security Systems",
+    "summary": "The NSA has published guidance on implementing zero trust architecture in national security systems. The document covers identity, device, network, application, and data pillars. It provides maturity models, reference architectures, and practical steps for agencies. The guidance emphasizes continuous verification, least privilege, and assumed breach. It maps to NIST SP 800-207 and related standards."
+  },
+  {
+    "id": "openai_plugin_vuln",
+    "source_name": "OpenAI Security",
+    "title": "OpenAI Discloses Prompt Injection Vulnerability in ChatGPT Plugins",
+    "summary": "OpenAI disclosed a prompt injection vulnerability affecting third-party ChatGPT plugins. An attacker could embed malicious instructions in a webpage and cause the plugin to perform unauthorized actions. OpenAI has added mitigations, including stricter tool permissions and user confirmations. The company recommends plugin developers validate inputs and limit access to sensitive data. The incident highlights risks in LLM agent ecosystems."
+  }
+]

@@ -158,6 +158,11 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .kw-tag-weak { background:rgba(107,114,128,0.12); color:#6b7280; }
 .kw-empty { font-size:11px; color:var(--text-dim); font-style:italic; }
 .detail-kw-scoreline { margin-top:10px; padding-top:10px; border-top:1px solid var(--border-light); font-size:11px; font-weight:600; color:#d97706; }
+.detail-score-breakdown { margin-top:14px; padding-top:12px; border-top:1px dashed var(--border-light); }
+.detail-score-header { font-size:11px; font-weight:600; color:var(--text-muted); letter-spacing:0.5px; margin-bottom:8px; }
+.detail-score-row { display:flex; justify-content:space-between; gap:12px; padding:3px 0; font-size:12px; color:var(--text-secondary); }
+.detail-score-label { color:var(--text-muted); }
+.detail-score-value { font-variant-numeric:tabular-nums; font-weight:600; color:var(--text-secondary); }
 .detail-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:32px; padding-top:20px; border-top:1px solid var(--border-light); }
 .detail-tag { padding:4px 12px; border-radius:4px; font-size:12px; background:var(--accent-soft); color:var(--accent); }
 .detail-original-link { display:inline-flex; align-items:center; gap:8px; margin-top:28px; padding:10px 22px; border-radius:var(--radius-md); font-size:14px; font-weight:600; color:#fff; background:var(--accent); text-decoration:none; transition:background .15s,transform .12s,box-shadow .15s; box-shadow:var(--shadow-sm); }
@@ -542,7 +547,8 @@ function _renderDetail(item) {
     (item.section ? '<span class="detail-section-tag ' + (item.section === '架构与技术深度' ? 'deep' : 'news') + '">' + (item.section === '架构与技术深度' ? '★ 架构与技术深度' : '● 本周安全要闻') + '</span>' : '') +
     '<span>' + esc(item.published_date) + '</span>' +
     (item.content_type ? '<span>·</span><span>' + esc(item.content_type) + '</span>' : '') +
-    (item.source_type ? '<span>·</span><span>' + esc(item.source_type) + '</span>' : '');
+    (item.source_type ? '<span>·</span><span>' + esc(item.source_type) + '</span>' : '') +
+    (item.duplicate_count ? '<span>·</span><span>另有 ' + item.duplicate_count + ' 篇同文报道</span>' : '');
 
   dTitle.innerHTML = '<a href="' + escAttr(item.url) + '" target="_blank">' + esc(item.title) + '</a>';
   // AI 摘要：ai_summary 优先；原文获取失败则提示无摘要
@@ -614,6 +620,31 @@ function _renderDetail(item) {
   var _raw = (typeof item.raw_score === 'number') ? item.raw_score : _sc;
   mHtml += '<div class="detail-kw-scoreline">综合评分: ' + _sc
          + (_raw > _sc ? '　·　证据强度: ' + _raw : '') + '</div>';
+
+  // 入选依据：把评分拆成可核对的项，避免“黑箱 100 分”
+  var sb = item.score_breakdown || {};
+  var sbRows = [];
+  function _sbRow(label, value) {
+    sbRows.push('<div class="detail-score-row"><span class="detail-score-label">'
+      + esc(label) + '</span><span class="detail-score-value">' + esc(String(value)) + '</span></div>');
+  }
+  if (sb.keyword_raw !== undefined) _sbRow('关键词分', sb.keyword_raw);
+  if (sb.topic_weight !== undefined) _sbRow('主题权重', '×' + sb.topic_weight);
+  if (sb.authority_multiplier !== undefined) {
+    _sbRow('信源权威', '×' + sb.authority_multiplier
+      + (sb.authority_tier ? '（' + sb.authority_tier + ' 级）' : ''));
+  }
+  if (sb.depth_bonus !== undefined) _sbRow('技术深度加分', '+' + sb.depth_bonus);
+  if (sb.commercial_score) _sbRow('商业噪声扣分', '-' + sb.commercial_score);
+  if (sb.series_penalty) _sbRow('系列稿扣分', '-' + sb.series_penalty);
+  if (sb.floor_applied) _sbRow('权威保底', '已生效');
+  if (sb.launch_cap) _sbRow('发布稿封顶', '已生效');
+  if (sb.final_raw_score !== undefined) _sbRow('最终相关性分', sb.final_raw_score);
+  if (sb.accept_threshold !== undefined) _sbRow('收录线', sb.accept_threshold);
+  if (sbRows.length) {
+    mHtml += '<div class="detail-score-breakdown">'
+      + '<div class="detail-score-header">入选依据</div>' + sbRows.join('') + '</div>';
+  }
   dMatchedKw.innerHTML = mHtml;
 }
 

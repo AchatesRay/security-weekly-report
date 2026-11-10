@@ -379,12 +379,16 @@ class SecurityScorer:
         series_penalty = self.series_penalty if series_hit else 0
 
         keyword_raw = float(ev.get("raw_score", 0) or 0)
+        depth_bonus = depth / 100.0 * self.depth_bonus_max
         adjusted = (keyword_raw * authority * topic * ct_mult
-                    + depth / 100.0 * self.depth_bonus_max
+                    + depth_bonus
                     - commercial - series_penalty)
+        floor_applied = False
         # 高权威、有技术证据的研究/通告给一个下限，避免被低关键词密度误杀
         if tier in ("S", "A") and depth >= 50:
-            adjusted = max(adjusted, 55 + depth * 0.3)
+            floored = max(adjusted, 55 + depth * 0.3)
+            floor_applied = floored > adjusted
+            adjusted = floored
 
         # 发布稿硬性封顶：标题是“Introducing/发布/推出/上线/Now Available”
         # 且没有足够技术深度时，不允许靠产品名词堆到收录线。
@@ -393,8 +397,11 @@ class SecurityScorer:
             r"^\s*(Introducing|Announces|Launches|Named a Leader|Recognized|Award|Ranked)\b|"
             r"(Marketplace|Now Available|Request a Demo|新品发布|正式发布|重磅发布|全新发布)|"
             r"^\s*(发布|推出|上线)", title, re.I))
+        launch_cap = False
         if launch_like and depth < 80:
-            adjusted = min(adjusted, 45)
+            capped = min(adjusted, 45)
+            launch_cap = capped < adjusted
+            adjusted = capped
             commercial_hits.append("发布稿封顶")
 
         adjusted = round(max(0.0, adjusted), 1)
@@ -441,6 +448,22 @@ class SecurityScorer:
             "selection_reason": "，".join(reason_parts),
             "depth_hits": depth_hits,
             "commercial_hits": commercial_hits,
+            "score_breakdown": {
+                "keyword_raw": round(keyword_raw, 1),
+                "authority_tier": tier,
+                "authority_multiplier": authority,
+                "topic_weight": topic,
+                "content_type_multiplier": ct_mult,
+                "depth_score": depth,
+                "depth_bonus": round(depth_bonus, 1),
+                "commercial_score": commercial,
+                "series_penalty": series_penalty,
+                "floor_applied": floor_applied,
+                "launch_cap": launch_cap,
+                "final_raw_score": adjusted,
+                "accept_threshold": accept_threshold,
+                "review_threshold": review_threshold,
+            },
         }
 
     # ── 负向过滤 ──
@@ -860,6 +883,7 @@ class SecurityScorer:
             "report_section": rel["report_section"],
             "series_hit": rel["series_hit"],
             "selection_reason": rel["selection_reason"],
+            "score_breakdown": rel["score_breakdown"],
             "depth_hits": rel["depth_hits"],
             "commercial_hits": rel["commercial_hits"],
             "matched": {

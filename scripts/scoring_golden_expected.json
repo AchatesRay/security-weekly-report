@@ -1,0 +1,102 @@
+{
+  "cisa_kev_fortinet": {
+    "decision": "accepted",
+    "raw_score": 182.2
+  },
+  "project_zero_exploit": {
+    "decision": "accepted",
+    "raw_score": 206.2
+  },
+  "unit42_ransomware": {
+    "decision": "accepted",
+    "raw_score": 242.2
+  },
+  "msrc_patch_tuesday": {
+    "decision": "accepted",
+    "raw_score": 108.5
+  },
+  "nist_csf_update": {
+    "decision": "review",
+    "raw_score": 67.5
+  },
+  "anthropic_prompt_injection": {
+    "decision": "accepted",
+    "raw_score": 182.4
+  },
+  "vendor_launch_platform": {
+    "decision": "filtered",
+    "raw_score": 0.0
+  },
+  "gartner_award": {
+    "decision": "filtered",
+    "raw_score": 0.0
+  },
+  "funding_round": {
+    "decision": "filtered",
+    "raw_score": 8.1
+  },
+  "checkpoint_roundup": {
+    "decision": "accepted",
+    "raw_score": 153.0
+  },
+  "npm_supply_chain": {
+    "decision": "filtered",
+    "raw_score": 0.0
+  },
+  "aws_imds": {
+    "decision": "filtered",
+    "raw_score": 12.0
+  },
+  "siemens_ics": {
+    "decision": "filtered",
+    "raw_score": 36.3
+  },
+  "moveit_zero_day": {
+    "decision": "accepted",
+    "raw_score": 109.2
+  },
+  "chrome_zero_day": {
+    "decision": "accepted",
+    "raw_score": 142.5
+  },
+  "k8s_ingress": {
+    "decision": "accepted",
+    "raw_score": 92.0
+  },
+  "llm_jailbreak": {
+    "decision": "review",
+    "raw_score": 73.9
+  },
+  "eu_ai_act": {
+    "decision": "filtered",
+    "raw_score": 37.9
+  },
+  "openssh_rce": {
+    "decision": "accepted",
+    "raw_score": 87.0
+  },
+  "macos_re": {
+    "decision": "filtered",
+    "raw_score": 0.0
+  },
+  "news_roundup": {
+    "decision": "filtered",
+    "raw_score": 0.0
+  },
+  "siem_buyers_guide": {
+    "decision": "filtered",
+    "raw_score": 0.0
+  },
+  "fin7_zero_day": {
+    "decision": "accepted",
+    "raw_score": 236.1
+  },
+  "nsa_zero_trust": {
+    "decision": "accepted",
+    "raw_score": 154.3
+  },
+  "openai_plugin_vuln": {
+    "decision": "accepted",
+    "raw_score": 120.1
+  }
+}

@@ -166,8 +166,8 @@ def run_stage2():
         # 读者画像与可解释字段（报告双栏、排序、详情展示均依赖这些）
         for key in ("keyword_score", "relevance_score", "topic_fit", "depth_score",
                     "commercial_score", "authority_tier", "authority_multiplier",
-                    "report_section", "selection_reason", "depth_hits", "commercial_hits",
-                    "series_hit"):
+                    "report_section", "selection_reason", "score_breakdown",
+                    "depth_hits", "commercial_hits", "series_hit"):
             if key in result:
                 item[key] = result[key]
 
