@@ -15,18 +15,26 @@
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import random
-from datetime import datetime
+import time
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 import httpx
 import yaml
 
-from ..utils import DATA_DIR, SOURCES_PATH, atomic_write, load_secrets
+from ..utils import (DATA_DIR, SETTINGS_PATH, SOURCES_PATH, atomic_write,
+                     atomic_write_text, load_secrets, parse_datetime_utc,
+                     utc_now_naive)
 
 RAW_ITEMS_PATH = DATA_DIR / "raw_items.json"
 SOURCE_HEALTH_PATH = DATA_DIR / "source_health.json"
+# 304 时复用上一次成功抓取的 XML，避免“同周重跑时未变更信源全部消失”
+FEED_CACHE_DIR = DATA_DIR / "state" / "feed_cache"
 
 # 连续失败达到此值后进入退避重试（不再永久禁用）
 MAX_CONSECUTIVE_FAILURES = 5
@@ -36,6 +44,76 @@ MAX_COOLDOWN_ROUNDS = 16
 HEALTH_META_KEY = "__meta__"
 # 单信源响应体积上限（防止单个超大信源把内存与 raw_items.json 撑爆）
 MAX_SOURCE_BYTES = 8 * 1024 * 1024
+
+# 按主机限速默认值：同一主机最多 2 个并发，请求间隔至少 0.6 秒。
+# 放在 settings.json 的 fetch 段，便于后台调整；改动后需重启进程生效。
+DEFAULT_MIN_HOST_INTERVAL = 0.6
+DEFAULT_MAX_PER_HOST = 2
+
+
+def _load_fetch_config() -> dict:
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as f:
+            return json.load(f).get("fetch", {}) or {}
+    except Exception:
+        return {}
+
+
+_FETCH_CFG = _load_fetch_config()
+try:
+    MIN_HOST_INTERVAL = float(_FETCH_CFG.get("min_host_interval_seconds",
+                                             DEFAULT_MIN_HOST_INTERVAL))
+except (TypeError, ValueError):
+    MIN_HOST_INTERVAL = DEFAULT_MIN_HOST_INTERVAL
+try:
+    MAX_PER_HOST = int(_FETCH_CFG.get("max_per_host_concurrency",
+                                      DEFAULT_MAX_PER_HOST))
+except (TypeError, ValueError):
+    MAX_PER_HOST = DEFAULT_MAX_PER_HOST
+MIN_HOST_INTERVAL = max(0.0, min(10.0, MIN_HOST_INTERVAL))
+MAX_PER_HOST = max(1, min(8, MAX_PER_HOST))
+
+_HOST_SEMAPHORES: dict[str, asyncio.Semaphore] = {}
+_HOST_LOCKS: dict[str, asyncio.Lock] = {}
+_HOST_LAST_REQUEST: dict[str, float] = {}
+
+
+@asynccontextmanager
+async def _host_slot(url: str):
+    """同一主机限并发 + 最小请求间隔；不同主机之间仍可并行。"""
+    host = (urlsplit(url).hostname or "").lower()
+    if host not in _HOST_SEMAPHORES:
+        _HOST_SEMAPHORES[host] = asyncio.Semaphore(MAX_PER_HOST)
+        _HOST_LOCKS[host] = asyncio.Lock()
+    async with _HOST_SEMAPHORES[host]:
+        async with _HOST_LOCKS[host]:
+            wait = MIN_HOST_INTERVAL - (time.monotonic()
+                                        - _HOST_LAST_REQUEST.get(host, 0.0))
+            if wait > 0:
+                await asyncio.sleep(wait)
+            _HOST_LAST_REQUEST[host] = time.monotonic()
+        yield
+
+
+async def _get(client: httpx.AsyncClient, url: str, **kwargs):
+    """所有抓取请求的统一入口：先过主机限速，再发请求。"""
+    async with _host_slot(url):
+        return await client.get(url, **kwargs)
+
+
+def _retry_after_seconds(value: str) -> float | None:
+    """解析 Retry-After：秒数或 HTTP 日期；无法解析返回 None。"""
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    dt = parse_datetime_utc(value)
+    if dt is None:
+        return None
+    return max(0.0, (dt - utc_now_naive()).total_seconds())
 
 # User-Agents to rotate between for bypassing RSS blocks
 USER_AGENTS = [
@@ -119,8 +197,13 @@ def _backoff_rounds(fails: int) -> int:
 
 
 def _should_backoff(health: dict, name: str, round_no: int) -> tuple[bool, str]:
-    """判断信源本轮是否应跳过（退避中）"""
+    """判断信源本轮是否应跳过（退避中 / Retry-After 冷却中）"""
     h = health.get(name) or {}
+    # 429/503 的 Retry-After 优先级最高：即使失败次数还没到退避阈值，
+    # 也要等站点要求的时间过去再试。
+    next_allowed = parse_datetime_utc(h.get("next_allowed_at", ""))
+    if next_allowed is not None and utc_now_naive() < next_allowed:
+        return True, f"Retry-After 冷却至 {next_allowed.isoformat()}Z"
     fails = h.get("consecutive_failures", 0)
     if fails < MAX_CONSECUTIVE_FAILURES:
         return False, ""
@@ -182,7 +265,7 @@ def _truncate(text: str, name: str) -> str:
 
 
 def _result(source: dict, url: str, text: str, error, rtype: str = None,
-            platform: str = None) -> dict:
+            platform: str = None, **extra) -> dict:
     item = {
         "source_name": source["name"],
         "language": source.get("language", "en"),
@@ -197,10 +280,94 @@ def _result(source: dict, url: str, text: str, error, rtype: str = None,
     cfg = source.get("scraper_config")
     if cfg:
         item["scraper_config"] = cfg
+    item.update(extra)
     return item
 
 
-async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
+def _conditional_headers(health: dict | None, name: str) -> dict:
+    """构造 If-None-Match / If-Modified-Since，用于 304 免下载。
+
+    只有本地已有该源的 XML 缓存时才发条件请求。否则一旦收到 304，
+    就没有内容可复用（例如 data/state 被清理但 source_health 还在），
+    该源会在后续每轮都“成功但零内容”。
+    """
+    try:
+        cache = _feed_cache_path(name)
+        if not cache.exists() or cache.stat().st_size == 0:
+            return {}
+    except OSError:
+        return {}
+    h = (health or {}).get(name) or {}
+    headers = {}
+    if h.get("etag"):
+        headers["If-None-Match"] = h["etag"]
+    if h.get("last_modified"):
+        headers["If-Modified-Since"] = h["last_modified"]
+    return headers
+
+
+def _feed_cache_path(name: str):
+    digest = hashlib.sha256(name.encode("utf-8")).hexdigest()[:16]
+    return FEED_CACHE_DIR / f"{digest}.xml"
+
+
+def _write_feed_cache(name: str, text: str) -> None:
+    if not text:
+        return
+    try:
+        atomic_write_text(_feed_cache_path(name), text)
+    except Exception as e:
+        print(f"  [FETCH] 缓存写入失败（不影响本轮）: {name}: {e}")
+
+
+def _read_feed_cache(name: str) -> str:
+    path = _feed_cache_path(name)
+    try:
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+    except Exception as e:
+        print(f"  [FETCH] 缓存读取失败（按未变更处理）: {name}: {e}")
+    return ""
+
+
+def _success_result(source: dict, url: str, resp, name: str) -> dict:
+    text = _truncate(resp.text, name)
+    _write_feed_cache(name, text)
+    return _result(
+        source, url, text, None,
+        etag=resp.headers.get("etag", ""),
+        last_modified=resp.headers.get("last-modified", ""),
+    )
+
+
+def _not_modified_result(source: dict, url: str, resp) -> dict:
+    name = source.get("name", "")
+    cached = _read_feed_cache(name)
+    if not cached:
+        print(f"  [FETCH] 警告: {name} 返回 304 但本地无缓存，本轮该源无内容")
+    return _result(
+        source, url, cached, None, not_modified=True,
+        from_cache=bool(cached),
+        etag=resp.headers.get("etag", ""),
+        last_modified=resp.headers.get("last-modified", ""),
+    )
+
+
+def _http_error_result(source: dict, url: str, resp, name: str) -> dict:
+    code = resp.status_code
+    retry_after = _retry_after_seconds(resp.headers.get("retry-after", ""))
+    extra = {"http_status": code}
+    if retry_after is not None:
+        extra["retry_after"] = retry_after
+    msg = f"HTTP {code}"
+    if retry_after is not None:
+        msg += f"（Retry-After {retry_after:.0f}s）"
+    print(f"  [FETCH ERROR] {name}: {msg}")
+    return _result(source, url, "", msg, **extra)
+
+
+async def fetch_feed(client: httpx.AsyncClient, source: dict,
+                     health: dict | None = None) -> dict:
     """抓取单个 RSS 信源，返回 {source_name, url, xml_text, error}"""
     name = source["name"]
     feed_url = source["url"]
@@ -213,6 +380,7 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
         return _result(source, feed_url, "", str(e))
 
     print(f"  [FETCH] {name} <- {feed_url}")
+    cond_headers = _conditional_headers(health, name)
 
     # 对需要跳过 SSL 验证的信源使用独立客户端（存在中间人风险，配置需谨慎）
     if not ssl_verify:
@@ -220,21 +388,34 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
               "该信源内容存在被篡改的可能")
         try:
             async with httpx.AsyncClient(verify=False, headers=client.headers) as insecure_client:
-                resp = await insecure_client.get(feed_url, timeout=30.0, follow_redirects=True)
+                resp = await _get(insecure_client, feed_url, timeout=30.0,
+                                  follow_redirects=True, headers=cond_headers or None)
+                if resp.status_code == 304:
+                    return _not_modified_result(source, feed_url, resp)
+                if resp.status_code in (429, 503):
+                    return _http_error_result(source, feed_url, resp, name)
                 resp.raise_for_status()
                 if resp.text.strip():
-                    return _result(source, feed_url, _truncate(resp.text, name), None)
+                    return _success_result(source, feed_url, resp, name)
+        except httpx.HTTPStatusError as e:
+            return _http_error_result(source, feed_url, e.response, name)
         except Exception as e:
             return _result(source, feed_url, "", str(e))
 
     first_ua = client.headers.get("User-Agent", "")
     first_error = None
     try:
-        resp = await client.get(feed_url, timeout=30.0, follow_redirects=True)
+        resp = await _get(client, feed_url, timeout=30.0, follow_redirects=True,
+                          headers=cond_headers or None)
+        if resp.status_code == 304:
+            return _not_modified_result(source, feed_url, resp)
+        if resp.status_code in (429, 503):
+            return _http_error_result(source, feed_url, resp, name)
         resp.raise_for_status()
         # 检查空响应 (某些信源对特定UA返回200但空body)
         if resp.text.strip():
-            return _result(source, feed_url, _truncate(resp.text, name), None)
+            return _success_result(source, feed_url, resp, name)
+        first_error = "空响应"
     except httpx.HTTPStatusError as e:
         first_error = f"HTTP {e.response.status_code}"
     except httpx.RequestError as e:
@@ -246,13 +427,20 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
         if retry_ua == first_ua:
             continue
         try:
-            resp2 = await client.get(
-                feed_url, timeout=30.0, follow_redirects=True,
-                headers={"User-Agent": retry_ua, "Accept": _RSS_ACCEPT})
+            resp2 = await _get(
+                client, feed_url, timeout=30.0, follow_redirects=True,
+                headers={**cond_headers, "User-Agent": retry_ua,
+                         "Accept": _RSS_ACCEPT})
+            if resp2.status_code == 304:
+                return _not_modified_result(source, feed_url, resp2)
+            if resp2.status_code in (429, 503):
+                return _http_error_result(source, feed_url, resp2, name)
             resp2.raise_for_status()
             if resp2.text.strip():
-                return _result(source, feed_url, _truncate(resp2.text, name), None)
+                return _success_result(source, feed_url, resp2, name)
             last_error = "空响应"
+        except httpx.HTTPStatusError as e:
+            last_error = f"HTTP {e.response.status_code}"
         except Exception as e:
             last_error = str(e)
 
@@ -261,7 +449,8 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict) -> dict:
     return _result(source, feed_url, "", msg)
 
 
-async def fetch_api(client: httpx.AsyncClient, source: dict) -> dict:
+async def fetch_api(client: httpx.AsyncClient, source: dict,
+                     health: dict | None = None) -> dict:
     """抓取单个 API 信源，返回 {source_name, url, xml_text, error}"""
     name = source["name"]
     feed_url = source["url"]
@@ -289,11 +478,23 @@ async def fetch_api(client: httpx.AsyncClient, source: dict) -> dict:
     if not handler:
         # 无平台信息时回退：基本 GET
         print(f"  [FETCH API] {name} 无可用 api_platform，回退至基本 GET")
+        cond_headers = _conditional_headers(health, name)
         try:
-            resp = await client.get(feed_url, timeout=30.0, follow_redirects=True)
+            resp = await _get(client, feed_url, timeout=30.0, follow_redirects=True,
+                              headers=cond_headers or None)
+            if resp.status_code == 304:
+                item = _not_modified_result(source, feed_url, resp)
+                item.update({"type": "api", "api_platform": platform})
+                return item
+            if resp.status_code in (429, 503):
+                return _http_error_result(source, feed_url, resp, name)
             resp.raise_for_status()
-            return _result(source, feed_url, _truncate(resp.text, name), None,
-                           rtype="api", platform=platform)
+            text = _truncate(resp.text, name)
+            _write_feed_cache(name, text)
+            return _result(source, feed_url, text, None,
+                           rtype="api", platform=platform,
+                           etag=resp.headers.get("etag", ""),
+                           last_modified=resp.headers.get("last-modified", ""))
         except Exception as e2:
             return _result(source, feed_url, "", str(e2), rtype="api", platform=platform)
 
@@ -306,7 +507,7 @@ async def fetch_api(client: httpx.AsyncClient, source: dict) -> dict:
 
 async def _fetch_arxiv(client, source, platform):
     url = source["url"]
-    resp = await client.get(url, timeout=30.0, follow_redirects=True)
+    resp = await _get(client, url, timeout=30.0, follow_redirects=True)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -318,7 +519,7 @@ async def _fetch_semantic_scholar(client, source, platform):
     headers = {}
     if SCHOLAR_API_KEY:
         headers["x-api-key"] = SCHOLAR_API_KEY
-    resp = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
+    resp = await _get(client, url, timeout=30.0, follow_redirects=True, headers=headers)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -326,7 +527,7 @@ async def _fetch_semantic_scholar(client, source, platform):
 
 async def _fetch_ietf(client, source, platform):
     url = source["url"]
-    resp = await client.get(url, timeout=30.0, follow_redirects=True)
+    resp = await _get(client, url, timeout=30.0, follow_redirects=True)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -335,7 +536,7 @@ async def _fetch_ietf(client, source, platform):
 async def _fetch_mitre_attack(client, source, platform):
     """MITRE ATT&CK STIX：数据量大，单独放宽超时"""
     url = source["url"]
-    resp = await client.get(url, timeout=120.0, follow_redirects=True)
+    resp = await _get(client, url, timeout=120.0, follow_redirects=True)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -347,7 +548,7 @@ async def _fetch_github(client, source, platform):
     headers = {"Accept": "application/vnd.github.v3+json"}
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-    resp = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
+    resp = await _get(client, url, timeout=30.0, follow_redirects=True, headers=headers)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -359,7 +560,7 @@ async def _fetch_github_repo(client, source, platform):
     headers = {"Accept": "application/vnd.github.v3+json"}
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-    resp = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
+    resp = await _get(client, url, timeout=30.0, follow_redirects=True, headers=headers)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -368,7 +569,7 @@ async def _fetch_github_repo(client, source, platform):
 async def _fetch_secrss(client, source, platform):
     """安全内参 API：基本 GET"""
     url = source["url"]
-    resp = await client.get(url, timeout=30.0, follow_redirects=True)
+    resp = await _get(client, url, timeout=30.0, follow_redirects=True)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -409,9 +610,9 @@ async def fetch_all() -> list[dict]:
         tasks = []
         for src, _ in sources:
             if src.get("type") == "api":
-                tasks.append(fetch_api(client, src))
+                tasks.append(fetch_api(client, src, health))
             else:
-                tasks.append(fetch_feed(client, src))
+                tasks.append(fetch_feed(client, src, health))
         results = await asyncio.gather(*tasks, return_exceptions=True)
         results = [r if isinstance(r, dict) else {
             "source_name": "",
@@ -443,6 +644,19 @@ async def fetch_all() -> list[dict]:
                         and r["error"].startswith("backoff")):
             continue
         _update_health(health, name, r["error"] is None, round_no)
+        h = health.setdefault(name, {})
+        if r.get("etag"):
+            h["etag"] = r["etag"]
+        if r.get("last_modified"):
+            h["last_modified"] = r["last_modified"]
+        if r.get("not_modified"):
+            h["last_not_modified"] = datetime.now().isoformat()
+        if r.get("retry_after") is not None:
+            try:
+                h["next_allowed_at"] = (utc_now_naive() + timedelta(
+                    seconds=float(r["retry_after"]))).isoformat()
+            except (TypeError, ValueError):
+                pass
 
     recovered = [n for n, h in health.items()
                  if n != HEALTH_META_KEY and isinstance(h, dict)
@@ -462,7 +676,9 @@ async def fetch_all() -> list[dict]:
         if not name:
             continue
         error = r.get("error")
-        if error is None:
+        if error is None and r.get("not_modified"):
+            status = "not_modified"
+        elif error is None:
             status = "success"
         elif isinstance(error, str) and error.startswith("backoff"):
             status = "backoff"
@@ -476,9 +692,12 @@ async def fetch_all() -> list[dict]:
     atomic_write(DATA_DIR / "fetch_status.json", fetch_status, indent=2)
 
     success = sum(1 for r in results if r.get("error") is None)
+    not_modified_count = sum(1 for r in results if r.get("not_modified"))
     backoff_count = sum(1 for r in results
                         if isinstance(r.get("error"), str) and r["error"].startswith("backoff"))
     msg = f"[FETCHER] 完成: {success}/{len(results)} 成功"
+    if not_modified_count:
+        msg += f"（其中 {not_modified_count} 个 304 未变更）"
     if backoff_count:
         msg += f"（{backoff_count} 个退避中）"
     print(msg)
