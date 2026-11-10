@@ -18,6 +18,7 @@
 import hashlib
 import json
 import re
+from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -84,8 +85,85 @@ def get_week_number(dt: datetime) -> str:
     return f"{iso[0]}W{iso[1]:02d}"
 
 
+def _load_reader_profile() -> dict:
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as f:
+            cfg = json.load(f)
+        return cfg.get("reader_profile", {}) or {}
+    except Exception:
+        return {}
+
+
+def _load_quality() -> dict:
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as f:
+            cfg = json.load(f)
+        return cfg.get("quality", {}) or {}
+    except Exception:
+        return {}
+
+
+def _rank_key(it: dict) -> float:
+    """报告排序：优先相关性，其次深度，最后关键词原始强度。"""
+    for key in ("raw_score", "relevance_score", "confidence_score"):
+        v = it.get(key)
+        if v is None:
+            continue
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
+def _apply_diversity(items: list[dict], max_per_source: int = 3,
+                     max_series_per_source: int = 1) -> list[dict]:
+    """单源配额 + 同系列合并：避免一个信源/一个周报系列霸榜。"""
+    ranked = sorted(items, key=_rank_key, reverse=True)
+    counts: Counter = Counter()
+    series_counts: Counter = Counter()
+    out = []
+    for item in ranked:
+        src = item.get("source_name") or ""
+        if counts[src] >= max_per_source:
+            continue
+        if item.get("series_hit"):
+            if series_counts[src] >= max_series_per_source:
+                continue
+            series_counts[src] += 1
+        counts[src] += 1
+        out.append(item)
+    return out
+
+
+def _split_sections(items: list[dict]) -> tuple[list[dict], list[dict]]:
+    """把收录内容分为“架构与技术深度”和“本周安全要闻”两栏。"""
+    profile = _load_reader_profile()
+    limit = int(profile.get("deep_section_limit", 15) or 15)
+    min_depth = int(profile.get("deep_section_min_depth", 35) or 35)
+    min_rel = float(profile.get("deep_section_min_relevance", 45) or 45)
+    deep_candidates = [
+        i for i in items
+        if i.get("depth_score", 0) >= min_depth
+        and i.get("relevance_score", 0) >= min_rel
+        and i.get("commercial_score", 0) < 50
+    ]
+    deep_items = sorted(
+        deep_candidates,
+        key=lambda i: (i.get("depth_score", 0), i.get("relevance_score", 0)),
+        reverse=True,
+    )[:limit]
+    deep_ids = {id(i) for i in deep_items}
+    news_items = [i for i in items if id(i) not in deep_ids]
+    for it in deep_items:
+        it["section"] = "架构与技术深度"
+    for it in news_items:
+        it["section"] = "本周安全要闻"
+    return deep_items, news_items
+
+
 def group_by_category(items: list[dict]) -> dict:
-    """按分类对内容分组（未知分类归入“未分类”）"""
+    """兼容旧接口：按分类对内容分组。"""
     order = _category_order()
     groups = {cat: [] for cat in order}
     for item in items:
@@ -93,7 +171,6 @@ def group_by_category(items: list[dict]) -> dict:
         if cat not in groups:
             cat = UNCLASSIFIED
         groups[cat].append(item)
-    # 移除空组，保持 order 的相对顺序
     return {k: v for k, v in groups.items() if v}
 
 
@@ -179,6 +256,14 @@ def build_json_items(items: list[dict]) -> list[dict]:
             "confidence_score": item.get("confidence_score", 0),
             # 不截顶的证据强度，用于前端排序/展示（截顶分大量并列满分）
             "raw_score": item.get("raw_score", item.get("confidence_score", 0)),
+            "section": item.get("section", ""),
+            "relevance_score": item.get("relevance_score", 0),
+            "depth_score": item.get("depth_score", 0),
+            "topic_fit": item.get("topic_fit", 0),
+            "commercial_score": item.get("commercial_score", 0),
+            "authority_tier": item.get("authority_tier", ""),
+            "selection_reason": item.get("selection_reason", ""),
+            "series_hit": bool(item.get("series_hit")),
             "full_body": full_body,
             # 供前端如实标注“未翻译”的内容（只看报告实际展示的标题与摘要；
             # 正文按设计不翻译，不参与该标记）
@@ -339,23 +424,25 @@ def generate_report():
     sunday = monday + timedelta(days=6)
     date_range = f"{monday.strftime('%Y.%m.%d')}-{sunday.strftime('%Y.%m.%d')}"
 
-    # 分离 accepted 和 review 条目，并按**证据强度**（不截顶的原始分）降序排列。
-    # 截顶后大量条目同为 100 分、彼此无法排序；原始分让证据更强的排在前面。
-    def _rank_key(it: dict) -> float:
-        v = it.get("raw_score")
-        if v is None:
-            v = it.get("confidence_score", 0)
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            return 0.0
+    # 分离 accepted 和 review；收录内容先做单源/系列配额，再按相关性排序。
+    profile = _load_reader_profile()
+    quality = _load_quality()
+    quotas = quality.get("quotas", {}) or {}
+    max_per_source = int(quotas.get("max_per_source", 3) or 3)
+    max_total = int(profile.get("max_total_items", 80) or 80)
 
-    accepted_items = sorted((i for i in items if i.get("filter_decision") != "review"),
-                            key=_rank_key, reverse=True)
+    accepted_all = [i for i in items if i.get("filter_decision") != "review"]
+    accepted_all = _apply_diversity(accepted_all, max_per_source=max_per_source)
+    accepted_items = sorted(accepted_all, key=_rank_key, reverse=True)[:max_total]
     review_items = sorted((i for i in items if i.get("filter_decision") == "review"),
                           key=_rank_key, reverse=True)
 
-    groups = group_by_category(accepted_items)
+    deep_items, news_items = _split_sections(accepted_items)
+    groups = {}
+    if deep_items:
+        groups["★ 架构与技术深度"] = deep_items
+    if news_items:
+        groups["● 本周安全要闻"] = news_items
 
     all_items = accepted_items + review_items
     json_items = build_json_items(all_items)
@@ -377,15 +464,14 @@ def generate_report():
         except Exception:
             pass
 
-    # 分类名与数量（用于三栏模板的侧边栏）
+    # 栏目标题与数量（用于三栏模板的侧边栏）
     cat_names = []
     cat_counts = []
-    for cat in _category_order():
-        if cat in groups:
-            # 去掉 "① ", "② " 等前缀
-            name = re.sub(r"^[①②③④⑤⑥]\s*", "", cat)
-            cat_names.append(name)
-            cat_counts.append(len(groups[cat]))
+    for cat in groups:
+        # 去掉 "★ ", "● ", "① " 等前缀
+        name = re.sub(r"^[★●◐①②③④⑤⑥⑦]\s*", "", cat)
+        cat_names.append(name)
+        cat_counts.append(len(groups[cat]))
 
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
     template = env.get_template("weekly_report.html")

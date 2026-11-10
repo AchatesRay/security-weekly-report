@@ -17,10 +17,11 @@ import re
 from datetime import timedelta
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+import yaml
 from rapidfuzz import fuzz, process
 
-from ..utils import (DATA_DIR, SETTINGS_PATH, atomic_write, parse_datetime_utc,
-                     utc_now_naive)
+from ..utils import (DATA_DIR, SETTINGS_PATH, SOURCES_PATH, atomic_write,
+                     parse_datetime_utc, utc_now_naive)
 
 PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
 DEDUPED_ITEMS_PATH = DATA_DIR / "deduped_items.json"
@@ -61,6 +62,29 @@ def load_thresholds() -> tuple[int, int]:
 
 
 SIMILARITY_THRESHOLD, MAX_DAYS = load_thresholds()
+
+_GROUP_PRIORITY = {
+    "政府与CERT": 5, "标准框架": 5, "安全厂商": 4, "开发者社区": 4,
+    "安全媒体": 3, "国内信源": 3, "AI厂商": 2,
+}
+_TIER_PRIORITY = {"S": 5, "A": 4, "B": 3, "C": 2}
+
+def _load_source_priority() -> dict:
+    """source_name -> 优先级（越大越权威），用于同名事件保留最佳版本。"""
+    priority: dict = {}
+    try:
+        with open(SOURCES_PATH, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        for src in cfg.get("sources", []):
+            if isinstance(src, dict) and src.get("name"):
+                tier = str(src.get("tier", "")).upper()
+                priority[src["name"]] = _TIER_PRIORITY.get(
+                    tier, _GROUP_PRIORITY.get(src.get("group", ""), 3))
+    except Exception:
+        pass
+    return priority
+
+SOURCE_PRIORITY = _load_source_priority()
 
 # 标题规范化：去掉前缀标记、括号标签与标点，压缩空白
 _PREFIX_RE = re.compile(
@@ -179,6 +203,15 @@ def deduplicate(items: list[dict]) -> list[dict]:
                     "merged_sources", [existing.get("source_name", "")])
                 if source_name and source_name not in merged:
                     merged.append(source_name)
+                # 同一事件保留“最佳版本”：信源等级优先，其次摘要更长
+                new_pri = SOURCE_PRIORITY.get(source_name, 3)
+                old_pri = SOURCE_PRIORITY.get(existing.get("source_name", ""), 3)
+                new_len = len(item.get("summary") or "")
+                old_len = len(existing.get("summary") or "")
+                if new_pri > old_pri or (new_pri == old_pri and new_len > old_len * 1.2):
+                    item["merged_sources"] = merged
+                    result[idx] = item
+                    seen_norms[idx] = norm_title
                 title_dups += 1
                 continue
 

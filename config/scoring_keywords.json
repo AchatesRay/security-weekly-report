@@ -974,7 +974,8 @@
       {
         "text": "依赖混淆",
         "categories": [
-          "③ 漏洞态势与供应链安全"
+          "③ 漏洞态势与供应链安全",
+          "⑥ 数据安全与隐私保护"
         ],
         "content_types": [
           "行业分析",
@@ -1182,7 +1183,8 @@
       {
         "text": "威胁狩猎",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑤ 产业动态与技术趋势",
+          "② 威胁情报与攻防对抗"
         ]
       },
       {
@@ -1712,7 +1714,8 @@
       {
         "text": "检测规则",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑤ 产业动态与技术趋势",
+          "② 威胁情报与攻防对抗"
         ]
       },
       {
@@ -2410,7 +2413,8 @@
       {
         "text": "供应链投毒",
         "categories": [
-          "③ 漏洞态势与供应链安全"
+          "③ 漏洞态势与供应链安全",
+          "⑥ 数据安全与隐私保护"
         ]
       },
       {
@@ -2438,6 +2442,351 @@
         "categories": [
           "① AI/LLM 安全",
           "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "CVE",
+        "type": "core",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "RCE",
+        "type": "core",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "LPE",
+        "type": "core",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "SSRF",
+        "type": "core",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "XXE",
+        "type": "core",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "CSRF",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "UAF",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "反序列化",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "利用链",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "补丁分析",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "补丁对比",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "根因分析",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "内存破坏",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "堆溢出",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "栈溢出",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "类型混淆",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "免杀",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "漏洞挖掘",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "漏洞复现",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "攻击面分析",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "Remote Code Execution",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "patch diff",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "root cause",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "exploit chain",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "proof of concept",
+        "categories": [
+          "③ 漏洞态势与供应链安全"
+        ]
+      },
+      {
+        "text": "参考架构",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "安全架构",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "架构取舍",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "工程实践",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "故障域",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "性能开销",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "基准测试",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "数据面",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "控制面",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "策略编排",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "运行时安全",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "reference architecture",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "threat model",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "design trade-off",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "failure mode",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "身份联邦",
+        "categories": [
+          "⑥ 数据安全与隐私保护"
+        ]
+      },
+      {
+        "text": "工作负载身份",
+        "categories": [
+          "⑥ 数据安全与隐私保护"
+        ]
+      },
+      {
+        "text": "证书生命周期",
+        "categories": [
+          "⑥ 数据安全与隐私保护"
+        ]
+      },
+      {
+        "text": "制品签名",
+        "categories": [
+          "⑥ 数据安全与隐私保护"
+        ]
+      },
+      {
+        "text": "检测工程",
+        "categories": [
+          "② 威胁情报与攻防对抗"
+        ]
+      },
+      {
+        "text": "遥测",
+        "categories": [
+          "② 威胁情报与攻防对抗"
+        ]
+      },
+      {
+        "text": "admission control",
+        "categories": [
+          "⑤ 产业动态与技术趋势",
+          "② 威胁情报与攻防对抗"
+        ]
+      },
+      {
+        "text": "identity management",
+        "categories": [
+          "⑤ 产业动态与技术趋势",
+          "⑥ 数据安全与隐私保护"
+        ]
+      },
+      {
+        "text": "least privilege",
+        "categories": [
+          "⑤ 产业动态与技术趋势",
+          "⑥ 数据安全与隐私保护",
+          "② 威胁情报与攻防对抗"
+        ]
+      },
+      {
+        "text": "design tenet",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "policy design",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "zero trust architecture",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "security architecture",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "control plane",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "data plane",
+        "categories": [
+          "⑤ 产业动态与技术趋势"
+        ]
+      },
+      {
+        "text": "AI security agent",
+        "categories": [
+          "① AI/LLM 安全"
         ]
       }
     ]
@@ -2525,7 +2874,7 @@
         "text": "IPO",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ],
         "content_types": [
           "行业分析"
@@ -2556,7 +2905,7 @@
         "text": "M&A",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ]
       },
       {
@@ -2741,7 +3090,7 @@
         "text": "上市",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ],
         "content_types": [
           "行业分析"
@@ -2758,7 +3107,7 @@
         "text": "估值",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ]
       },
       {
@@ -2793,14 +3142,14 @@
         "text": "厂商",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ]
       },
       {
         "text": "合并",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ]
       },
       {
@@ -2862,7 +3211,7 @@
         "text": "市场报告",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ],
         "content_types": [
           "行业分析"
@@ -2917,7 +3266,7 @@
         "text": "投资",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ]
       },
       {
@@ -2931,7 +3280,7 @@
         "text": "收购",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ],
         "content_types": [
           "行业分析"
@@ -2984,7 +3333,7 @@
         "text": "新品上市",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ],
         "content_types": [
           "行业分析"
@@ -3054,7 +3403,7 @@
         "text": "融资",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ],
         "content_types": [
           "行业分析"
@@ -3064,7 +3413,7 @@
         "text": "行业报告",
         "type": "normal",
         "categories": [
-          "⑤ 产业动态与技术趋势"
+          "⑦ 产业与商业动态"
         ],
         "content_types": [
           "行业分析"
@@ -3823,20 +4172,23 @@
     ]
   },
   "category_weights": {
-    "① AI/LLM 安全": 1.2,
-    "⑤ 产业动态与技术趋势": 1.2,
-    "⑥ 数据安全与隐私保护": 1,
-    "② 威胁情报与攻防对抗": 0.9,
-    "③ 漏洞态势与供应链安全": 0.8,
-    "④ 政策法规与标准框架": 0.8
+    "① AI/LLM 安全": 0.8,
+    "② 威胁情报与攻防对抗": 0.75,
+    "③ 漏洞态势与供应链安全": 0.9,
+    "④ 政策法规与标准框架": 0.9,
+    "⑤ 产业动态与技术趋势": 1.0,
+    "⑥ 数据安全与隐私保护": 0.7,
+    "⑦ 产业与商业动态": 0.15,
+    "未分类": 0.3
   },
   "content_type_weights": {
-    "研究报告/白皮书": 1.1,
-    "行业分析": 1.1,
-    "漏洞披露": 0.8,
-    "攻击活动报告": 0.8,
-    "工具发布": 1,
-    "法规/标准发布": 1
+    "研究报告/白皮书": 1.15,
+    "漏洞披露": 1.0,
+    "攻击活动报告": 1.0,
+    "工具发布": 0.85,
+    "行业分析": 0.55,
+    "法规/标准发布": 0.85,
+    "综合": 0.9
   },
   "categories": {
     "① AI/LLM 安全": {
@@ -3856,6 +4208,9 @@
     },
     "⑥ 数据安全与隐私保护": {
       "description": "数据安全防护、隐私计算、数据治理与个人信息保护相关技术与实践"
+    },
+    "⑦ 产业与商业动态": {
+      "description": "厂商融资、并购、市场报告、榜单、活动与商业动态"
     }
   },
   "content_types": {
@@ -3926,22 +4281,9 @@
     "detail_exclusions": {
       "enabled": true,
       "keywords": [
-        "漏洞复现",
-        "EXP编写",
-        "POC下载",
-        "漏洞利用教程",
-        "CVE详情",
-        "漏洞靶场",
-        "IOC指标",
-        "流量特征",
-        "木马免杀",
-        "webshell工具",
-        "渗透教程",
-        "CTF Writeup",
-        "事件复盘",
-        "攻击详情",
         "泄露数据明细",
-        "受害企业名单"
+        "受害企业名单",
+        "CTF Writeup"
       ],
       "single_penalty": -20,
       "drop_on_match_count": 2
@@ -4104,6 +4446,358 @@
         "合规"
       ],
       "note": "单独出现不计分，需搭配安全类前缀才计分"
+    },
+    "网络安全": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "云安全": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全运营": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全服务": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "服务化": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "产业趋势": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "技术创新": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "技术路线": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "技术演进": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "架构演进": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "可观测性": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "下一代安全": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全自动化": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全遥测": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "攻击技术": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "防御技术": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全韧性": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "风险评估": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "风险管理": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "认证": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "访问控制": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "防火墙": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "VPN": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "密码学": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "加密算法": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全左移": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全右移": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全即代码": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "数据湖": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "可信计算": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "内生安全": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "软件边界": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "身份治理": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "身份认证": {
+      "standalone_score": false,
+      "note": "领域伞形词，仅用于分类，不单独计分"
+    },
+    "SOC": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "SIEM": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "SOAR": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "XDR": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "EDR": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "WAF": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "SASE": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "ZTNA": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "ZTA": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "CASB": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "CSPM": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "CWPP": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "MDR": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "NDR": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "EPP": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "SSE": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "SDP": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "威胁情报": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "渗透测试": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "云原生安全": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全大模型": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全Copilot": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
+    },
+    "安全智能体": {
+      "standalone_score": false,
+      "note": "产品品类/领域伞形词，仅用于分类，不单独计分"
     }
+  },
+  "commercial_filters": {
+    "award_market": [
+      "Gartner",
+      "Forrester",
+      "Magic Quadrant",
+      "Market Guide",
+      "IDC",
+      "魔力象限",
+      "市场份额",
+      "榜单",
+      "排名",
+      "入围",
+      "登榜",
+      "荣获",
+      "获奖"
+    ],
+    "funding_ma": [
+      "融资",
+      "估值",
+      "营收",
+      "财报",
+      "上市",
+      "IPO",
+      "收购",
+      "合并",
+      "签约",
+      "战略合作",
+      "M&A"
+    ],
+    "event_promo": [
+      "发布会",
+      "峰会",
+      "大会",
+      "巡展",
+      "沙龙",
+      "webinar",
+      "Request a Demo",
+      "免费试用",
+      "立即注册",
+      "预约演示"
+    ],
+    "product_launch": [
+      "Introducing",
+      "Announces",
+      "Launches",
+      "Now Available",
+      "Marketplace",
+      "Partner",
+      "Acquires",
+      "Appoints",
+      "Named a Leader",
+      "Recognized",
+      "Award",
+      "Ranked",
+      "发布",
+      "推出",
+      "上线"
+    ],
+      "corporate_comms": [
+        "Celebrating",
+        "Career Week",
+        "All aboard",
+        "headed to our next stop",
+        "Join us",
+        "winners",
+        "Meet the",
+        "Farewell",
+        "anniversary",
+        "Two Years of",
+        "Share your feedback"
+      ],
+      "series_patterns": [
+      "Threat Intelligence Report",
+      "Weekly",
+      "Roundup",
+      "This Week",
+      "Monthly",
+      "Q1",
+      "Q2",
+      "Q3",
+      "Q4",
+      "IR trends",
+        "Patch Tuesday",
+        "Part 1",
+        "Part 2",
+        "Part 3",
+        "Part I",
+        "Part II",
+        "上篇",
+        "下篇",
+        "周报",
+      "月度",
+      "季度",
+      "盘点",
+      "汇总"
+    ],
+      "weights": {
+        "award_market": 45,
+        "funding_ma": 40,
+        "corporate_comms": 35,
+      "event_promo": 30,
+      "product_launch": 30,
+      "series": 25,
+      "marketing_tone": 50
+    },
+    "marketing_tone": [
+      "全新",
+      "重磅",
+      "引领",
+      "赋能",
+      "颠覆",
+      "首发",
+      "亮相",
+      "打造",
+      "助力",
+      "一站式",
+      "行业领先",
+      "遥遥领先",
+      "首选",
+      "焕新",
+      "升级发布",
+      "正式发布"
+    ]
   }
 }

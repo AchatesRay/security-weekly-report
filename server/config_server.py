@@ -218,6 +218,22 @@ _ALLOWED_SETTINGS_SPEC = {
     "summary": {"max_chars": int, "short_max_chars": int, "min_chars": int,
                 "short_categories": list},
     "category_order": list,
+    # 读者画像：双栏阈值、总量上限、深栏条数
+    "reader_profile": {
+        "deep_section_min_depth": int,
+        "deep_section_min_relevance": (int, float),
+        "max_total_items": int,
+        "deep_section_limit": int,
+    },
+    # 质量信号：信源权威、深度、商业噪声、单源配额
+    "quality": {
+        "authority_multipliers": dict,
+        "depth_bonus_max": (int, float),
+        "commercial_penalty_max": (int, float),
+        "series_penalty": (int, float),
+        "source_tiers": dict,
+        "quotas": dict,
+    },
 }
 
 # translate.fields 允许的取值（与 translator.SUPPORTED_FIELDS 保持一致）
@@ -241,8 +257,12 @@ def sanitize_settings(raw: dict) -> dict:
                 if sk not in val:
                     continue
                 sv = val[sk]
-                # bool 是 int 的子类，需单独排除
-                if isinstance(sv, bool) or not isinstance(sv, stype):
+                # bool 是 int 的子类：声明为 bool 的字段按 bool 校验，
+                # 声明为数值的字段则排除 bool。
+                if stype is bool:
+                    if not isinstance(sv, bool):
+                        raise ConfigValidationError(f"{key}.{sk} 类型不正确")
+                elif isinstance(sv, bool) or not isinstance(sv, stype):
                     raise ConfigValidationError(f"{key}.{sk} 类型不正确")
                 sub[sk] = sv
             out[key] = sub
@@ -284,6 +304,23 @@ def sanitize_settings(raw: dict) -> dict:
     if short_cats is not None and not all(
             isinstance(x, str) and x.strip() for x in short_cats):
         raise ConfigValidationError("summary.short_categories 必须是字符串数组")
+
+    profile = out.get("reader_profile", {})
+    for pkey, lo, hi in (("deep_section_min_depth", 0, 100),
+                         ("deep_section_min_relevance", 0, 200),
+                         ("max_total_items", 1, 1000),
+                         ("deep_section_limit", 1, 100)):
+        pval = profile.get(pkey)
+        if pval is not None and not (lo <= pval <= hi):
+            raise ConfigValidationError(f"reader_profile.{pkey} 必须在 {lo}-{hi} 之间")
+
+    quality = out.get("quality", {})
+    for qkey, lo, hi in (("depth_bonus_max", 0, 300),
+                         ("commercial_penalty_max", 0, 500),
+                         ("series_penalty", 0, 200)):
+        qval = quality.get(qkey)
+        if qval is not None and not (lo <= qval <= hi):
+            raise ConfigValidationError(f"quality.{qkey} 必须在 {lo}-{hi} 之间")
     return out
 
 

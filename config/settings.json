@@ -26,6 +26,68 @@
     "④ 政策法规与标准框架",
     "⑤ 产业动态与技术趋势",
     "⑥ 数据安全与隐私保护",
+    "⑦ 产业与商业动态",
     "未分类"
-  ]
+  ],
+  "reader_profile": {
+    "deep_section_min_depth": 35,
+    "deep_section_min_relevance": 45,
+    "max_total_items": 80,
+    "deep_section_limit": 15
+  },
+  "quality": {
+    "authority_multipliers": {
+      "S": 1.2,
+      "A": 1.1,
+      "B": 1.0,
+      "C": 0.85
+    },
+    "depth_bonus_max": 60,
+    "commercial_penalty_max": 100,
+    "series_penalty": 25,
+    "source_tiers": {
+      "default_by_group": {
+        "政府与CERT": "S",
+        "标准框架": "S",
+        "安全厂商": "A",
+        "开发者社区": "B",
+        "安全媒体": "B",
+        "国内信源": "B",
+        "AI厂商": "B"
+      },
+      "overrides": {
+        "Google Project Zero": "S",
+        "Unit 42": "S",
+        "Cisco Talos Blog": "S",
+        "Microsoft Security Blog": "S",
+        "MSRC": "S",
+        "Mandiant / Google Cloud Threat Intel": "S",
+        "Google Cloud Security Blog": "S",
+        "AWS Security Blog": "S",
+        "NIST Cybersecurity Insights": "S",
+        "CISA Alerts": "S",
+        "NCSC UK": "S",
+        "SANS ISC": "S",
+        "PortSwigger Research": "S",
+        "DFIR Report": "S",
+        "Sekoia Blog": "S",
+        "ESET WeLiveSecurity": "S",
+        "Kaspersky Securelist": "S",
+        "Zero Day Initiative": "S",
+        "arXiv cs.CR": "S",
+        "IETF Datatracker": "S",
+        "MITRE ATT&CK": "S",
+        "GitHub Security Lab": "S",
+        "Praetorian Blog": "S",
+        "Embrace The Red": "S",
+        "AI Hot": "C",
+        "Hacker News": "C",
+        "Reddit r/netsec": "C",
+        "Packet Storm Security": "C"
+      }
+    },
+    "quotas": {
+      "max_per_source": 3
+    }
+  }
 }

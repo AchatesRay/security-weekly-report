@@ -333,7 +333,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 var _allData = {};   // week_str => { items, catNames, catCounts }
 var _currentWeek = '{{ week_str }}';
 var _catNames = [{% for cat in groups %}{{ (cat.split(" ", 1)[1] if " " in cat else cat) | tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
-{% set prefix_chars = "①②③④⑤⑥" %}
+{% set prefix_chars = "①②③④⑤⑥⑦" %}
 var _catPrefixes = [{% for cat in groups %}{% set first = cat.split(" ", 1)[0] %}{% if first|length == 1 and first in prefix_chars %}{{ first | tojson }}{% else %}{{ "" | tojson }}{% endif %}{% if not loop.last %},{% endif %}{% endfor %}];
 
 // Register current week's data
@@ -405,6 +405,7 @@ function rebuildCatIdx(data) {
     item._catIdx = -1;
     data.catNames.forEach(function(name, ci) {
       var fullName = (_catPrefixes[ci] || '') + ' ' + name;
+      if (item.section && item.section === name) { item._catIdx = ci; return; }
       if (item.category === fullName || item.category === name) item._catIdx = ci;
     });
   });

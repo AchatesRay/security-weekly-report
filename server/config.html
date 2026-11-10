@@ -257,6 +257,7 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
             <option value="④ 政策法规与标准框架">④ 政策法规与标准框架</option>
             <option value="⑤ 产业动态与技术趋势">⑤ 产业动态与技术趋势</option>
             <option value="⑥ 数据安全与隐私保护">⑥ 数据安全与隐私保护</option>
+            <option value="⑦ 产业与商业动态">⑦ 产业与商业动态</option>
             <option value="__none__">未分配分类</option>
           </select>
           <input type="text" id="kwFilterSearch" placeholder="🔍 搜索关键词..." style="flex:1;min-width:120px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:12px" oninput="renderKeywordManager()">
@@ -287,6 +288,7 @@ td .btn-icon:hover { color:var(--danger); background:var(--danger-soft); }
               <option value="④ 政策法规与标准框架">④ 政策法规与标准框架</option>
               <option value="⑤ 产业动态与技术趋势">⑤ 产业动态与技术趋势</option>
               <option value="⑥ 数据安全与隐私保护">⑥ 数据安全与隐私保护</option>
+              <option value="⑦ 产业与商业动态">⑦ 产业与商业动态</option>
             </select>
           </div>
           <div class="form-group" style="flex:1;min-width:100px;margin-bottom:0">
@@ -476,7 +478,7 @@ var _sources = [];
 var _sourceStatus = {};
 var _settings = { dedup: {}, translate: {} };
 var _llm = { enabled: false, provider: 'openai', api_key: '', model: '', base_url: '', prompt_template: '' };
-var _catNames = ['① AI/LLM 安全','② 威胁情报与攻防对抗','③ 漏洞态势与供应链安全','④ 政策法规与标准框架','⑤ 产业动态与技术趋势','⑥ 数据安全与隐私保护'];
+var _catNames = ['① AI/LLM 安全','② 威胁情报与攻防对抗','③ 漏洞态势与供应链安全','④ 政策法规与标准框架','⑤ 产业动态与技术趋势','⑥ 数据安全与隐私保护','⑦ 产业与商业动态'];
 
 // -- Protocol check --
 if (window.location.protocol === 'file:') {
@@ -716,7 +718,7 @@ function renderKeywordManager() {
 
   var WEIGHT_OPTIONS = ['strong','medium','weak'];
   var WEIGHT_LABEL = { strong: '强词 30', medium: '中词 15', weak: '弱词 5' };
-  var CAT_OPTIONS = ['','① AI/LLM 安全','② 威胁情报与攻防对抗','③ 漏洞态势与供应链安全','④ 政策法规与标准框架','⑤ 产业动态与技术趋势','⑥ 数据安全与隐私保护'];
+  var CAT_OPTIONS = ['','① AI/LLM 安全','② 威胁情报与攻防对抗','③ 漏洞态势与供应链安全','④ 政策法规与标准框架','⑤ 产业动态与技术趋势','⑥ 数据安全与隐私保护','⑦ 产业与商业动态'];
   var CT_OPTIONS = ['','研究报告/白皮书','漏洞披露','攻击活动报告','工具发布','行业分析','法规/标准发布'];
   var html = '';
   filtered.forEach(function(kw, flatIdx) {

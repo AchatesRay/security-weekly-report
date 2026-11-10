@@ -28,10 +28,54 @@ import json
 import re
 from pathlib import Path
 
-from ..utils import SCORING_CONFIG_PATH
+import yaml
+
+from ..utils import SCORING_CONFIG_PATH, SETTINGS_PATH, SOURCES_PATH
 
 DEFAULT_ACCEPT_THRESHOLD = 80
 DEFAULT_REVIEW_THRESHOLD = 50
+
+# ── 读者画像默认值（settings.json 缺省时使用）──
+DEFAULT_TOPIC_WEIGHTS = {
+    "① AI/LLM 安全": 0.5,
+    "② 威胁情报与攻防对抗": 0.75,
+    "③ 漏洞态势与供应链安全": 0.9,
+    "④ 政策法规与标准框架": 0.35,
+    "⑤ 产业动态与技术趋势": 1.0,
+    "⑥ 数据安全与隐私保护": 0.7,
+    "⑦ 产业与商业动态": 0.15,
+    "未分类": 0.3,
+}
+DEFAULT_AUTHORITY = {"S": 1.20, "A": 1.10, "B": 1.00, "C": 0.85}
+DEFAULT_CONTENT_TYPE_WEIGHTS = {
+    "研究报告/白皮书": 1.15,
+    "漏洞披露": 1.0,
+    "攻击活动报告": 1.0,
+    "工具发布": 0.85,
+    "行业分析": 0.55,
+    "法规/标准发布": 0.85,
+    "综合": 0.9,
+}
+
+# 深度信号：不看名词，看“有没有技术证据”
+_DEPTH_PATTERNS = [
+    (25, r"CVE-\d{4}-\d{4,}"),
+    (20, r"(RCE|LPE|SSRF|XXE|CSRF|UAF|deserial|反序列化|利用链|exploit chain|"
+         r"patch diff|root cause|根因|内存破坏|堆溢出|栈溢出|类型混淆)"),
+    (15, r"(reference architecture|参考架构|安全架构|架构取舍|design trade-?off|"
+         r"failure mode|故障域|性能开销|benchmark|基准测试|deploy|migration|"
+         r"落地|迁移|策略编排|数据面|控制面|admission control|identity management|"
+         r"least privilege|design tenet|policy design|zero trust architecture|"
+         r"security architecture)"),
+    (10, r"(deployment|lessons|case study|postmortem|部署|案例|复盘)"),
+    (10, r"(we found|we tested|we measured|we deployed|our analysis|"
+         r"in our environment|我们发现|实测|复现|复盘|我们部署)"),
+    (10, r"(```|curl |kubectl |docker run|terraform|apiVersion:|SELECT |import )"),
+    (10, r"(dataset|benchmark|measured|样本|测试环境|对比测试|准确率|召回率|"
+         r"latency|throughput|p99)"),
+    (10, r"(mitigation|detection|hunting|修复建议|检测规则|缓解措施|加固)"),
+]
+_DEPTH_COMPILED = [(w, re.compile(p, re.I)) for w, p in _DEPTH_PATTERNS]
 
 
 class SecurityScorer:
@@ -39,7 +83,60 @@ class SecurityScorer:
 
     def __init__(self, config_path: Path = SCORING_CONFIG_PATH):
         self.config = self._load_config(config_path)
+        self.settings = self._load_settings()
+        self.profile = self.settings.get("reader_profile", {}) or {}
+        self.quality = self.settings.get("quality", {}) or {}
+        self.topic_weights = self.config.get("category_weights") or DEFAULT_TOPIC_WEIGHTS
+        self.content_type_weights = (self.config.get("content_type_weights")
+                                     or DEFAULT_CONTENT_TYPE_WEIGHTS)
+        self.authority_multipliers = (self.quality.get("authority_multipliers")
+                                      or DEFAULT_AUTHORITY)
+        self.series_penalty = float(self.quality.get("series_penalty", 25) or 0)
+        self.depth_bonus_max = float(self.quality.get("depth_bonus_max", 60) or 0)
+        self.commercial_penalty_max = float(
+            self.quality.get("commercial_penalty_max", 100) or 100)
+        self.max_per_source = int(
+            (self.quality.get("quotas", {}) or {}).get("max_per_source", 3) or 3)
+        self.source_meta = self._load_source_meta()
         self._build_indices()
+        self._build_commercial_patterns()
+
+    @staticmethod
+    def _load_settings() -> dict:
+        try:
+            with open(SETTINGS_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _load_source_meta() -> dict:
+        """source_name -> {group, tier}，用于信源权威度。"""
+        meta: dict = {}
+        try:
+            with open(SOURCES_PATH, encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+            for src in cfg.get("sources", []):
+                if isinstance(src, dict) and src.get("name"):
+                    meta[src["name"]] = {
+                        "group": src.get("group", ""),
+                        "tier": src.get("tier", ""),
+                    }
+        except Exception:
+            pass
+        return meta
+
+    def _build_commercial_patterns(self):
+        cfg = self.config.get("commercial_filters", {}) or {}
+        self.commercial_weights = cfg.get("weights", {}) or {}
+        self.commercial_patterns = {}
+        for key, words in cfg.items():
+            if key == "weights" or not isinstance(words, list):
+                continue
+            self.commercial_patterns[key] = [w for w in words if isinstance(w, str) and w]
+        self.series_patterns = [w for w in self.commercial_patterns.pop("series_patterns", [])
+                                if w]
 
     # ── 配置加载 ──
 
@@ -185,6 +282,166 @@ class SecurityScorer:
         if pattern:
             return bool(pattern.search(text))
         return kw_text.lower() in text.lower()
+
+    # ── 读者画像：主题 / 深度 / 权威 / 商业噪声 ──
+
+    def _match_word(self, text: str, word: str) -> bool:
+        if not text or not word:
+            return False
+        if self._is_ascii_only(word):
+            return bool(re.search(r'\b' + re.escape(word) + r'\b', text, re.I))
+        return word.lower() in text.lower()
+
+    def _source_tier(self, item: dict) -> str:
+        name = item.get("source_name") or ""
+        meta = self.source_meta.get(name, {})
+        # settings 的显式覆盖优先，其次 source_config 的 tier，最后按组默认
+        overrides = ((self.quality.get("source_tiers", {}) or {}).get("overrides", {}) or {})
+        if name in overrides:
+            return str(overrides[name]).upper()
+        tier = (meta.get("tier") or "").upper()
+        if tier:
+            return tier
+        group = meta.get("group") or ""
+        defaults = ((self.quality.get("source_tiers", {}) or {})
+                    .get("default_by_group", {}) or {})
+        return str(defaults.get(group, "B")).upper()
+
+    def _depth_score(self, item: dict, text: str) -> tuple[int, list[str]]:
+        """0-100 的深度分：看技术证据，不看名词数量。"""
+        score = 0
+        hits: list[str] = []
+        title = item.get("title") or ""
+        body = text or ""
+        for weight, pattern in _DEPTH_COMPILED:
+            if pattern.search(body):
+                score += weight
+                hits.append(pattern.pattern[:24])
+        # 标题里的技术证据额外加权（标题命中往往意味着文章主线就是技术）
+        if re.search(r"CVE-\d{4}-\d{4,}|RCE|SSRF|XXE|利用链|漏洞|exploit|vulnerab", title, re.I):
+            score += 10
+        if re.search(r"(architecture|design|reference|deployment|lessons|"
+                     r"架构|设计|工程实践|部署|实践|复盘)", title, re.I):
+            score += 20
+        length = len(body)
+        if length >= 3000:
+            score += 5
+        if length >= 8000:
+            score += 5
+        return min(100, score), hits
+
+    def _commercial_score(self, item: dict, text: str, content_type: str,
+                          depth: int) -> tuple[int, list[str]]:
+        """0-100 的商业/营销噪声分。只统计标题与开头，避免误伤技术文中的引用。"""
+        title = item.get("title") or ""
+        lead = (item.get("summary") or "")[:400]
+        probe = f"{title} {lead}"
+        score = 0
+        hits: list[str] = []
+        for key, words in self.commercial_patterns.items():
+            matched = [w for w in words if self._match_word(probe, w)]
+            if matched:
+                weight = float(self.commercial_weights.get(key, 0) or 0)
+                score += weight
+                hits.append(f"{key}({matched[0]})")
+        if content_type == "行业分析" and depth < 30:
+            score += 20
+            hits.append("行业分析且无深度")
+        return min(int(self.commercial_penalty_max), int(score)), hits
+
+    def _series_hit(self, title: str) -> bool:
+        return any(self._match_word(title, w) for w in self.series_patterns)
+
+    def _topic_mult(self, category: str) -> float:
+        try:
+            return max(0.05, min(1.2, float(self.topic_weights.get(category, 0.3))))
+        except (TypeError, ValueError):
+            return 0.3
+
+    def _content_type_mult(self, content_type: str) -> float:
+        try:
+            return max(0.4, min(1.2, float(
+                self.content_type_weights.get(content_type, 1.0))))
+        except (TypeError, ValueError):
+            return 1.0
+
+    def _apply_relevance(self, item: dict, ev: dict, category: str,
+                         content_type: str, all_text: str) -> dict:
+        """在关键词分之上叠加读者画像，返回最终分数与可解释字段。"""
+        tier = self._source_tier(item)
+        authority = float(self.authority_multipliers.get(tier, 1.0))
+        topic = self._topic_mult(category)
+        ct_mult = self._content_type_mult(content_type)
+        depth, depth_hits = self._depth_score(item, all_text)
+        commercial, commercial_hits = self._commercial_score(
+            item, all_text, content_type, depth)
+        series_hit = self._series_hit(item.get("title") or "")
+        series_penalty = self.series_penalty if series_hit else 0
+
+        keyword_raw = float(ev.get("raw_score", 0) or 0)
+        adjusted = (keyword_raw * authority * topic * ct_mult
+                    + depth / 100.0 * self.depth_bonus_max
+                    - commercial - series_penalty)
+        # 高权威、有技术证据的研究/通告给一个下限，避免被低关键词密度误杀
+        if tier in ("S", "A") and depth >= 50:
+            adjusted = max(adjusted, 55 + depth * 0.3)
+
+        # 发布稿硬性封顶：标题是“Introducing/发布/推出/上线/Now Available”
+        # 且没有足够技术深度时，不允许靠产品名词堆到收录线。
+        title = item.get("title") or ""
+        launch_like = bool(re.search(
+            r"^\s*(Introducing|Announces|Launches|Named a Leader|Recognized|Award|Ranked)\b|"
+            r"(Marketplace|Now Available|Request a Demo|新品发布|正式发布|重磅发布|全新发布)|"
+            r"^\s*(发布|推出|上线)", title, re.I))
+        if launch_like and depth < 80:
+            adjusted = min(adjusted, 45)
+            commercial_hits.append("发布稿封顶")
+
+        adjusted = round(max(0.0, adjusted), 1)
+        score_int = int(min(100, round(adjusted)))
+
+        accept_threshold = float(self.thresholds.get("accept_threshold", 80))
+        review_threshold = float(self.thresholds.get("review_threshold", 50))
+        if score_int >= accept_threshold:
+            decision, level = "accepted", "high"
+        elif score_int >= review_threshold:
+            decision, level = "review", "medium"
+        else:
+            decision, level = "filtered", "non-security"
+
+        deep_min_depth = int(self.profile.get("deep_section_min_depth", 45) or 45)
+        deep_min_rel = float(self.profile.get("deep_section_min_relevance", 45) or 45)
+        section = ("deep" if depth >= deep_min_depth and adjusted >= deep_min_rel
+                   and commercial < 50 else "news")
+
+        reason_parts = [
+            f"主题×{topic:g}",
+            f"权威{tier}×{authority:g}",
+            f"深度+{depth / 100.0 * self.depth_bonus_max:.0f}",
+        ]
+        if commercial:
+            reason_parts.append(f"商业-{commercial}")
+        if series_penalty:
+            reason_parts.append(f"系列-{series_penalty:g}")
+        reason_parts.append(f"关键词{keyword_raw:g}→相关性{adjusted:g}")
+
+        return {
+            "score": score_int,
+            "raw_score": adjusted,
+            "relevance_score": round(min(100.0, adjusted), 1),
+            "level": level,
+            "decision": decision,
+            "topic_fit": round(topic * 100, 1),
+            "depth_score": depth,
+            "commercial_score": commercial,
+            "authority_tier": tier,
+            "authority_multiplier": authority,
+            "report_section": section,
+            "series_hit": series_hit,
+            "selection_reason": "，".join(reason_parts),
+            "depth_hits": depth_hits,
+            "commercial_hits": commercial_hits,
+        }
 
     # ── 负向过滤 ──
 
@@ -564,6 +821,12 @@ class SecurityScorer:
         category = self._classify(all_matched)
         content_type = self._infer_content_type(all_matched, all_text)
 
+        # 读者画像：主题/深度/权威/商业噪声 → 最终相关性分
+        rel = self._apply_relevance(item, ev, category, content_type, all_text)
+        score_int = rel["score"]
+        decision = rel["decision"]
+        level = rel["level"]
+
         # 判定理由
         reason_parts = []
         if strong_matched:
@@ -577,17 +840,28 @@ class SecurityScorer:
             reason_parts.append("负向过滤规则命中")
         if ev["gate_note"]:
             reason_parts.append(ev["gate_note"])
-        reason_parts.append(f"最终得分{score_int}")
-        if ev["raw_score"] > score_int:
-            reason_parts.append(f"证据强度{ev['raw_score']:g}")
+        reason_parts.append(f"关键词分{ev['raw_score']:g}→相关性{score_int}")
+        reason_parts.append(rel["selection_reason"])
 
         return {
             "score": score_int,
-            "raw_score": ev["raw_score"],
+            "raw_score": rel["raw_score"],
+            "keyword_score": ev["raw_score"],
+            "relevance_score": rel["relevance_score"],
             "level": level,
             "decision": decision,
             "category": category,
             "content_type": content_type,
+            "topic_fit": rel["topic_fit"],
+            "depth_score": rel["depth_score"],
+            "commercial_score": rel["commercial_score"],
+            "authority_tier": rel["authority_tier"],
+            "authority_multiplier": rel["authority_multiplier"],
+            "report_section": rel["report_section"],
+            "series_hit": rel["series_hit"],
+            "selection_reason": rel["selection_reason"],
+            "depth_hits": rel["depth_hits"],
+            "commercial_hits": rel["commercial_hits"],
             "matched": {
                 "strong": sorted(strong_matched.keys()),
                 "medium": sorted(medium_matched.keys()),
@@ -624,11 +898,23 @@ class SecurityScorer:
         drop_threshold = self.thresholds.get("stage1_drop_below", 30)
         drop = score_int < drop_threshold
 
+        # 技术强信号/高权威源的“低关键词密度”内容不在阶段1误杀
+        tier = self._source_tier(item)
+        depth, _ = self._depth_score(item, all_text)
+        commercial, _ = self._commercial_score(item, all_text, "", depth)
+        if drop and tier in ("S", "A") and depth >= 30:
+            drop = False
+        if commercial >= 60:
+            drop = True
+
         reason = ""
         if drop:
             reason = f"快速预筛得分{score_int}（<{drop_threshold}），提前丢弃"
         elif ev["has_negative"]:
             reason = f"快速预筛得分{score_int}，命中负向规则但保留待完整评估"
+        elif score_int < drop_threshold:
+            reason = (f"关键词分{score_int} 低于阈值，但{tier}级源且深度信号{depth}，"
+                      f"保留待完整评估")
 
         return {
             "score": score_int,
