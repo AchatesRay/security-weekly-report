@@ -1,7 +1,12 @@
 {
   "dedup": {
     "similarity_threshold": 75,
-    "max_days": 7
+    "max_days": 7,
+    "near_dup_hamming": 3,
+    "window_hours": 72,
+    "ledger_ttl_days": 56,
+    "near_dup_enabled": true,
+    "ledger_enabled": true
   },
   "translate": {
     "timeout": 8,
@@ -89,5 +94,12 @@
     "quotas": {
       "max_per_source": 3
     }
+  },
+  "fetch": {
+    "min_host_interval_seconds": 0.6,
+    "max_per_host_concurrency": 2
+  },
+  "fulltext": {
+    "fallback_enabled": true
   }
 }

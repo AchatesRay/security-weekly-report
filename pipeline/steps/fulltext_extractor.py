@@ -49,7 +49,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-from ..utils import DATA_DIR, UnsafeURLError, atomic_write, safe_get
+try:  # 可选依赖：未安装时自动退回现有自研抽取，不阻断管道
+    import trafilatura
+except ImportError:  # pragma: no cover
+    trafilatura = None
+
+from ..utils import (DATA_DIR, SETTINGS_PATH, UnsafeURLError, atomic_write,
+                     safe_get)
 
 PARSED_ITEMS_PATH = DATA_DIR / "parsed_items.json"
 
@@ -58,6 +64,21 @@ REQUEST_TIMEOUT = 15.0
 MAX_BODY_LENGTH = 20000
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_WORKERS = 8
+
+# 第二意见触发条件与接受门槛（见 P0-1）
+SECOND_OPINION_MIN_LEN = 300
+SECOND_OPINION_RATIO = 1.5
+SECOND_OPINION_SHORT_LINE_RATIO = 0.6
+
+
+def _fallback_enabled() -> bool:
+    """settings.json 的 fulltext.fallback_enabled；异常时默认开启。"""
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as f:
+            cfg = json.load(f).get("fulltext", {}) or {}
+        return bool(cfg.get("fallback_enabled", True))
+    except Exception:
+        return True
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -714,10 +735,75 @@ def extract_text_from_html(html_text: str) -> str:
 
 # ── 以下与现有实现一致（抓取与写回） ──────────────────────────
 
-def fetch_article_text(url: str) -> tuple[str | None, str]:
+def _needs_second_opinion(html_text: str, custom_text: str) -> bool:
+    """判断自研抽取结果是否“可能漏了正文”。"""
+    if len(custom_text) < SECOND_OPINION_MIN_LEN:
+        return True
+    paragraphs = [ln.strip() for ln in custom_text.splitlines()
+                  if len(ln.strip()) >= 40]
+    if len(paragraphs) < 2:
+        return True
+    visible = _fallback_extract_text(html_text)
+    visible_len = len(_SPACE_RE.sub(" ", visible).strip())
+    if visible_len >= 1000 and len(custom_text) < visible_len * 0.25:
+        return True
+    return False
+
+
+def _trafilatura_text(html_text: str) -> str:
+    """用 trafilatura 做第二意见；只处理已抓回的 HTML，绝不自行联网。"""
+    if trafilatura is None:
+        return ""
+    try:
+        out = trafilatura.extract(
+            html_text,
+            include_comments=False,
+            include_tables=True,
+            favor_recall=True,
+        )
+    except Exception:
+        return ""
+    if not out:
+        return ""
+    # 先按原有换行做行级去噪，再逐行压缩水平空白。
+    # 不能先把换行压成空格：那样段落会并成一行，行级去噪和导航判断都会失效。
+    out = _clean_noise_lines(out)
+    lines = [_SPACE_RE.sub(" ", ln).strip() for ln in out.split("\n")]
+    return "\n".join(ln for ln in lines if ln)
+
+
+def _looks_like_navigation(text: str) -> bool:
+    """粗糙的导航堆砌判断：短行占比过高则不采用。"""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return True
+    short = sum(1 for ln in lines if len(ln) < 15)
+    return short / len(lines) > SECOND_OPINION_SHORT_LINE_RATIO
+
+
+def extract_text_cascade(html_text: str) -> tuple[str, str]:
+    """自研抽取 + trafilatura 第二意见，返回 (正文, 策略标签)。
+
+    只有“自研结果明显偏短/偏碎，且第二意见显著更长且不像导航”时才采用
+    第二意见。这样既保留现有五层清洗的稳定性，又能兜住少数抽取失败的站点。
+    """
+    custom = extract_text_from_html(html_text)
+    if (not html_text or not _fallback_enabled()
+            or not _needs_second_opinion(html_text, custom)):
+        return custom, "custom"
+    rescued = _trafilatura_text(html_text)
+    accepted = (len(rescued) >= SECOND_OPINION_MIN_LEN
+                and len(rescued) >= len(custom) * SECOND_OPINION_RATIO
+                and not _looks_like_navigation(rescued))
+    if accepted:
+        return rescued, "trafilatura_rescue"
+    return custom, "custom"
+
+
+def fetch_article_text(url: str) -> tuple[str | None, str, str]:
     """抓取文章 URL 并提取纯文本。
 
-    返回 (正文或 None, 状态说明)。状态用于统计被安全策略拦下的条目数。
+    返回 (正文或 None, 状态说明, 抽取策略)。状态用于统计被安全策略拦下的条目数。
     """
     try:
         resp = safe_get(
@@ -727,24 +813,24 @@ def fetch_article_text(url: str) -> tuple[str | None, str]:
             max_bytes=MAX_RESPONSE_BYTES,
         )
     except UnsafeURLError as e:
-        return None, f"blocked:{e}"
+        return None, f"blocked:{e}", "custom"
     except Exception as e:
-        return None, f"error:{type(e).__name__}"
+        return None, f"error:{type(e).__name__}", "custom"
 
     content_type = resp.header("content-type", "")
     if "html" not in content_type.lower():
-        return None, "skipped_content_type"
+        return None, "skipped_content_type", "custom"
 
-    text = extract_text_from_html(resp.text)
+    text, strategy = extract_text_cascade(resp.text)
     if len(text) < 200:
-        return None, "too_short"
-    return text[:MAX_BODY_LENGTH], ("truncated" if resp.truncated else "ok")
+        return None, "too_short", strategy
+    return text[:MAX_BODY_LENGTH], ("truncated" if resp.truncated else "ok"), strategy
 
 
-def _fetch_one(item: dict) -> tuple[dict, str | None, str]:
+def _fetch_one(item: dict) -> tuple[dict, str | None, str, str]:
     url = item.get("url", "") or ""
-    body, status = fetch_article_text(url)
-    return item, body, status
+    body, status, strategy = fetch_article_text(url)
+    return item, body, status, strategy
 
 
 def run():
@@ -773,15 +859,17 @@ def run():
     fetched_count = 0
     blocked_count = 0
     status_counter: dict[str, int] = {}
+    strategy_counter: dict[str, int] = {}
     if targets:
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
             futures = [pool.submit(_fetch_one, it) for it in targets]
             done = 0
             for fut in as_completed(futures):
-                item, body, status = fut.result()
+                item, body, status, strategy = fut.result()
                 done += 1
                 key = status.split(":", 1)[0]
                 status_counter[key] = status_counter.get(key, 0) + 1
+                strategy_counter[strategy] = strategy_counter.get(strategy, 0) + 1
                 if key == "blocked":
                     blocked_count += 1
                     print(f"  [FULLTEXT] 已拦截不安全链接: {item.get('url','')[:80]}"
@@ -791,6 +879,7 @@ def run():
                     item["original_summary"] = item.get("summary", "")
                     item["summary"] = body
                     item["fulltext_fetched"] = True
+                    item["extract_strategy"] = strategy
                     fetched_count += 1
                 else:
                     item["fulltext_fetched"] = False
@@ -801,8 +890,11 @@ def run():
     atomic_write(PARSED_ITEMS_PATH, items, indent=2)
 
     detail = ", ".join(f"{k}={v}" for k, v in sorted(status_counter.items()))
+    strategy_detail = ", ".join(f"{k}={v}" for k, v in sorted(strategy_counter.items()))
     print(f"[FULLTEXT] 全文提取完成: {fetched_count}/{len(targets)} 条获取到正文"
           + (f"（{detail}）" if detail else ""))
+    if strategy_counter:
+        print(f"[FULLTEXT] 抽取策略: {strategy_detail}")
     if blocked_count:
         print(f"[FULLTEXT] 其中 {blocked_count} 条链接指向内网/非法地址，已按安全策略拦截")
     return items

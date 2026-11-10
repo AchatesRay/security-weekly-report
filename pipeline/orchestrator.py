@@ -24,7 +24,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from .utils import DATA_DIR, atomic_write
+from .utils import DATA_DIR, REPORTS_DIR, atomic_write
 
 # 每次运行前需要清除的中间产物（保证不会读到上一轮残留）
 INTERMEDIATE_FILES = [
@@ -143,9 +143,15 @@ def run_pipeline(skip_fetch: bool = False) -> bool:
         from .steps.keyword_filter import run_stage1
         run_step(4, "评分过滤（阶段1：快速预筛）", run_stage1, record)
 
-        # Step 5: 全文提取
+        # Step 5: 全文提取 + 正文指纹去重（5.5 子阶段）
+        from .steps.fingerprint_dedup import run as run_fingerprint_dedup
         from .steps.fulltext_extractor import run as run_fulltext
-        run_step(5, "提取全文（摘要过短的文章）", run_fulltext, record)
+
+        def _fulltext_and_dedup():
+            run_fulltext()
+            run_fingerprint_dedup()
+
+        run_step(5, "提取全文并合并正文重复", _fulltext_and_dedup, record)
 
         # Step 6: 评分过滤阶段2（完整评分 + 分类 → classified_items.json）
         from .steps.keyword_filter import run_stage2
@@ -166,6 +172,15 @@ def run_pipeline(skip_fetch: bool = False) -> bool:
         # Step 10: 移动版
         from .steps.mobile_converter import run as run_mobile
         run_step(10, "生成移动版页面", run_mobile, record)
+
+        # 只有报告与移动版都成功后才更新跨周发布台账；
+        # 台账写入失败不反过来判定周报失败（下一周可能重复，但不丢内容）。
+        try:
+            ledger_written = _record_published_ledger()
+            record["ledger"] = {"written": ledger_written}
+        except Exception as e:
+            print(f"  [WARN] 跨周发布台账写入失败（不影响本周报告）: {e}")
+            record["ledger"] = {"error": str(e)}
 
     except PipelineAbort as e:
         print()
@@ -193,6 +208,22 @@ def run_pipeline(skip_fetch: bool = False) -> bool:
 
     print("报告: reports/Security_Reports.html")
     return True
+
+
+def _record_published_ledger() -> int:
+    """把本周实际发布的条目写入 data/state/published_ledger.json。"""
+    from .utils.fingerprint import record_published, week_key
+
+    week_str = week_key()
+    data_path = REPORTS_DIR / f"data_{week_str}.json"
+    if not data_path.exists():
+        print(f"  [WARN] 未找到本周报告数据 {data_path.name}，跳过发布台账")
+        return 0
+    with open(data_path, encoding="utf-8") as f:
+        items = json.load(f)
+    written = record_published(items, week_str)
+    print(f"[LEDGER] 已记录 {written} 条本周发布内容（跨周去重台账）")
+    return written
 
 
 def _load_json(path: Path):

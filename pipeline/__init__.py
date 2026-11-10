@@ -8,6 +8,7 @@
                                                                -> data/deduped_items.json
   4.  keyword_filter stg1 标题+前200字快速评分，<30 分提前丢弃     -> data/parsed_items.json
   5.  fulltext_extractor  短摘要文章抓取原文（原地增强，并发+SSRF 防护）
+                          + 5.5 正文指纹去重/跨周台账（Hamming≤3、72h 窗）
   6.  keyword_filter stg2 完整评分 + 分类 + 内容类型             -> data/classified_items.json
   7.  llm_processor       TextRank 抽取式摘要                    -> data/enhanced_items.json
   8.  translator          非中文内容 → 中文（腾讯云 TMT）          -> data/translated_items.json

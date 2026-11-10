@@ -211,7 +211,15 @@ def validate_sources_yaml(text: str) -> list[dict]:
 
 # settings.json 允许的字段与其类型（白名单，防止把密钥等任意键写进配置文件）
 _ALLOWED_SETTINGS_SPEC = {
-    "dedup": {"similarity_threshold": int, "max_days": int},
+    "dedup": {"similarity_threshold": int, "max_days": int,
+              "near_dup_hamming": int, "window_hours": int,
+              "ledger_ttl_days": int, "near_dup_enabled": bool,
+              "ledger_enabled": bool},
+    # 抓取限速：同一主机并发上限与请求间隔（改动需重启进程生效）
+    "fetch": {"min_host_interval_seconds": (int, float),
+              "max_per_host_concurrency": int},
+    # 正文抽取兜底开关：关闭后完全走现有自研五层清洗
+    "fulltext": {"fallback_enabled": bool},
     "translate": {"timeout": (int, float), "fields": list},
     # 摘要长度（报告「摘要」栏）。short_categories 里的分类用 short_max_chars，
     # 其余用 max_chars；min_chars 低于则退化为"原文节选"。
@@ -281,6 +289,20 @@ def sanitize_settings(raw: dict) -> dict:
     days = dedup.get("max_days")
     if days is not None and not (1 <= days <= 365):
         raise ConfigValidationError("dedup.max_days 必须在 1-365 之间")
+    for dkey, lo, hi in (("near_dup_hamming", 0, 64),
+                         ("window_hours", 1, 720),
+                         ("ledger_ttl_days", 1, 365)):
+        dval = dedup.get(dkey)
+        if dval is not None and not (lo <= dval <= hi):
+            raise ConfigValidationError(f"dedup.{dkey} 必须在 {lo}-{hi} 之间")
+
+    fetch_cfg = out.get("fetch", {})
+    interval = fetch_cfg.get("min_host_interval_seconds")
+    if interval is not None and not (0 <= interval <= 60):
+        raise ConfigValidationError("fetch.min_host_interval_seconds 必须在 0-60 之间")
+    concurrency = fetch_cfg.get("max_per_host_concurrency")
+    if concurrency is not None and not (1 <= concurrency <= 16):
+        raise ConfigValidationError("fetch.max_per_host_concurrency 必须在 1-16 之间")
 
     translate = out.get("translate", {})
     fields = translate.get("fields")
