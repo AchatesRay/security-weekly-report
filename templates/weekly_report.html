@@ -103,22 +103,6 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .list-card-meta { font-size:12px; color:#059669; display:flex; align-items:center; gap:8px; }
 .list-card-ai { font-size:10px; font-weight:600; color:var(--accent); background:var(--accent-soft); padding:1px 6px; border-radius:3px; letter-spacing:.3px; }
 .list-card-review { border-left-color:#f59e0b !important; }
-/* 双栏筛选：分类导航是主维度，栏目是列表内的次维度 */
-.section-tabs { display:flex; gap:4px; margin-top:10px; }
-.section-tab { flex:1; padding:5px 6px; border:1px solid var(--border); background:var(--bg); color:var(--text-muted); border-radius:4px; font-size:11px; font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap; }
-.section-tab:hover { border-color:var(--accent); color:var(--accent); }
-.section-tab.active { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:600; }
-.section-tab-count { opacity:.65; margin-left:2px; }
-.list-section-header { padding:10px 20px 7px; font-size:11px; font-weight:600; letter-spacing:.5px; background:var(--bg); border-bottom:1px solid var(--border-light); }
-.list-section-header:not(:first-child) { border-top:1px solid var(--border-light); }
-.list-section-header.deep { color:#7c3aed; }
-.list-section-header.news { color:#b45309; }
-.list-card-section { font-size:10px; font-weight:600; padding:1px 6px; border-radius:3px; letter-spacing:.3px; }
-.list-card-section.deep { color:#7c3aed; background:rgba(124,58,237,.10); }
-.list-card-section.news { color:#b45309; background:rgba(245,158,11,.12); }
-.detail-section-tag { padding:3px 10px; border-radius:4px; font-size:11px; font-weight:600; }
-.detail-section-tag.deep { color:#7c3aed; background:rgba(124,58,237,.10); }
-.detail-section-tag.news { color:#b45309; background:rgba(245,158,11,.12); }
 
 /* Detail */
 .detail-panel { flex:1; background:var(--surface); display:flex; flex-direction:column; height:100vh; overflow-y:auto; }
@@ -127,7 +111,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .detail-empty p { font-size:14px; }
 .detail-content { padding:40px 56px 60px; max-width:1200px; }
 .detail-meta { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px; font-size:12px; }
-.detail-meta > span:not(.detail-source-tag):not(.detail-section-tag) { color:#059669; }
+.detail-meta > span:not(.detail-source-tag) { color:#059669; }
 .detail-source-tag { padding:3px 10px; border-radius:4px; font-size:11px; font-weight:600; letter-spacing:.3px; }
 .detail-title { font-family:"Microsoft YaHei","微软雅黑",sans-serif; font-size:26px; font-weight:800; letter-spacing:-0.3px; line-height:1.35; margin-bottom:16px; }
 .detail-title a { color:var(--text); text-decoration:none; }
@@ -313,12 +297,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
   <div class="list-panel">
     <div class="list-header">
       <h3 id="listTitle">全部分类</h3>
-      <p id="listSub">{{ total_count }} 条情报 · 深度 {{ section_counts['deep'] }} / 要闻 {{ section_counts['news'] }}</p>
-      <div class="section-tabs" id="sectionTabs">
-        <button type="button" class="section-tab active" data-section="all">全部 <span class="section-tab-count" data-count="all">{{ section_counts['all'] }}</span></button>
-        <button type="button" class="section-tab" data-section="架构与技术深度">★ 深度 <span class="section-tab-count" data-count="deep">{{ section_counts['deep'] }}</span></button>
-        <button type="button" class="section-tab" data-section="本周安全要闻">● 要闻 <span class="section-tab-count" data-count="news">{{ section_counts['news'] }}</span></button>
-      </div>
+      <p id="listSub">{{ total_count }} 条情报</p>
     </div>
     <div class="list-items" id="listItems"></div>
   </div>
@@ -376,7 +355,6 @@ _allData['{{ week_str }}'] = {
 // ── State ──
 var _currentData = _allData['{{ week_str }}'];
 var _currentCat = -1;          // -1=全部分类，-2=待复核，>=0=主题分类
-var _currentSection = 'all';   // all=全部，或 item.section 原值（★ 深度 / ● 要闻）
 var _currentItems = [];
 var _currentSel = -1;
 
@@ -398,7 +376,6 @@ var dLink = document.getElementById('detailLink');
 var loading = document.getElementById('loading');
 var navAllCount = document.getElementById('navAllCount');
 var sidebarFooter = document.getElementById('sidebarFooter');
-var sectionTabs = document.getElementById('sectionTabs');
 
 function esc(s) { return (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escAttr(s) { return (''+s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
@@ -439,28 +416,11 @@ function rebuildCatIdx(data) {
   });
 }
 
-function _matchesSection(item, section) {
-  return section === 'all' || item.section === section;
-}
-
-function _sectionBadge(item) {
-  if (item.section === '架构与技术深度') return '<span class="list-card-section deep">★ 深度</span>';
-  if (item.section === '本周安全要闻') return '<span class="list-card-section news">● 要闻</span>';
-  return '';
-}
-
-function _sectionHeader(name, count) {
-  var isDeep = name === '架构与技术深度';
-  var label = isDeep ? '★ 架构与技术深度' : '● 本周安全要闻';
-  return '<div class="list-section-header ' + (isDeep ? 'deep' : 'news') + '">' + label +
-    ' <span class="section-tab-count">' + count + '</span></div>';
-}
-
 function _cardHtml(item, i) {
   var html = '<div class="list-card' + (item.filter_decision === 'review' ? ' list-card-review' : '') + '" data-idx="' + i + '">';
   html += '<div class="list-card-source" style="color:hsl(' + item.source_hue + ',55%,40%)">' + esc(item.source_name) + '</div>';
   html += '<div class="list-card-title">' + esc(item.title) + '</div>';
-  html += '<div class="list-card-meta">' + _sectionBadge(item) + '<span>' + esc(item.published_date) + '</span>';
+  html += '<div class="list-card-meta"><span>' + esc(item.published_date) + '</span>';
   if (item.content_type) html += '<span>·</span><span>' + esc(item.content_type) + '</span>';
   if (item.source_type) html += '<span>·</span><span>' + esc(item.source_type) + '</span>';
   html += '</div></div>';
@@ -479,30 +439,11 @@ function renderList() {
     baseItems = data.items.filter(function(d) { return d._catIdx === catIdx && d.filter_decision !== 'review'; });
   }
 
-  // 待复核条目没有 section 标签，栏目筛选对它不适用。
-  var section = catIdx === -2 ? 'all' : _currentSection;
-  if (catIdx === -2) _currentSection = 'all';
-
-  var counts = { all: baseItems.length, deep: 0, news: 0 };
-  baseItems.forEach(function(item) {
-    if (item.section === '架构与技术深度') counts.deep++;
-    else if (item.section === '本周安全要闻') counts.news++;
-  });
-  if (sectionTabs) {
-    sectionTabs.style.display = catIdx === -2 ? 'none' : 'flex';
-    sectionTabs.querySelectorAll('.section-tab').forEach(function(tab) {
-      tab.classList.toggle('active', tab.dataset.section === section);
-      var countEl = tab.querySelector('.section-tab-count');
-      if (countEl) countEl.textContent = counts[tab.dataset.section] || 0;
-    });
-  }
-
-  var items = baseItems.filter(function(item) { return _matchesSection(item, section); });
+  var items = baseItems;
   _currentSel = -1;
 
   listTitle.textContent = catIdx === -1 ? '全部分类' : (catIdx === -2 ? '待复核' : data.catNames[catIdx]);
-  listSub.textContent = items.length + ' 条情报' +
-    (catIdx === -2 ? '' : ' · 深度 ' + counts.deep + ' / 要闻 ' + counts.news);
+  listSub.textContent = items.length + ' 条情报';
 
   if (!items.length) {
     _currentItems = items;
@@ -512,23 +453,8 @@ function renderList() {
   }
 
   var html = '';
-  if (catIdx === -1 && section === 'all') {
-    // 全部分类 + 全部栏目：按两栏分组显示，同时保留栏目切换。
-    var display = [];
-    ['架构与技术深度', '本周安全要闻'].forEach(function(name) {
-      var group = items.filter(function(item) { return item.section === name; });
-      if (!group.length) return;
-      html += _sectionHeader(name, group.length);
-      group.forEach(function(item) {
-        html += _cardHtml(item, display.length);
-        display.push(item);
-      });
-    });
-    _currentItems = display;
-  } else {
-    items.forEach(function(item, i) { html += _cardHtml(item, i); });
-    _currentItems = items;
-  }
+  items.forEach(function(item, i) { html += _cardHtml(item, i); });
+  _currentItems = items;
   listEl.innerHTML = html;
 
   listEl.querySelectorAll('.list-card').forEach(function(el) {
@@ -544,7 +470,6 @@ function _renderDetail(item) {
   dContent.style.animation = 'fadeIn 0.3s ease';
 
   dMeta.innerHTML = '<span class="detail-source-tag" style="color:hsl(' + item.source_hue + ',55%,35%);background:hsla(' + item.source_hue + ',55%,40%,0.1)">' + esc(item.source_name) + '</span>' +
-    (item.section ? '<span class="detail-section-tag ' + (item.section === '架构与技术深度' ? 'deep' : 'news') + '">' + (item.section === '架构与技术深度' ? '★ 架构与技术深度' : '● 本周安全要闻') + '</span>' : '') +
     '<span>' + esc(item.published_date) + '</span>' +
     (item.content_type ? '<span>·</span><span>' + esc(item.content_type) + '</span>' : '') +
     (item.source_type ? '<span>·</span><span>' + esc(item.source_type) + '</span>' : '') +
@@ -689,9 +614,8 @@ function applyWeekData(week) {
   _currentData = data;
   rebuildCatIdx(data);
   loadNav(data);
-  // Reset to "全部分类" view（双栏分组在全部视图下才完整展示）
+  // Reset to "全部分类" view
   _currentCat = -1;
-  _currentSection = 'all';
   document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
   document.querySelector('.nav-item[data-idx="-1"]').classList.add('active');
   renderList();
@@ -781,15 +705,6 @@ document.addEventListener('DOMContentLoaded', function() {
       renderList();
     });
   });
-  // 栏目切换（全部 / 深度 / 要闻）
-  if (sectionTabs) {
-    sectionTabs.querySelectorAll('.section-tab').forEach(function(el) {
-      el.addEventListener('click', function() {
-        _currentSection = el.dataset.section;
-        renderList();
-      });
-    });
-  }
   renderList();
 });
 </script>

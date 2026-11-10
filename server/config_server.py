@@ -226,12 +226,9 @@ _ALLOWED_SETTINGS_SPEC = {
     "summary": {"max_chars": int, "short_max_chars": int, "min_chars": int,
                 "short_categories": list},
     "category_order": list,
-    # 读者画像：双栏阈值、总量上限、深栏条数
+    # 读者画像：每周展示总量上限
     "reader_profile": {
-        "deep_section_min_depth": int,
-        "deep_section_min_relevance": (int, float),
         "max_total_items": int,
-        "deep_section_limit": int,
     },
     # 质量信号：信源权威、深度、商业噪声、单源配额
     "quality": {
@@ -328,10 +325,7 @@ def sanitize_settings(raw: dict) -> dict:
         raise ConfigValidationError("summary.short_categories 必须是字符串数组")
 
     profile = out.get("reader_profile", {})
-    for pkey, lo, hi in (("deep_section_min_depth", 0, 100),
-                         ("deep_section_min_relevance", 0, 200),
-                         ("max_total_items", 1, 1000),
-                         ("deep_section_limit", 1, 100)):
+    for pkey, lo, hi in (("max_total_items", 1, 1000),):
         pval = profile.get(pkey)
         if pval is not None and not (lo <= pval <= hi):
             raise ConfigValidationError(f"reader_profile.{pkey} 必须在 {lo}-{hi} 之间")

@@ -35,10 +35,7 @@
     "未分类"
   ],
   "reader_profile": {
-    "deep_section_min_depth": 35,
-    "deep_section_min_relevance": 45,
-    "max_total_items": 80,
-    "deep_section_limit": 15
+    "max_total_items": 80
   },
   "quality": {
     "authority_multipliers": {

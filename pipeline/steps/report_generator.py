@@ -136,32 +136,6 @@ def _apply_diversity(items: list[dict], max_per_source: int = 3,
     return out
 
 
-def _split_sections(items: list[dict]) -> tuple[list[dict], list[dict]]:
-    """把收录内容分为“架构与技术深度”和“本周安全要闻”两栏。"""
-    profile = _load_reader_profile()
-    limit = int(profile.get("deep_section_limit", 15) or 15)
-    min_depth = int(profile.get("deep_section_min_depth", 35) or 35)
-    min_rel = float(profile.get("deep_section_min_relevance", 45) or 45)
-    deep_candidates = [
-        i for i in items
-        if i.get("depth_score", 0) >= min_depth
-        and i.get("relevance_score", 0) >= min_rel
-        and i.get("commercial_score", 0) < 50
-    ]
-    deep_items = sorted(
-        deep_candidates,
-        key=lambda i: (i.get("depth_score", 0), i.get("relevance_score", 0)),
-        reverse=True,
-    )[:limit]
-    deep_ids = {id(i) for i in deep_items}
-    news_items = [i for i in items if id(i) not in deep_ids]
-    for it in deep_items:
-        it["section"] = "架构与技术深度"
-    for it in news_items:
-        it["section"] = "本周安全要闻"
-    return deep_items, news_items
-
-
 def group_by_category(items: list[dict]) -> dict:
     """兼容旧接口：按分类对内容分组。"""
     order = _category_order()
@@ -260,7 +234,6 @@ def build_json_items(items: list[dict]) -> list[dict]:
             "confidence_score": item.get("confidence_score", 0),
             # 不截顶的证据强度，用于前端排序/展示（截顶分大量并列满分）
             "raw_score": item.get("raw_score", item.get("confidence_score", 0)),
-            "section": item.get("section", ""),
             "relevance_score": item.get("relevance_score", 0),
             "depth_score": item.get("depth_score", 0),
             "topic_fit": item.get("topic_fit", 0),
@@ -442,18 +415,8 @@ def generate_report():
     review_items = sorted((i for i in items if i.get("filter_decision") == "review"),
                           key=_rank_key, reverse=True)
 
-    # 两个维度并存：
-    #   groups      —— 主题分类（①~⑦），供侧栏导航、分类计数与分类 JSON 使用；
-    #   item.section —— 栏目（★ 深度 / ● 要闻），供正文列表分栏与卡片标签使用。
-    # 二者不能共用同一个字典：把 groups 换成两个栏目，会让侧栏分类
-    # 静默退化成两类（前端不报错，只是分类消失）。
-    deep_items, news_items = _split_sections(accepted_items)
+    # 主题分类（①~⑦）：供侧栏导航、分类计数与分类 JSON 使用。
     groups = group_by_category(accepted_items)
-    section_counts = {
-        "deep": len(deep_items),
-        "news": len(news_items),
-        "all": len(accepted_items),
-    }
 
     all_items = accepted_items + review_items
     json_items = build_json_items(all_items)
@@ -498,7 +461,6 @@ def generate_report():
         translation_warning=translation_warning,
         cat_names=cat_names,
         cat_counts=cat_counts,
-        section_counts=section_counts,
     )
 
     # ── 渲染成功后才落盘 ──

@@ -112,9 +112,6 @@
   .is-mobile .list-card-title { font-size: 13px; }
   .is-mobile .list-card-source { font-size: 11px; }
   .is-mobile .list-card-meta { font-size: 11px; flex-wrap: wrap; }
-  .is-mobile .section-tabs { margin-top: 8px; gap: 6px; }
-  .is-mobile .section-tab { padding: 7px 4px; font-size: 12px; }
-  .is-mobile .list-section-header { padding: 10px 14px 7px; }
   .is-mobile .list-item { padding: 10px 12px; margin-bottom: 6px; border-radius: 8px; cursor: pointer; }
   .is-mobile .list-item:active { background: #e2e5ed; }
   .is-mobile .list-item-title { font-size: 13px; }

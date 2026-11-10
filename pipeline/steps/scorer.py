@@ -416,11 +416,6 @@ class SecurityScorer:
         else:
             decision, level = "filtered", "non-security"
 
-        deep_min_depth = int(self.profile.get("deep_section_min_depth", 45) or 45)
-        deep_min_rel = float(self.profile.get("deep_section_min_relevance", 45) or 45)
-        section = ("deep" if depth >= deep_min_depth and adjusted >= deep_min_rel
-                   and commercial < 50 else "news")
-
         reason_parts = [
             f"主题×{topic:g}",
             f"权威{tier}×{authority:g}",
@@ -443,7 +438,6 @@ class SecurityScorer:
             "commercial_score": commercial,
             "authority_tier": tier,
             "authority_multiplier": authority,
-            "report_section": section,
             "series_hit": series_hit,
             "selection_reason": "，".join(reason_parts),
             "depth_hits": depth_hits,
@@ -880,7 +874,6 @@ class SecurityScorer:
             "commercial_score": rel["commercial_score"],
             "authority_tier": rel["authority_tier"],
             "authority_multiplier": rel["authority_multiplier"],
-            "report_section": rel["report_section"],
             "series_hit": rel["series_hit"],
             "selection_reason": rel["selection_reason"],
             "score_breakdown": rel["score_breakdown"],
