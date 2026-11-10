@@ -127,16 +127,20 @@ SecurityInfo/
 
 | # | 模块 | 输入 | 输出 | 职责 | 失败处理 |
 |---|------|------|------|------|------|
-| 1 | fetcher | 141 个信源配置 | `raw_items.json` | 并发抓取 RSS/API/Scraper 信源，API 密钥按平台下发，信源健康监测 | 单信源失败不阻断；连续失败进入指数退避重试 |
+| 1 | fetcher | 141 个信源配置 | `raw_items.json` | 并发抓取 RSS/API/Scraper 信源，API 密钥按平台下发，信源健康监测；支持 ETag/Last-Modified/304、同主机限速与 Retry-After；304 时复用 `data/state/feed_cache/` 上次 XML | 单信源失败不阻断；连续失败进入指数退避重试 |
 | 2 | parser | `raw_items.json` | `parsed_items.json` | XML→统一 dict，HTML 去标签，时间统一归一到 UTC | 中止 |
 | 3 | deduplicator | `parsed_items.json` | `deduped_items.json` | URL 规范化去重（剥追踪参数）+ rapidfuzz 标题相似去重（阈值 75%），过期过滤（>7 天） | 中止 |
 | 4 | keyword\_filter (stage1) | `deduped_items.json` | `parsed_items.json` | 标题+前200字快速评分，**<30 分提前丢弃**，减少全文抓取量 | 中止 |
-| 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(原地增强) | 摘要 <300 字的文章抓取全文（并发 8，上限 20000 字），**含 SSRF 防护**；正文清洗为**先定位正文容器、再删模板**（删除时跳过正文容器及其祖先），只在块级标签边界换行以免把句子切碎 | 中止（单条失败仅记录状态） |
+| 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(原地增强) | 摘要 <300 字的文章抓取全文（并发 8，上限 20000 字），**含 SSRF 防护**；正文清洗为**先定位正文容器、再删模板**（删除时跳过正文容器及其祖先），只在块级标签边界换行以免把句子切碎；自研结果明显偏短时用 trafilatura 做**第二意见**（≥300 字、≥自研 1.5 倍才采用）；随后执行 **5.5 正文指纹去重 + 跨周台账过滤**（SimHash，Hamming≤3，72h 窗） | 中止（单条失败仅记录状态） |
 | 6 | keyword\_filter (stage2) | `parsed_items.json` | `classified_items.json` | 完整评分 + 领域分类 + 内容类型。**≥80 收录，50-79 待复核，<50 丢弃** | 中止 |
 | 7 | llm\_processor | `classified_items.json` | `enhanced_items.json` | 抽取式摘要：先洗掉网页噪声（导航/署名/分享/日期/聚合壳），再摘取**最值得看的连续一段**，按句边界收尾；长度按分类分档（`summary` 段），结果附来源标记 `ai_summary_kind` | 中止 |
 | 8 | translator | `enhanced_items.json` | `translated_items.json` | 腾讯云 TMT，把**非中文的标题与摘要**翻译为中文；**正文不翻译**（范围见 settings 的 `translate.fields`）；翻译失败逐条标记 | 中止（无密钥时跳过并记录状态） |
 | 9 | report\_generator | `translated_items.json` | `Security_Reports.html` + 分类 JSON | Jinja2 渲染 HTML；**渲染成功后才写数据文件**，避免数据与页面不一致 | 中止（保留上一版报告） |
 | 10 | mobile\_converter | `Security_Reports.html` | `Security_Reports_mobile.html` | 按模板标记剥离详情面板，注入 mobile.css/mobile.js | 中止（保留上一版报告） |
+
+> **跨周发布台账**：第 5 步的指纹去重只处理本轮内容；`data/state/published_ledger.json`
+> 记录报告与移动版都成功生成后的已发布条目，下一周自动过滤同一 URL/同一正文的重复稿。
+> 台账是持久状态，不在 `INTERMEDIATE_FILES` 清理名单里；同周重跑不会拦截（否则重跑会清空本周内容）。
 
 ### 评分机制
 
@@ -200,6 +204,26 @@ SecurityInfo/
 > 「Citrix 警告 NetScaler 漏洞正被在野利用」这类只命中 1 个强词的安全要闻一并
 > 降级 —— 因为强词表以 AI 话题词为主，`vulnerability`/`exploit`/`ransomware`
 > 等经典安全事件词大多在中词层。启用前请用真实数据回归确认不误伤。
+
+#### 入选依据（`score_breakdown`）
+
+每条收录/待复核条目都会持久化 `score_breakdown`，详情面板据此展示「入选依据」：
+关键词分、主题权重、信源权威系数、技术深度加分、商业噪声扣分、系列稿扣分、
+发布稿封顶/权威保底是否生效、最终相关性分与收录线。这样读者不必面对一个
+无法解释的 100 分，运营也能快速判断“某条为什么被收录/被降权”。
+
+#### 评分回归（`scripts/scoring_golden_test.py`）
+
+改评分、词表、主题权重前先跑：
+
+```powershell
+python scripts/scoring_golden_test.py            # 对比固定样本的决策与顺序
+python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写快照
+```
+
+样本覆盖 KEV 漏洞、厂商发布稿、奖项稿、融资稿、政策、AI 安全、系列周报等；
+断言的是**决策**与**相对顺序**，不要求精确分数。快照里的 `raw_score` 允许
+±12 漂移，超过会提示人工检查。
 
 评分关键词配置位于 `config/scoring_keywords.json`。
 
@@ -296,7 +320,12 @@ SecurityInfo/
 {
   "dedup": {
     "similarity_threshold": 75,    // 标题模糊去重阈值（0-100）
-    "max_days": 7                  // 文章过期天数
+    "max_days": 7,                 // 文章过期天数
+    "near_dup_hamming": 3,         // 正文 SimHash 近重复阈值（0-64，越小越严）
+    "window_hours": 72,            // 近重复比对时间窗（小时）
+    "ledger_ttl_days": 56,         // 跨周发布台账保留天数（8 周）
+    "near_dup_enabled": true,      // 正文近重复合并总开关
+    "ledger_enabled": true         // 跨周台账过滤总开关
   },
   "translate": {
     "timeout": 8,                  // 单条翻译超时（秒）
@@ -330,6 +359,13 @@ SecurityInfo/
     "commercial_penalty_max": 100,
     "series_penalty": 25,
     "quotas": {"max_per_source": 3}
+  },
+  "fetch": {
+    "min_host_interval_seconds": 0.6,  // 同一主机两次请求的最小间隔（秒）
+    "max_per_host_concurrency": 2      // 同一主机并发上限
+  },
+  "fulltext": {
+    "fallback_enabled": true           // trafilatura 第二意见总开关
   }
 }
 ```
@@ -463,6 +499,12 @@ cat data/parsed_items.json | python3 -m json.tool | head -50
 # 摘要质量体检 / 改动前后回归对比
 python scripts/summary_quality_report.py
 python scripts/summary_quality_report.py 改前.json 改后.json
+
+# 评分决策/顺序回归（改评分或词表前必跑）
+python scripts/scoring_golden_test.py
+
+# 正文近重复合并清单（人工抽检误合并率）
+python scripts/dedup_report.py
 ```
 
 ### 红线
