@@ -59,7 +59,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .detail-fav-btn:disabled { opacity:.6; cursor:default; }
 .detail-fav-tip { font-size:12px; color:var(--text-muted); }
 
-/* ── 选文标注（仅 ?annotate=1 且登录后显示）──
+/* ── 选文标注（登录后自动显示，?annotate=0 可关闭）──
    标注只用于调规则，不改变当天报告，所以做成"轻量旁路"：
    未开启时 DOM 仍在，但整块不占位、不响应。 */
 .anno-bar { display:none; align-items:center; gap:8px; flex-wrap:wrap; margin:-8px 0 16px; }
@@ -931,6 +931,7 @@ function _buildAnnoPop() {
 }
 
 function _openAnnoPop(anchor, item) {
+  if (!_annoReasons.length) { _toast('标注服务暂不可用，请稍后重试'); return; }
   _buildAnnoPop();
   var pop = document.getElementById('annoPop');
   if (!pop) return;
@@ -1044,47 +1045,44 @@ function _annoRender(item) {
 
 function initAnnotations() {
   if (location.protocol === 'file:') return;
-  var qs;
-  try { qs = new URLSearchParams(location.search); } catch (e) { return; }
-  var enabled = qs.get('annotate') === '1';
-  if (!enabled) { try { enabled = sessionStorage.getItem('anno_on') === '1'; } catch (e) {} }
-  if (!enabled) return;
+  // 登录即开启：认证在网关（Caddy / hub-auth）完成，接口返回 200 即视为有权限。
+  // ?annotate=0 是紧急关闭开关；?annotate=1 仍兼容（旧链接不会失效）。
+  var qs = null;
+  try { qs = new URLSearchParams(location.search); } catch (e) { qs = null; }
+  if (qs && qs.get('annotate') === '0') {
+    try { sessionStorage.removeItem('anno_on'); } catch (e) {}
+    return;
+  }
+  // 全站已在登录之后，标注入口对每个访客一律展示，不做登录探测。
+  _annoOn = true;
+  document.body.classList.add('anno-on');
+  _buildAnnoPop();
+  if (!_annoCardBound) {
+    _annoCardBound = true;
+    listEl.addEventListener('click', function(e) {
+      var btn = e.target.closest ? e.target.closest('.anno-mini') : null;
+      if (!btn) return;
+      e.stopPropagation();
+      var card = btn.closest('.list-card');
+      if (!card) return;
+      var idx = parseInt(card.dataset.idx, 10);
+      var item = _currentItems && _currentItems[idx];
+      if (!item) return;
+      if (btn.dataset.anno === 'accept') _annoSubmit(item, 'accept', '');
+      else _openAnnoPop(btn, item);
+    });
+  }
+  renderList();
+  // 再拉一次已有标注与原因表，用于回显和弹层；失败不影响入口展示。
   _annoApi('GET', '/api/annotations').then(function(data) {
-    _annoOn = true;
     _annoReasons = data.reasons || [];
     _annoToday = data.today || { total: 0 };
     (data.items || []).forEach(function(r) {
       if (r && r.item_id) _annoMap[r.item_id] = r;
     });
-    try { sessionStorage.setItem('anno_on', '1'); } catch (e) {}
-    document.body.classList.add('anno-on');
     _buildAnnoPop();
-    if (!_annoCardBound) {
-      _annoCardBound = true;
-      listEl.addEventListener('click', function(e) {
-        var btn = e.target.closest ? e.target.closest('.anno-mini') : null;
-        if (!btn) return;
-        e.stopPropagation();
-        var card = btn.closest('.list-card');
-        if (!card) return;
-        var idx = parseInt(card.dataset.idx, 10);
-        var item = _currentItems && _currentItems[idx];
-        if (!item) return;
-        if (btn.dataset.anno === 'accept') _annoSubmit(item, 'accept', '');
-        else _openAnnoPop(btn, item);
-      });
-    }
     renderList();
-    _toast('标注模式已开启（' + (data.annotator || '') + '）');
-  }).catch(function() {
-    try { sessionStorage.removeItem('anno_on'); } catch (e) {}
-    try {
-      var u = new URL(location.href);
-      u.searchParams.delete('annotate');
-      history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
-    } catch (e) {}
-    _toast('标注需要登录后台账号');
-  });
+  }).catch(function() {});
 }
 
 // 详情面板按钮（手机版面板是后创建的，用事件委派）
