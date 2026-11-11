@@ -122,8 +122,18 @@ def _precompress_enabled() -> bool:
 
 
 def precompress(path: Path, level: int = 6, remove_original: bool = False) -> Path | None:
-    """为文件生成预压缩 .gz 版本，返回压缩文件路径（压缩后更大则跳过）"""
+    """为文件生成预压缩 .gz 版本，返回压缩文件路径（压缩后更大则跳过）。
+
+    关闭预压缩时必须**删掉旧 .gz**：服务端会优先返回同名 .gz，留下上一轮的
+    压缩副本会让浏览器一直拿到旧页面（实测 2026-11-11：模板改了但读者看到旧版）。
+    """
     if not _precompress_enabled():
+        stale = path.with_name(path.name + ".gz")
+        if stale.exists():
+            try:
+                stale.unlink()
+            except OSError:
+                pass
         return None
     if not path.exists():
         return None

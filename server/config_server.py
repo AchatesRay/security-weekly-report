@@ -57,6 +57,7 @@ _PIPELINE_LOG_PATH = None
 
 _pipeline_proc: "subprocess.Popen | None" = None
 _FAVORITES = None          # FavoritesStore，在 _init_paths 中创建
+_ANNOTATIONS = None        # AnnotationStore，在 _init_paths 中创建
 
 # ── 常量 ──
 MAX_BODY_BYTES = 4 * 1024 * 1024          # 单个请求体上限 4MB
@@ -72,6 +73,7 @@ def _init_paths(project_dir: str | None = None):
     global _PROJECT_DIR, _CONFIG_DIR, _DATA_DIR, _REPORT_DIR
     global _SETTINGS_PATH, _SOURCES_PATH, _LLM_PATH
     global _PIPELINE_LOG_PATH, _SCORING_KEYWORDS_PATH, _FAVORITES
+    global _ANNOTATIONS
 
     _PROJECT_DIR = Path(project_dir).resolve() if project_dir else SERVER_DIR.parent
     # 确保 pipeline 模块可导入
@@ -100,6 +102,11 @@ def _init_paths(project_dir: str | None = None):
         reports_dir=_REPORT_DIR,
         max_image_bytes=max_image_bytes,
     )
+
+    # 选文标注：追加式 JSONL，存放规则调优的"人判"证据。
+    # 不参与管道，写接口沿用后台 Basic Auth + 同源校验。
+    from pipeline.annotations import AnnotationStore
+    _ANNOTATIONS = AnnotationStore(_DATA_DIR / "state" / "annotations")
 
 
 # ── Read/Write helpers ──
@@ -667,7 +674,12 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         """如果存在预压缩文件且客户端接受 gzip，返回 .gz 路径"""
         gz = path.with_name(path.name + ".gz")
         if gz.exists() and "gzip" in self.headers.get("Accept-Encoding", ""):
-            return gz
+            # 只认比原文件新的 .gz：旧副本会让浏览器永远拿到上一版报告
+            try:
+                if gz.stat().st_mtime >= path.stat().st_mtime:
+                    return gz
+            except OSError:
+                return None
         return None
 
     def _serve_file(self, file_path: Path, ctype: str = None):
@@ -874,6 +886,12 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/api/config/scoring_keywords/save":
             return self._put_scoring_keywords()
 
+        # ── 选文标注 API（只读列表 + 导出；写接口在 POST）──
+        if path == "/api/annotations":
+            return self._get_annotations()
+        if path == "/api/annotations/export":
+            return self._export_annotations(parsed)
+
         # ── 收藏 API ──
         if path == "/api/favorites":
             return self._get_favorites()
@@ -925,6 +943,8 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
             return self._run_pipeline()
         if path == "/api/favorites":
             return self._post_favorite()
+        if path == "/api/annotations":
+            return self._post_annotation()
 
         send_json(self, {"error": "Not found"}, 404)
 
@@ -1178,6 +1198,55 @@ class ConfigHandler(http.server.SimpleHTTPRequestHandler):
             send_json(self, {"ok": False, "error": "收藏不存在"}, 404)
             return
         send_json(self, {"ok": True, "removed": True})
+
+    # ── 选文标注 API ──
+
+    @staticmethod
+    def _annotator_name() -> str:
+        """标注人：有认证时用登录名，本地未启用认证时记为 local。"""
+        return _CONFIG_USER if (_AUTH_ENABLED and _CONFIG_USER) else "local"
+
+    def _get_annotations(self):
+        items = _ANNOTATIONS.latest()
+        send_json(self, {
+            "ok": True,
+            "annotator": self._annotator_name(),
+            "reasons": _ANNOTATIONS.reasons(),
+            "today": _ANNOTATIONS.today_counts(),
+            "total": len(items),
+            "items": items,
+        })
+
+    def _post_annotation(self):
+        if not self._require_same_origin_write():
+            return
+        payload = self._read_json_body(self)
+        try:
+            record = _ANNOTATIONS.append(payload, annotator=self._annotator_name())
+        except ValueError as e:
+            raise ConfigValidationError(str(e)) from e
+        send_json(self, {"ok": True, "record": record,
+                         "today": _ANNOTATIONS.today_counts()})
+
+    def _export_annotations(self, parsed):
+        query = urllib.parse.parse_qs(parsed.query)
+        month = (query.get("month") or [""])[0].strip()
+        try:
+            body = _ANNOTATIONS.export_jsonl(month or None).encode("utf-8")
+        except ValueError as e:
+            raise ConfigValidationError(str(e)) from e
+        stamp = month or datetime.now().strftime("%Y-%m")
+        filename = f"annotations_{stamp}.jsonl"
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except OSError:
+            pass
 
     def _get_favorite_asset(self, path: str):
         raw = path[len("/api/favorites/assets/"):]

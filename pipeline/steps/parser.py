@@ -6,7 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin
 
-from ..utils import DATA_DIR, atomic_write, parse_datetime_utc
+import yaml
+
+from ..utils import DATA_DIR, SOURCES_PATH, atomic_write, parse_datetime_utc
 from ..utils.html_sanitize import sanitize_fragment
 from ..utils.textnorm import item_id
 
@@ -524,8 +526,44 @@ def parse_all() -> list[dict]:
         except Exception as e:
             print(f"  [PARSE ERROR] {source['source_name']} feed: {e}")
 
+    # 逐源行为开关随条目下沉，供全文抓取（跳过必败请求）与评分（关注源直采）读取。
+    # 以 source_config.yaml 为准（--skip-fetch 时 raw_items 可能是旧格式，
+    # 里面没有这两个字段），raw_items 里的同名字段作为兜底。
+    source_flags = {}
+    try:
+        with open(SOURCES_PATH, encoding="utf-8") as f:
+            cfg_sources = (yaml.safe_load(f) or {}).get("sources", [])
+    except Exception as e:  # noqa: BLE001 — 配置损坏不应阻断解析
+        cfg_sources = []
+        print(f"  [PARSE] 读取 source_config.yaml 失败，逐源开关降级为 raw_items 兜底: {e}")
+
+    def _flags_of(src: dict) -> dict:
+        flags = {}
+        # 配置用 name，raw_items 用 source_name
+        if src.get("fulltext") is False:
+            flags["fulltext"] = False
+        pt = src.get("pass_through")
+        if isinstance(pt, dict) and pt.get("enabled"):
+            flags["pass_through"] = pt
+        return flags
+
+    for src in cfg_sources:
+        flags = _flags_of(src)
+        if flags:
+            source_flags[src.get("name", "")] = flags
+    for src in raw_sources:
+        name = src.get("source_name", "")
+        if name in source_flags:
+            continue
+        flags = _flags_of(src)
+        if flags:
+            source_flags[name] = flags
+
     for item in all_items:
         item["item_id"] = item_id(item.get("url", ""))
+        flags = source_flags.get(item.get("source_name", ""))
+        if flags:
+            item["source_flags"] = flags
 
     unparsable = _normalize_item_dates(all_items)
     print(f"[PARSER] 解析完成: {len(all_items)} 条"

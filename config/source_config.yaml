@@ -151,6 +151,33 @@ sources:
   type: rss
   language: en
   enabled: true
+  # 全站 Cloudflare JS 挑战（2026-11-11 实测：7 种 UA + 无头 Chrome 均返回 403）。
+  # 正文不可得，只用 RSS 的标题 + 1~2 句摘要；标记后 step 5 不再做必败的正文请求。
+  fulltext: false
+  # 关注源直采：观点/运营栏目与 AI 安全关键词命中的条目不走 80 分线，
+  # 直接进「待复核」板块（每期每源最多 max_items 条），主榜阈值不受影响。
+  pass_through:
+    enabled: true
+    target: review
+    max_items: 6
+    sections:
+      - cybersecurity-operations
+      - cyber-risk
+    keywords:
+      - AI
+      - LLM
+      - Claude
+      - Anthropic
+      - CISO
+      - incident
+      - incident response
+      - automation
+      - automating
+      - autonomous
+      - model training
+      - training data
+      - 大模型
+      - 智能体
 - name: DeepSeek
   group: AI厂商
   url: https://deepseek.com/feed.xml

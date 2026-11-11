@@ -296,6 +296,26 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
 
 ---
 
+## 选文标注
+
+阅读时顺手标注"这条该不该收"，为**调规则**积累可复盘的人判证据。完整说明见
+[docs/annotations.md](docs/annotations.md)。
+
+- **入口**：`/?annotate=1`（需后台账号；公开读者从普通链接进入完全看不到入口）
+- **不改报告**：标注只是证据，不会把条目撤下或置顶，当天报告不受影响
+- **8 个原因**：商业稿、非安全、AI 空泛、太浅、重复、过时、信源噪音、漏洞详情不关注，
+  每个都对应一个可调项（商业惩罚、伞形词规则、深度加分、去重阈值、信源等级、③ 类权重……）
+- **随行快照**：`data/state/annotations/annotations-YYYY-MM.jsonl` 只追加不改写，
+  撤销也写事件；报告数据 14 天清理后仍能复盘
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/annotations` | 生效标注 + 原因表 + 当天计数 |
+| POST | `/api/annotations` | 新增标注（`accept` / `reject` / `clear`） |
+| GET | `/api/annotations/export?month=YYYY-MM` | 导出 JSONL |
+
+---
+
 ## 配置参考
 
 ### 信源配置 (`config/source_config.yaml`)
@@ -311,6 +331,14 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
   enabled: true                      # 是否启用
   note: "备注"                        # 可选备注
   ssl_verify: false                  # 可选，关闭 TLS 证书校验（有中间人风险，慎用）
+  fulltext: false                    # 可选，false = 正文不可得（如 Cloudflare 全站 403），
+                                     #   step 5 跳过正文抓取，只用标题+RSS 摘要
+  pass_through:                      # 可选，关注源直采（不占 80 分线，只进「待复核」）
+    enabled: true
+    target: review                   # 目前仅支持 review
+    max_items: 6                     # 每期每源最多几条
+    sections: [cybersecurity-operations, cyber-risk]   # 按 URL 路径栏目
+    keywords: [AI, LLM, CISO]        # ASCII 按词边界匹配，中文按子串
   api_platform: github_repo          # 仅 API 类型：github / github_repo / arxiv /
                                      #   semantic_scholar / ietf / mitre_attack / secrss
   scraper_config:                    # 仅 Scraper 类型：CSS 选择器
@@ -321,6 +349,11 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
     link_selector: "a"
     link_base: "https://example.com"
 ```
+
+> `pass_through` 的设计背景：正文拿不到、摘要只有一两句的观点/访谈稿，
+> 在关键词体系里天然拿不到分，会在 stage1 的 30 分线被丢弃。
+> 这类源按「栏目 + 关键词」直采到「待复核」等人工过目，主榜阈值与词表完全不动；
+> 商业惩罚 ≥30 的发布稿/软文不入选。
 
 > 未写 `api_platform` 的 API 信源会按信源名自动回补平台（见
 > `pipeline/steps/fetcher.py` 的 `SOURCE_NAME_PLATFORMS`），以便正确带上

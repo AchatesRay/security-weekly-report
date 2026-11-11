@@ -182,8 +182,12 @@ def select_display_items(items: list[dict]) -> tuple[list[dict], list[dict]]:
     accepted_all = [i for i in items if i.get("filter_decision") != "review"]
     accepted_all = _apply_diversity(accepted_all, max_per_source=max_per_source)
     accepted_items = sorted(accepted_all, key=_rank_key, reverse=True)[:max_total]
-    review_items = sorted((i for i in items if i.get("filter_decision") == "review"),
-                          key=_rank_key, reverse=True)
+    # 关注源直采条目排在待复核最前面：它们分数常为 0，
+    # 按相关度排序会被几十条普通待复核条目淹没。
+    review_items = sorted(
+        (i for i in items if i.get("filter_decision") == "review"),
+        key=lambda i: (1 if i.get("focus_reason") else 0, _rank_key(i)),
+        reverse=True)
     return accepted_items, review_items
 
 
@@ -337,6 +341,8 @@ def build_json_items(items: list[dict]) -> list[dict]:
             "scoring_matched": item.get("scoring_matched") or {},
             "source_hue": _source_color(item.get("source_name", "")),
             "filter_decision": item.get("filter_decision", ""),
+            # 关注源直采命中的原因（栏目/关键词），前端用于展示「关注」标记
+            "focus_reason": item.get("focus_reason", ""),
             "confidence_score": item.get("confidence_score", 0),
             # 不截顶的证据强度，用于前端排序/展示（截顶分大量并列满分）
             "raw_score": item.get("raw_score", item.get("confidence_score", 0)),

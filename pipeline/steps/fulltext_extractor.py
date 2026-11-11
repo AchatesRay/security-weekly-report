@@ -989,6 +989,12 @@ def run():
             continue
         if item.get("full_body"):
             continue
+        # 正文不可得的源（如 Dark Reading 全站 Cloudflare 挑战）不再发起
+        # 必败的请求：每轮白费几十次 403，还会把全文抓取成功率伪造得很难看。
+        if (item.get("source_flags") or {}).get("fulltext") is False:
+            item["summary_only"] = True
+            item["fulltext_fetched"] = False
+            continue
         targets.append(item)
 
     print(f"[FULLTEXT] 需抓取全文: {len(targets)}/{total} 条（并发 {MAX_WORKERS}）")

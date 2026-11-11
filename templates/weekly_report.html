@@ -59,6 +59,36 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .detail-fav-btn:disabled { opacity:.6; cursor:default; }
 .detail-fav-tip { font-size:12px; color:var(--text-muted); }
 
+/* ── 选文标注（仅 ?annotate=1 且登录后显示）──
+   标注只用于调规则，不改变当天报告，所以做成"轻量旁路"：
+   未开启时 DOM 仍在，但整块不占位、不响应。 */
+.anno-bar { display:none; align-items:center; gap:8px; flex-wrap:wrap; margin:-8px 0 16px; }
+body.anno-on .anno-bar { display:flex; }
+.anno-btn { display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border:1px solid var(--border); border-radius:16px; background:var(--surface); color:var(--text-secondary); font-size:12px; font-family:inherit; cursor:pointer; transition:background .15s,border-color .15s,color .15s; }
+.anno-btn:hover { border-color:var(--accent); color:var(--accent); }
+.anno-btn.active-yes { border-color:#059669; color:#047857; background:rgba(5,150,105,.1); }
+.anno-btn.active-no { border-color:#dc2626; color:#b91c1c; background:rgba(220,38,38,.1); }
+.anno-status { font-size:12px; color:var(--text-muted); }
+.anno-count { margin-left:auto; font-size:11px; color:var(--text-muted); white-space:nowrap; }
+
+.list-card-anno { display:none; align-items:center; gap:4px; margin-top:6px; }
+body.anno-on .list-card-anno { display:flex; }
+.anno-mini { width:22px; height:22px; padding:0; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text-muted); font-size:12px; line-height:1; font-family:inherit; cursor:pointer; }
+.anno-mini:hover { border-color:var(--accent); color:var(--accent); }
+.anno-mini.is-active-yes { border-color:#059669; color:#047857; background:rgba(5,150,105,.1); }
+.anno-mini.is-active-no { border-color:#dc2626; color:#b91c1c; background:rgba(220,38,38,.1); }
+.anno-mini-tag { font-size:11px; color:var(--text-muted); margin-left:2px; }
+.list-card.is-anno-reject .list-card-title { opacity:.55; }
+.list-card.is-anno-reject { border-left-color:#dc2626; }
+
+.anno-pop { position:fixed; z-index:260; width:min(268px, calc(100vw - 16px)); padding:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:0 10px 30px rgba(0,0,0,.18); display:none; }
+.anno-pop.show { display:block; }
+.anno-pop-title { font-size:11px; color:var(--text-muted); margin-bottom:6px; }
+.anno-chip { display:block; width:100%; text-align:left; padding:6px 8px; border:0; border-radius:6px; background:transparent; color:var(--text); font-size:12px; font-family:inherit; line-height:1.35; cursor:pointer; }
+.anno-chip:hover { background:var(--accent-hover); }
+.anno-chip small { display:block; color:var(--text-muted); font-size:10px; margin-top:1px; }
+.anno-chip-plain { color:var(--text-muted); border-top:1px solid var(--border-light); margin-top:4px; border-radius:0 0 6px 6px; }
+
 /* 轻提示 */
 .toast { position:fixed; left:50%; bottom:34px; transform:translateX(-50%) translateY(10px); max-width:80vw; padding:10px 18px; border-radius:8px; background:rgba(26,29,41,0.92); color:#fff; font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s,transform .2s; z-index:300; }
 .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
@@ -121,6 +151,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .list-card-meta { font-size:12px; color:#059669; display:flex; align-items:center; gap:8px; }
 .list-card-ai { font-size:10px; font-weight:600; color:var(--accent); background:var(--accent-soft); padding:1px 6px; border-radius:3px; letter-spacing:.3px; }
 .list-card-review { border-left-color:#f59e0b !important; }
+.focus-tag { color:#b45309; font-weight:600; }
 
 /* Detail */
 .detail-panel { flex:1; background:var(--surface); display:flex; flex-direction:column; height:100vh; overflow-y:auto; }
@@ -387,6 +418,14 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
         <button type="button" class="detail-fav-btn" id="detailFavBtn">☆ 收藏</button>
         <span class="detail-fav-tip" id="detailFavTip"></span>
       </div>
+      <!-- 标注栏：仅标注模式渲染（阅读时压根看不到） -->
+      <div class="anno-bar" id="annoBar">
+        <button type="button" class="anno-btn" id="annoYes">✓ 值得收录</button>
+        <button type="button" class="anno-btn" id="annoNo">✕ 不该收录</button>
+        <button type="button" class="anno-btn" id="annoClear">撤销</button>
+        <span class="anno-status" id="annoStatus"></span>
+        <span class="anno-count" id="annoCount"></span>
+      </div>
       <div class="detail-divider"></div>
       <div class="detail-ai-summary" id="detailAiSummary" style="display:none">
         <div class="detail-ai-summary-header">摘要<span class="detail-ai-summary-tag" id="detailAiSummaryTag"></span></div>
@@ -505,13 +544,24 @@ function rebuildCatIdx(data) {
 }
 
 function _cardHtml(item, i) {
-  var html = '<div class="list-card' + (item.filter_decision === 'review' ? ' list-card-review' : '') + '" data-idx="' + i + '">';
+  var st = _annoItemState(item);
+  var html = '<div class="list-card' + (item.filter_decision === 'review' ? ' list-card-review' : '')
+    + (st && st.verdict === 'reject' ? ' is-anno-reject' : '')
+    + '" data-idx="' + i + '" data-item-id="' + escAttr(item.item_id || '') + '">';
   html += '<div class="list-card-source" style="color:hsl(' + item.source_hue + ',55%,40%)">' + esc(item.source_name) + '</div>';
   html += '<div class="list-card-title">' + esc(item.title) + '</div>';
   html += '<div class="list-card-meta"><span>' + esc(item.published_date) + '</span>';
-  if (item.content_type) html += '<span>·</span><span>' + esc(item.content_type) + '</span>';
-  if (item.source_type) html += '<span>·</span><span>' + esc(item.source_type) + '</span>';
-  html += '</div></div>';
+    if (item.focus_reason) html += '<span class="focus-tag">· 关注</span>';
+    if (item.content_type) html += '<span>·</span><span>' + esc(item.content_type) + '</span>';
+    if (item.source_type) html += '<span>·</span><span>' + esc(item.source_type) + '</span>';
+  html += '</div>';
+  // 标注快捷按钮：只在标注模式下显示（body.anno-on）
+  html += '<div class="list-card-anno">'
+    + '<button type="button" class="anno-mini anno-mini-yes' + (st && st.verdict === 'accept' ? ' is-active-yes' : '') + '" data-anno="accept" title="值得收录（1）">✓</button>'
+    + '<button type="button" class="anno-mini anno-mini-no' + (st && st.verdict === 'reject' ? ' is-active-no' : '') + '" data-anno="reject" title="不该收录（2）">✕</button>'
+    + '<span class="anno-mini-tag">' + (st ? (st.verdict === 'accept' ? '已标：值得收录' : '已标：' + esc(_annoReasonLabel(st.reason))) : '') + '</span>'
+    + '</div>';
+  html += '</div>';
   return html;
 }
 
@@ -642,8 +692,14 @@ function _renderDetail(item) {
   // 仅当超过满分时额外显示，用于区分同为 100 分的条目
   var _sc = (item.confidence_score || 0);
   var _raw = (typeof item.raw_score === 'number') ? item.raw_score : _sc;
-  mHtml += '<div class="detail-kw-scoreline">综合评分: ' + _sc
-         + (_raw > _sc ? '　·　证据强度: ' + _raw : '') + '</div>';
+  if (item.focus_reason) {
+    // 关注源直采条目本来就不参与评分排序，显示 0 分会误导读者
+    mHtml += '<div class="detail-kw-scoreline">关注源直采：' + esc(item.focus_reason)
+           + '（未走评分门槛）</div>';
+  } else {
+    mHtml += '<div class="detail-kw-scoreline">综合评分: ' + _sc
+           + (_raw > _sc ? '　·　证据强度: ' + _raw : '') + '</div>';
+  }
 
   // 入选依据：把评分拆成可核对的项，避免“黑箱 100 分”
   var sb = item.score_breakdown || {};
@@ -665,7 +721,7 @@ function _renderDetail(item) {
   if (sb.launch_cap) _sbRow('发布稿封顶', '已生效');
   if (sb.final_raw_score !== undefined) _sbRow('最终相关性分', sb.final_raw_score);
   if (sb.accept_threshold !== undefined) _sbRow('收录线', sb.accept_threshold);
-  if (sbRows.length) {
+  if (sbRows.length && !item.focus_reason) {
     mHtml += '<div class="detail-score-breakdown">'
       + '<div class="detail-score-header">入选依据</div>' + sbRows.join('') + '</div>';
   }
@@ -673,6 +729,7 @@ function _renderDetail(item) {
 
   _favCurrent = item;
   _syncFavBtn(item);
+  _annoRender(item);
 }
 
 // ── 收藏交互 ──
@@ -781,6 +838,293 @@ document.addEventListener('click', function(e) {
     }).catch(function(err) {
       _toast('收藏失败：' + err.message);
     }).then(function() { detailFavBtn.disabled = false; });
+});
+
+// ── 选文标注 ──
+// 目标：为“调规则”积累可复盘的人判证据，**不改变当天报告**。
+// 只在 ?annotate=1（或本会话已开启）时拉取，避免公开读者被弹登录框。
+var _annoOn = false;
+var _annoReasons = [];
+var _annoMap = {};           // item_id => 当前生效标注
+var _annoToday = { total: 0 };
+var _annoBusy = false;
+var _annoCurrentItem = null;
+var _annoPopItem = null;
+var _annoCardBound = false;
+var _annoPopBound = false;
+
+function _annoApi(method, url, body) {
+  var opts = {
+    method: method,
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  };
+  if (body !== undefined) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  return fetch(url, opts).then(function(resp) {
+    return resp.json().catch(function() { return {}; }).then(function(data) {
+      if (!resp.ok || data.ok === false) {
+        throw new Error(data.error || ('请求失败（' + resp.status + '）'));
+      }
+      return data;
+    });
+  });
+}
+
+function _annoReasonLabel(code) {
+  if (!code) return '未说明';
+  for (var i = 0; i < _annoReasons.length; i++) {
+    if (_annoReasons[i].code === code) return _annoReasons[i].label;
+  }
+  return code === 'unspecified' ? '未说明' : code;
+}
+
+function _annoItemState(item) {
+  if (!item || !item.item_id) return null;
+  return _annoMap[item.item_id] || null;
+}
+
+// 只存“当时长什么样”：报告数据 14 天清理，事后复盘靠快照
+function _annoSnapshot(item) {
+  return {
+    title: item.title, url: item.url, source_name: item.source_name,
+    category: item.category, published_date: item.published_date,
+    first_seen: item.first_seen, edition: _currentWeek,
+    content_type: item.content_type,
+    confidence_score: item.confidence_score,
+    raw_score: item.raw_score,
+    relevance_score: item.relevance_score,
+    score_breakdown: item.score_breakdown || {},
+    matched_terms: item.scoring_matched || {},
+    ai_summary: item.ai_summary || ''
+  };
+}
+
+function _buildAnnoPop() {
+  var pop = document.getElementById('annoPop');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.className = 'anno-pop';
+    pop.id = 'annoPop';
+    document.body.appendChild(pop);
+  }
+  var html = '<div class="anno-pop-title">这条为什么不该收？（点一下即保存）</div>';
+  _annoReasons.forEach(function(r) {
+    html += '<button type="button" class="anno-chip" data-reason="' + escAttr(r.code) + '">'
+      + esc(r.label) + '<small>' + esc(r.hint || '') + '</small></button>';
+  });
+  html += '<button type="button" class="anno-chip anno-chip-plain" data-reason="">不说明原因</button>';
+  pop.innerHTML = html;
+  if (!_annoPopBound) {
+    _annoPopBound = true;
+    pop.addEventListener('click', function(e) {
+      var chip = e.target.closest ? e.target.closest('.anno-chip') : null;
+      if (!chip) return;
+      var reason = chip.getAttribute('data-reason') || '';
+      var item = _annoPopItem;
+      _closeAnnoPop();
+      if (item) _annoSubmit(item, 'reject', reason);
+    });
+  }
+}
+
+function _openAnnoPop(anchor, item) {
+  _buildAnnoPop();
+  var pop = document.getElementById('annoPop');
+  if (!pop) return;
+  _annoPopItem = item;
+  pop.classList.add('show');
+  var r = anchor && anchor.getBoundingClientRect
+    ? anchor.getBoundingClientRect()
+    : { left: window.innerWidth / 2, right: window.innerWidth / 2, top: 80, bottom: 80, width: 0 };
+  var w = pop.offsetWidth, h = pop.offsetHeight;
+  var left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+  var top = r.bottom + 6;
+  if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+}
+
+function _closeAnnoPop() {
+  var p = document.getElementById('annoPop');
+  if (p) p.classList.remove('show');
+  _annoPopItem = null;
+}
+
+function _annoSubmit(item, verdict, reason) {
+  if (!_annoOn || !item || !item.item_id || _annoBusy) return;
+  var existing = _annoItemState(item);
+  // 再点同一个判定 = 撤销（手滑不另外找按钮）
+  if (verdict !== 'clear' && existing && existing.verdict === verdict
+      && (!reason || existing.reason === reason)) {
+    verdict = 'clear';
+    reason = '';
+  }
+  _annoBusy = true;
+  var payload = {
+    item_id: item.item_id,
+    verdict: verdict,
+    reason: reason || '',
+    baseline: item.filter_decision === 'review' ? 'review' : 'accepted',
+    snapshot: _annoSnapshot(item)
+  };
+  _annoApi('POST', '/api/annotations', payload).then(function(data) {
+    if (verdict === 'clear') {
+      delete _annoMap[item.item_id];
+    } else {
+      _annoMap[item.item_id] = {
+        item_id: item.item_id, verdict: verdict, reason: reason || '',
+        baseline: payload.baseline
+      };
+    }
+    if (data.today) _annoToday = data.today;
+    _annoRefreshItem(item);
+    _toast(verdict === 'clear' ? '已撤销标注'
+      : (verdict === 'accept' ? '已记为值得收录'
+         : '已记为不该收录 · ' + (_annoReasonLabel(reason) || '未说明')));
+  }).catch(function(err) {
+    _toast('标注失败：' + err.message);
+  }).then(function() { _annoBusy = false; });
+}
+
+function _annoRefreshItem(item) {
+  if (!item) return;
+  if (listEl) {
+    var card = listEl.querySelector('.list-card[data-item-id="' + (item.item_id || '') + '"]');
+    if (card) {
+      var st = _annoItemState(item);
+      card.classList.toggle('is-anno-reject', !!st && st.verdict === 'reject');
+      var yes = card.querySelector('.anno-mini-yes');
+      var no = card.querySelector('.anno-mini-no');
+      var tag = card.querySelector('.anno-mini-tag');
+      if (yes) yes.classList.toggle('is-active-yes', !!st && st.verdict === 'accept');
+      if (no) no.classList.toggle('is-active-no', !!st && st.verdict === 'reject');
+      if (tag) tag.textContent = st
+        ? (st.verdict === 'accept' ? '已标：值得收录' : '已标：' + _annoReasonLabel(st.reason))
+        : '';
+    }
+  }
+  if (_annoCurrentItem && item.item_id === _annoCurrentItem.item_id) {
+    _annoRender(_annoCurrentItem);
+  }
+}
+
+function _annoRender(item) {
+  _annoCurrentItem = item || null;
+  var bar = document.getElementById('annoBar');
+  if (!bar) return;
+  if (!_annoOn) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  var st = _annoItemState(item);
+  var yes = document.getElementById('annoYes');
+  var no = document.getElementById('annoNo');
+  var clr = document.getElementById('annoClear');
+  var status = document.getElementById('annoStatus');
+  var cnt = document.getElementById('annoCount');
+  var isReview = item && item.filter_decision === 'review';
+  if (yes) {
+    yes.textContent = isReview ? '✓ 该收（规则漏收）' : '✓ 值得收录';
+    yes.classList.toggle('active-yes', !!st && st.verdict === 'accept');
+  }
+  if (no) {
+    no.textContent = isReview ? '✕ 确实不该收' : '✕ 不该收录';
+    no.classList.toggle('active-no', !!st && st.verdict === 'reject');
+  }
+  if (clr) clr.style.display = st ? '' : 'none';
+  if (status) {
+    status.textContent = st
+      ? (st.verdict === 'accept' ? '已标：值得收录'
+         : '已标：不该收录 · ' + (_annoReasonLabel(st.reason) || '未说明'))
+      : '';
+  }
+  if (cnt) cnt.textContent = '今日已标 ' + (_annoToday.total || 0) + ' 条';
+}
+
+function initAnnotations() {
+  if (location.protocol === 'file:') return;
+  var qs;
+  try { qs = new URLSearchParams(location.search); } catch (e) { return; }
+  var enabled = qs.get('annotate') === '1';
+  if (!enabled) { try { enabled = sessionStorage.getItem('anno_on') === '1'; } catch (e) {} }
+  if (!enabled) return;
+  _annoApi('GET', '/api/annotations').then(function(data) {
+    _annoOn = true;
+    _annoReasons = data.reasons || [];
+    _annoToday = data.today || { total: 0 };
+    (data.items || []).forEach(function(r) {
+      if (r && r.item_id) _annoMap[r.item_id] = r;
+    });
+    try { sessionStorage.setItem('anno_on', '1'); } catch (e) {}
+    document.body.classList.add('anno-on');
+    _buildAnnoPop();
+    if (!_annoCardBound) {
+      _annoCardBound = true;
+      listEl.addEventListener('click', function(e) {
+        var btn = e.target.closest ? e.target.closest('.anno-mini') : null;
+        if (!btn) return;
+        e.stopPropagation();
+        var card = btn.closest('.list-card');
+        if (!card) return;
+        var idx = parseInt(card.dataset.idx, 10);
+        var item = _currentItems && _currentItems[idx];
+        if (!item) return;
+        if (btn.dataset.anno === 'accept') _annoSubmit(item, 'accept', '');
+        else _openAnnoPop(btn, item);
+      });
+    }
+    renderList();
+    _toast('标注模式已开启（' + (data.annotator || '') + '）');
+  }).catch(function() {
+    try { sessionStorage.removeItem('anno_on'); } catch (e) {}
+    try {
+      var u = new URL(location.href);
+      u.searchParams.delete('annotate');
+      history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
+    } catch (e) {}
+    _toast('标注需要登录后台账号');
+  });
+}
+
+// 详情面板按钮（手机版面板是后创建的，用事件委派）
+document.addEventListener('click', function(e) {
+  var t = e.target && e.target.closest ? e.target.closest('#annoYes, #annoNo, #annoClear') : null;
+  if (t) {
+    e.preventDefault();
+    var item = _annoCurrentItem;
+    if (!_annoOn || !item || _annoBusy) return;
+    if (t.id === 'annoNo') { _openAnnoPop(t, item); return; }
+    _annoSubmit(item, t.id === 'annoYes' ? 'accept' : 'clear', '');
+    return;
+  }
+  var p = document.getElementById('annoPop');
+  if (p && p.classList.contains('show') && !p.contains(e.target)
+      && !(e.target.closest && e.target.closest('[data-anno]'))) {
+    _closeAnnoPop();
+  }
+});
+
+// 快捷键：J/K 切条，1 收，2 不收（再选原因），U 撤销
+document.addEventListener('keydown', function(e) {
+  if (!_annoOn) return;
+  var tag = (e.target && e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  var item = _currentItems && _currentItems[_currentSel];
+  if (!item) return;
+  var k = e.key;
+  if (k === 'j' || k === 'J') {
+    if (_currentSel < _currentItems.length - 1) selectItem(_currentSel + 1);
+  } else if (k === 'k' || k === 'K') {
+    if (_currentSel > 0) selectItem(_currentSel - 1);
+  } else if (k === '1') {
+    _annoSubmit(item, 'accept', '');
+  } else if (k === '2') {
+    _openAnnoPop(document.getElementById('annoNo'), item);
+  } else if (k === 'u' || k === 'U') {
+    _annoSubmit(item, 'clear', '');
+  }
 });
 
 function selectItem(idx) {
@@ -919,6 +1263,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   renderList();
   loadFavoriteState();
+  initAnnotations();
 });
 </script>
 </body>

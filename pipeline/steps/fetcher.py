@@ -280,6 +280,12 @@ def _result(source: dict, url: str, text: str, error, rtype: str = None,
     cfg = source.get("scraper_config")
     if cfg:
         item["scraper_config"] = cfg
+    # 逐源行为开关要随原始数据一路传到评分/抓取步骤：
+    # fulltext=false 表示正文不可得（如 Cloudflare 拦截）；
+    # pass_through 表示关注源直采规则（见 AGENTS.md §5）。
+    for key in ("fulltext", "pass_through"):
+        if key in source:
+            item[key] = source[key]
     item.update(extra)
     return item
 

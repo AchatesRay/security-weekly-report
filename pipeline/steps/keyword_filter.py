@@ -16,6 +16,8 @@
 """
 
 import json
+import re
+from urllib.parse import urlparse
 
 from .scorer import SecurityScorer, SCORING_CONFIG_PATH
 from ..utils import DATA_DIR, atomic_write
@@ -97,6 +99,62 @@ def init_default_keywords() -> bool:
     return False
 
 
+# 关注源直采：栏目 → 主题分类（仅在评分为「未分类」时补位，不覆盖已有分类）
+PASS_THROUGH_SECTION_CATEGORY = {
+    "cybersecurity-operations": "⑤ 产业动态与技术趋势",
+    "cyber-risk": "⑤ 产业动态与技术趋势",
+    "cyberattacks-data-breaches": "② 威胁情报与攻防对抗",
+    "endpoint-security": "② 威胁情报与攻防对抗",
+    "mobile-security": "② 威胁情报与攻防对抗",
+    "ics-ot-security": "② 威胁情报与攻防对抗",
+    "application-security": "③ 漏洞态势与供应链安全",
+}
+
+
+def _kw_hit(text: str, kw: str) -> bool:
+    """ASCII 关键词按词边界匹配（避免 AI 命中 said/email），中文按子串。"""
+    if not kw:
+        return False
+    if kw.isascii():
+        return re.search(r"(?<![A-Za-z0-9])" + re.escape(kw) + r"(?![A-Za-z0-9])",
+                         text, re.I) is not None
+    return kw in text
+
+
+def _pass_through_rule(item: dict) -> dict | None:
+    """命中关注源直采规则时返回命中信息，否则返回 None。
+
+    规则来自 source_config.yaml 的 pass_through 段，由 parser 随条目下沉到
+    item["source_flags"]。设计意图：观点/访谈类内容摘要极短、没有攻击技术词，
+    关键词体系天然识别不了，因此按源 + 栏目先放行到「待复核」等人工过目，
+    主榜的 80 分线与词表完全不动。
+    """
+    flags = item.get("source_flags") or {}
+    cfg = flags.get("pass_through")
+    if not isinstance(cfg, dict) or not cfg.get("enabled"):
+        return None
+
+    url_path = urlparse(item.get("url") or "").path.strip("/")
+    section = url_path.split("/")[0] if url_path else ""
+    text = f'{item.get("title", "")} {item.get("summary", "")}'
+    hits = [kw for kw in (cfg.get("keywords") or []) if _kw_hit(text, kw)]
+    section_hit = bool(section) and section in (cfg.get("sections") or [])
+    if not hits and not section_hit:
+        return None
+
+    reason = []
+    if section_hit:
+        reason.append(f"栏目 {section}")
+    if hits:
+        reason.append("关键词 " + "/".join(hits))
+    return {
+        "section": section,
+        "hits": hits,
+        "reason": "；".join(reason),
+        "max_items": int(cfg.get("max_items") or 6),
+    }
+
+
 def run_stage1():
     """阶段1过滤：快速预筛，<30 分提前丢弃（读取去重结果）"""
     init_default_keywords()
@@ -123,6 +181,13 @@ def run_stage1():
         result = scorer.quick_score(item)
         item["stage1_score"] = result["score"]
         item["stage1_drop"] = result["drop"]
+
+        # 关注源直采条目不受阶段1 的 30 分线限制（观点类天然拿不到分）
+        pt = _pass_through_rule(item)
+        if pt:
+            item["pass_through"] = pt
+            kept.append(item)
+            continue
 
         if result["drop"]:
             dropped += 1
@@ -171,12 +236,49 @@ def run_stage2():
             if key in result:
                 item[key] = result[key]
 
-        if result["decision"] == "accepted":
+        # 关注源直采：不走 80 分线，直接进「待复核」等人工过目。
+        # 注：已收录（>=80）的条目不会被降级，避免同一篇在主榜与待复核重复；
+        # 商业惩罚 >=30 的（发布稿/软文/会议推广）不放行——否则「Launches」
+        # 这类稿子会靠一个 AI 关键词占掉关注配额。
+        pt = item.get("pass_through")
+        if (pt and item.get("filter_decision") != "accepted"
+                and int(item.get("commercial_score") or 0) < 30):
+            item["filter_decision"] = "review"
+            item["confidence_level"] = "focus"
+            item["focus_reason"] = pt.get("reason", "")
+            if item.get("category") in (None, "", "未分类"):
+                item["category"] = PASS_THROUGH_SECTION_CATEGORY.get(
+                    pt.get("section", ""), "⑤ 产业动态与技术趋势")
+
+        if item.get("filter_decision") == "accepted":
             accepted.append(item)
-        elif result["decision"] == "review":
+        elif item.get("filter_decision") == "review":
             review.append(item)
         else:
             discarded.append(item)
+
+    # 关注源直采配额：同一信源每期最多 max_items 条，
+    # 排序口径「关键词命中数降序 → 发布时间降序」，超出的退回丢弃。
+    focus_items = [i for i in review if i.get("focus_reason")]
+    if focus_items:
+        overflow: set[int] = set()
+        per_source: dict[str, int] = {}
+        for it in sorted(focus_items,
+                         key=lambda x: (len((x.get("pass_through") or {}).get("hits") or []),
+                                        x.get("published_date") or ""),
+                         reverse=True):
+            src = it.get("source_name") or ""
+            cap = int((it.get("pass_through") or {}).get("max_items") or 6)
+            if per_source.get(src, 0) >= cap:
+                it["filter_decision"] = "filtered"
+                it["focus_reason"] = ""
+                overflow.add(id(it))
+                continue
+            per_source[src] = per_source.get(src, 0) + 1
+        if overflow:
+            review = [i for i in review if id(i) not in overflow]
+        print(f"[KEYWORD] 关注源直采: {len(focus_items) - len(overflow)} 条进待复核"
+              + (f"，{len(overflow)} 条超配额丢弃" if overflow else ""))
 
     # 写回：accepted + review 都保留继续走管道（字段已带 filter_decision 区分）
     final = accepted + review
