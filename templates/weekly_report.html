@@ -51,8 +51,8 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 .sidebar-fav-link .fav-star { color:#f59e0b; font-size:14px; }
 .sidebar-fav-count { margin-left:auto; font-size:11px; line-height:1; padding:3px 7px; border-radius:10px; background:var(--accent-soft); color:var(--accent); font-variant-numeric:tabular-nums; }
 
-/* 收藏按钮 */
-.detail-actions { display:flex; align-items:center; gap:10px; margin:-4px 0 16px; }
+/* 收藏 + 标注按钮：同一行 */
+.detail-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:-4px 0 16px; }
 .detail-fav-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border:1px solid var(--border); border-radius:20px; background:var(--surface); color:var(--text-secondary); font-size:13px; font-family:inherit; cursor:pointer; transition:background .15s,border-color .15s,color .15s; }
 .detail-fav-btn:hover { border-color:#f59e0b; color:#b45309; background:rgba(245,158,11,0.06); }
 .detail-fav-btn.active { border-color:#f59e0b; color:#b45309; background:rgba(245,158,11,0.12); }
@@ -62,7 +62,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 /* ── 选文标注（登录后自动显示，?annotate=0 可关闭）──
    标注只用于调规则，不改变当天报告，所以做成"轻量旁路"：
    未开启时 DOM 仍在，但整块不占位、不响应。 */
-.anno-bar { display:none; align-items:center; gap:8px; flex-wrap:wrap; margin:-8px 0 16px; }
+.anno-bar { display:none; align-items:center; gap:8px; flex-wrap:wrap; margin:0; }
 body.anno-on .anno-bar { display:flex; }
 .anno-btn { display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border:1px solid var(--border); border-radius:16px; background:var(--surface); color:var(--text-secondary); font-size:12px; font-family:inherit; cursor:pointer; transition:background .15s,border-color .15s,color .15s; }
 .anno-btn:hover { border-color:var(--accent); color:var(--accent); }
@@ -71,13 +71,6 @@ body.anno-on .anno-bar { display:flex; }
 .anno-status { font-size:12px; color:var(--text-muted); }
 .anno-count { margin-left:auto; font-size:11px; color:var(--text-muted); white-space:nowrap; }
 
-.list-card-anno { display:none; align-items:center; gap:4px; margin-top:6px; }
-body.anno-on .list-card-anno { display:flex; }
-.anno-mini { width:22px; height:22px; padding:0; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text-muted); font-size:12px; line-height:1; font-family:inherit; cursor:pointer; }
-.anno-mini:hover { border-color:var(--accent); color:var(--accent); }
-.anno-mini.is-active-yes { border-color:#059669; color:#047857; background:rgba(5,150,105,.1); }
-.anno-mini.is-active-no { border-color:#dc2626; color:#b91c1c; background:rgba(220,38,38,.1); }
-.anno-mini-tag { font-size:11px; color:var(--text-muted); margin-left:2px; }
 .list-card.is-anno-reject .list-card-title { opacity:.55; }
 .list-card.is-anno-reject { border-left-color:#dc2626; }
 
@@ -417,14 +410,14 @@ body.anno-on .list-card-anno { display:flex; }
       <div class="detail-actions" id="detailActions" style="display:none">
         <button type="button" class="detail-fav-btn" id="detailFavBtn">☆ 收藏</button>
         <span class="detail-fav-tip" id="detailFavTip"></span>
-      </div>
-      <!-- 标注栏：仅标注模式渲染（阅读时压根看不到） -->
-      <div class="anno-bar" id="annoBar">
-        <button type="button" class="anno-btn" id="annoYes">✓ 值得收录</button>
-        <button type="button" class="anno-btn" id="annoNo">✕ 不该收录</button>
-        <button type="button" class="anno-btn" id="annoClear">撤销</button>
-        <span class="anno-status" id="annoStatus"></span>
-        <span class="anno-count" id="annoCount"></span>
+        <!-- 标注按钮：仅标注模式显示（阅读时压根看不到），与收藏同一行 -->
+        <div class="anno-bar" id="annoBar">
+          <button type="button" class="anno-btn" id="annoYes">✓ 值得收录</button>
+          <button type="button" class="anno-btn" id="annoNo">✕ 不该收录</button>
+          <button type="button" class="anno-btn" id="annoClear">撤销</button>
+          <span class="anno-status" id="annoStatus"></span>
+          <span class="anno-count" id="annoCount"></span>
+        </div>
       </div>
       <div class="detail-divider"></div>
       <div class="detail-ai-summary" id="detailAiSummary" style="display:none">
@@ -555,12 +548,6 @@ function _cardHtml(item, i) {
     if (item.content_type) html += '<span>·</span><span>' + esc(item.content_type) + '</span>';
     if (item.source_type) html += '<span>·</span><span>' + esc(item.source_type) + '</span>';
   html += '</div>';
-  // 标注快捷按钮：只在标注模式下显示（body.anno-on）
-  html += '<div class="list-card-anno">'
-    + '<button type="button" class="anno-mini anno-mini-yes' + (st && st.verdict === 'accept' ? ' is-active-yes' : '') + '" data-anno="accept" title="值得收录（1）">✓</button>'
-    + '<button type="button" class="anno-mini anno-mini-no' + (st && st.verdict === 'reject' ? ' is-active-no' : '') + '" data-anno="reject" title="不该收录（2）">✕</button>'
-    + '<span class="anno-mini-tag">' + (st ? (st.verdict === 'accept' ? '已标：值得收录' : '已标：' + esc(_annoReasonLabel(st.reason))) : '') + '</span>'
-    + '</div>';
   html += '</div>';
   return html;
 }
@@ -774,19 +761,26 @@ function _favPayload(item) {
   };
 }
 
+// 收藏按钮与标注按钮共用一行：任一功能可用时整行显示
+function _syncDetailActions() {
+  if (!detailActions) return;
+  var show = (_favEnabled && !!_favCurrent) || _annoOn;
+  detailActions.style.display = show ? 'flex' : 'none';
+}
+
 function _syncFavBtn(item) {
   if (!detailActions || !detailFavBtn) return;
-  if (!_favEnabled || !item) {
-    detailActions.style.display = 'none';
-    return;
-  }
-  detailActions.style.display = 'flex';
+  var showFav = _favEnabled && !!item;
+  detailFavBtn.style.display = showFav ? '' : 'none';
+  if (detailFavTip) detailFavTip.style.display = showFav ? '' : 'none';
+  if (!showFav) { _syncDetailActions(); return; }
   var fav = item.url ? _favMap[item.url] : null;
   detailFavBtn.disabled = !_favLoaded;
   detailFavBtn.textContent = fav ? '★ 已收藏' : '☆ 收藏';
   detailFavBtn.classList.toggle('active', !!fav);
   detailFavTip.textContent = !_favLoaded ? '正在同步收藏状态…'
     : (fav ? ('收藏于 ' + String(fav.saved_at || '').slice(0, 10)) : '');
+  _syncDetailActions();
 }
 
 function _updateFavUi() {
@@ -850,7 +844,6 @@ var _annoToday = { total: 0 };
 var _annoBusy = false;
 var _annoCurrentItem = null;
 var _annoPopItem = null;
-var _annoCardBound = false;
 var _annoPopBound = false;
 
 function _annoApi(method, url, body) {
@@ -997,14 +990,6 @@ function _annoRefreshItem(item) {
     if (card) {
       var st = _annoItemState(item);
       card.classList.toggle('is-anno-reject', !!st && st.verdict === 'reject');
-      var yes = card.querySelector('.anno-mini-yes');
-      var no = card.querySelector('.anno-mini-no');
-      var tag = card.querySelector('.anno-mini-tag');
-      if (yes) yes.classList.toggle('is-active-yes', !!st && st.verdict === 'accept');
-      if (no) no.classList.toggle('is-active-no', !!st && st.verdict === 'reject');
-      if (tag) tag.textContent = st
-        ? (st.verdict === 'accept' ? '已标：值得收录' : '已标：' + _annoReasonLabel(st.reason))
-        : '';
     }
   }
   if (_annoCurrentItem && item.item_id === _annoCurrentItem.item_id) {
@@ -1016,8 +1001,9 @@ function _annoRender(item) {
   _annoCurrentItem = item || null;
   var bar = document.getElementById('annoBar');
   if (!bar) return;
-  if (!_annoOn) { bar.style.display = 'none'; return; }
+  if (!_annoOn) { bar.style.display = 'none'; _syncDetailActions(); return; }
   bar.style.display = '';
+  _syncDetailActions();
   var st = _annoItemState(item);
   var yes = document.getElementById('annoYes');
   var no = document.getElementById('annoNo');
@@ -1057,21 +1043,6 @@ function initAnnotations() {
   _annoOn = true;
   document.body.classList.add('anno-on');
   _buildAnnoPop();
-  if (!_annoCardBound) {
-    _annoCardBound = true;
-    listEl.addEventListener('click', function(e) {
-      var btn = e.target.closest ? e.target.closest('.anno-mini') : null;
-      if (!btn) return;
-      e.stopPropagation();
-      var card = btn.closest('.list-card');
-      if (!card) return;
-      var idx = parseInt(card.dataset.idx, 10);
-      var item = _currentItems && _currentItems[idx];
-      if (!item) return;
-      if (btn.dataset.anno === 'accept') _annoSubmit(item, 'accept', '');
-      else _openAnnoPop(btn, item);
-    });
-  }
   renderList();
   // 再拉一次已有标注与原因表，用于回显和弹层；失败不影响入口展示。
   _annoApi('GET', '/api/annotations').then(function(data) {
