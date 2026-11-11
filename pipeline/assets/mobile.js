@@ -196,7 +196,7 @@
         + '<span class="mobile-cat-label">待复核</span>'
         + '<span class="mobile-cat-count">' + reviewCount + '</span></div>';
     }
-    // 收藏入口：与周报共用登录态，直接跳收藏页
+    // 收藏入口：与报告页共用登录态，直接跳收藏页
     html += '<a class="mobile-cat-fav" href="/bookmarks">'
       + '<span class="mobile-cat-fav-label">★ 我的收藏</span>'
       + '<span class="mobile-cat-count">' + (window._favCount || 0) + '</span></a>';
@@ -301,7 +301,7 @@
   window.applyWeekData = function(week) {
     if (typeof _origAWD === 'function') _origAWD(week);
     // applyWeekData 会把 _currentCat 重置为 -1；移动端计数器必须同步，
-    // 否则切换周后分类面板高亮与实际列表不一致。
+    // 否则切换版本后分类面板高亮与实际列表不一致。
     _mobileCat = window._currentCat !== undefined ? window._currentCat : -1;
     buildCatList();
     _fullData = {};

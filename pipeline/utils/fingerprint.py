@@ -3,14 +3,14 @@
 用途：
   1. 64 位 SimHash：判断两篇正文是否“换了 URL 的同一篇稿子”；
   2. 内容哈希：给跨周台账提供精确比对键；
-  3. 台账：记录已经随周报发布过的条目，下一周不再重复收录。
+  3. 台账：记录已经随报告发布过的条目，下一周不再重复收录。
 
 口径说明：
   - 中文按**字符 3-gram**、英文按**词 3-gram** 生成特征，先做 NFKC 与
     空白归一化；标点不计入特征。
   - 正文优先级：full_body > summary；两者都太短时退回“标题 + 摘要”。
   - 台账只记录**已经成功生成报告与移动版**的条目，且同周重跑不生效
-    （否则重跑一次就会把本周内容全部当成“已发布”而清空周报）。
+    （否则重跑一次就会把本周内容全部当成“已发布”而清空报告）。
 """
 
 import hashlib
@@ -25,7 +25,7 @@ from . import DATA_DIR, atomic_write, parse_datetime_utc, utc_now_naive
 from .textnorm import normalize_url
 
 LEDGER_PATH = DATA_DIR / "state" / "published_ledger.json"
-DEFAULT_LEDGER_TTL_DAYS = 56          # 8 周
+DEFAULT_LEDGER_TTL_DAYS = 21          # 日更改造：3 周（窗口 14 天 + 缓冲）
 MAX_LEDGER_ENTRIES = 10000
 
 _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
@@ -102,15 +102,18 @@ def fingerprint_text(item: dict) -> str:
 
 
 def week_key(dt=None) -> str:
-    """与报告一致的 ISO 周号：2026W46。
+    """日报版本号（本地日期）：20261111。
 
-    必须用**本地时间**：report_generator 用 datetime.now() 生成周号并据此命名
-    data_<week>.json；台账若用 UTC 周号，在“本地已进入新一周、UTC 尚未跨周”
-    的时段会去读上一周的 data 文件，导致重复登记旧内容。
+    日更改造 2026-11-11：原先返回 ISO 周号（2026W46），现在与
+    report_generator.get_edition() 对齐为日期口径，台账定位
+    data_<edition>.json。函数名保留是为了不动所有调用方。
+
+    必须用**本地时间**：报告用 datetime.now() 生成版本号并据此命名数据文件；
+    台账若用 UTC 日期，在“本地已跨日、UTC 尚未跨日”的时段会去读前一天
+    的 data 文件，导致重复登记旧内容。
     """
     dt = dt or datetime.now()
-    iso = dt.isocalendar()
-    return f"{iso[0]}W{iso[1]:02d}"
+    return dt.strftime("%Y%m%d")
 
 
 def _empty_ledger() -> dict:
@@ -131,7 +134,11 @@ def load_ledger() -> dict:
 
 
 def _entry_is_relevant(entry: dict, current_week: str, ttl_days: int) -> bool:
-    """同周条目对重跑不生效；超过 TTL 的条目不再参与比对。"""
+    """同一天条目对重跑不生效；超过 TTL 的条目不再参与比对。
+
+    “同一天不拦截”是为了让当日重跑（--skip-fetch / 失败重试）能重新出报告；
+    跨日则拦截，避免同一篇文章连续多天被反复收录。
+    """
     if not isinstance(entry, dict):
         return False
     if entry.get("week") == current_week:
@@ -167,9 +174,10 @@ def record_published(items: list[dict], current_week: str | None = None,
     """把本轮实际发布的条目写入台账；返回写入条数。
 
     只应在报告与移动版都成功生成后调用。写入失败由调用方记录告警，
-    不反过来判定周报失败。
+    不反过来判定报告失败。
     """
     current_week = current_week or week_key()
+    # 兼容旧调用参数名：current_week 现在实际是日期版 edition（20261111）
     ledger = load_ledger()
     entries = ledger.setdefault("entries", {})
     now = utc_now_naive()

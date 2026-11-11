@@ -1,6 +1,6 @@
-# SecurityInfo — 网络安全态势周报系统
+# SecurityInfo — 网络安全态势日报系统
 
-从 141 个信源（当前启用 107 个；安全媒体、厂商、CERT、政府机构、AI 厂商等）自动抓取网络安全资讯，经 10 步流水线处理评分后，生成 HTML 周报（桌面端 + 移动端自适应）。
+从 141 个信源（当前启用 107 个；安全媒体、厂商、CERT、政府机构、AI 厂商等）自动抓取网络安全资讯，经 10 步流水线处理评分后，**每天早上 08:00** 生成 HTML 日报（桌面端 + 移动端自适应）。日报采用**近 14 天滚动窗口**：每天把新收录条目并入累加库，首页最多展示 120 条；超过 14 天的数据直接删除、不备份，收藏夹永久保留。
 
 ## 功能特性
 
@@ -13,6 +13,7 @@
 - **管理后台** — Web 界面管理信源、评分关键词、分类排序、管道启停
 - **文章收藏** — 详情页一键收藏，自动生成标签（分类 / CVE / 领域词 / 关键词），收藏内容以完整快照独立存放，可在「我的收藏」页搜索、筛选、改标签、写备注、删除与导出
 - **预压缩** — HTML 和数据文件自动 gzip 预压缩，减少传输体积
+- **日更 + 14 天滚动窗口** — 新条目按天累加，`first_seen` 落在窗口内的条目持续展示；`python app.py retention` 清理超期数据（不备份，`data/favorites/` 不受影响）
 
 ## 快速开始
 
@@ -22,14 +23,15 @@ pip install -r requirements.txt
 
 # 2. 配置环境变量（参考 .env.example）
 cp .env.example .env
-# 编辑 .env，填入 TMT_SECRET_ID / TMT_SECRET_KEY
+# 编辑 .env，填入翻译密钥：腾讯云 TMT_SECRET_ID / TMT_SECRET_KEY
+# （改用百度翻译则填 BAIDU_APPID / BAIDU_KEY，并把 settings.json 的 translate.provider 设为 baidu）
 
 # 3. 完整运行（抓取 + 处理 + 生成报告）
 python app.py --run
 
 # 4. 启动管理后台（默认 8090 端口）
 python app.py server 8090
-#    周报：http://localhost:8090/
+#    日报：http://localhost:8090/
 #    我的收藏：http://localhost:8090/bookmarks
 
 # 直接启动并仅监听回环地址（置于 Caddy/Nginx 反向代理后时使用）
@@ -46,6 +48,13 @@ python app.py --run --skip-fetch
 ./scripts/server.sh start   # 后台启动
 ./scripts/server.sh stop    # 停止
 ./scripts/server.sh status  # 查看状态
+
+# 清理超过保留期的运行产物（默认 14 天；--dry-run 只打印不删）
+python app.py retention --dry-run
+python app.py retention --days 14
+
+# 日更发布（生产用：跑管道 → 发布稳定链接 → 归档 → 清理）
+bash scripts/daily_publish.sh
 ```
 
 ---
@@ -72,8 +81,10 @@ SecurityInfo/
 │   │   ├── fulltext_extractor.py # [步骤5] 短摘要文章原文抓取 + 正文清洗（BS4 解析）
 │   │   ├── llm_processor.py      # [步骤7] 摘要（清洗噪声 + 最优连续窗口抽取；LLM 分支预留）
 │   │   ├── translator.py         # [步骤8] 非中文标题与摘要→中文（腾讯云 TMT）
-│   │   ├── report_generator.py   # [步骤9] Jinja2 HTML 报告生成
-│   │   └── mobile_converter.py   # [步骤10] 桌面→移动端转换
+│   │   ├── report_generator.py   # [步骤9] Jinja2 HTML 报告生成（窗口级排版）
+│   │   ├── mobile_converter.py   # [步骤10] 桌面→移动端转换
+│   │   ├── rolling_store.py      # 滚动条目库（跨天累加，data/state/rolling_items.json）
+│   │   └── retention.py          # 保留期清理（默认 14 天，不备份）
 │   ├── utils/                    # 工具函数
 │   │   ├── __init__.py           # atomic_write, precompress, load_secrets
 │   │   └── scraper.py            # HTTP 静态页面爬虫（被 fetcher/parser 调用）
@@ -97,18 +108,19 @@ SecurityInfo/
 │   └── secrets.json              # API 密钥（gitignored，建议改用 .env）
 │
 ├── templates/                    # Jinja2 模板
-│   └── weekly_report.html        # 周报 HTML 模板
+│   └── weekly_report.html        # 日报 HTML 模板（文件名沿用历史约定）
 │
 ├── scripts/                      # 运维与检查脚本
 │   ├── server.sh                 # 管理后台启停脚本（start/stop/restart/status）
+│   ├── daily_publish.sh          # 日更发布：跑管道 → 发布 → 归档 → 保留期清理
 │   └── summary_quality_report.py # 摘要质量体检 / 改动前后回归对比
 │
 ├── reports/                      # 生成的周报（gitignored）
-│   ├── Security_Reports.html     # 桌面端完整周报
+│   ├── Security_Reports.html     # 桌面端完整日报
 │   ├── Security_Reports_mobile.html  # 移动端轻量版
 │   ├── Security_Reports.html.gz      # 预压缩版本
 │   ├── Security_Reports_mobile.html.gz
-│   └── data_2026W31*.json        # 按分类拆分的详情数据（移动端按需加载）
+│   └── data_2026-11-11*.json     # 按版本/分类拆分的详情数据（移动端按需加载）
 │
 ├── data/                         # 管道中间数据（gitignored）
 │   ├── raw_items.json            # 原始抓取结果
@@ -120,7 +132,8 @@ SecurityInfo/
 │   ├── fetch_status.json         # 信源抓取状态
 │   ├── source_health.json        # 信源健康记录
 │   ├── scoring_stats.json        # 评分统计
-│   ├── scoring_history/          # 评分统计归档（用于周对比）
+│   ├── scoring_history/          # 评分统计归档（用于日对比）
+│   └── state/                    # 跨轮持久状态（滚动库/台账/译文缓存/信源 ETag）
 │   └── favorites/                # 文章收藏（一篇一个快照 + assets/ 图片副本，gitignored）
 │
 └── docs/                         # 文档
@@ -133,7 +146,7 @@ SecurityInfo/
 
 ## 10 步流水线详解
 
-管道由 `pipeline/orchestrator.py` 统一编排。**任一步骤失败都会中止整个运行，且不会生成报告**（保留上一版周报），并以非零退出码结束；开跑前会清空全部中间产物，因此不存在“用上一轮旧数据重发周报”的情况。每次运行的步骤状态记录在 `data/pipeline_run.json`。
+管道由 `pipeline/orchestrator.py` 统一编排。**任一步骤失败都会中止整个运行，且不会生成报告**（保留上一版报告），并以非零退出码结束；开跑前会清空全部中间产物，因此不存在“用上一轮旧数据重发报告”的情况。每次运行的步骤状态记录在 `data/pipeline_run.json`。步骤 9 会先把本轮收录条目并入滚动库，再按 `report.rolling` 窗口裁剪后渲染。
 
 | # | 模块 | 输入 | 输出 | 职责 | 失败处理 |
 |---|------|------|------|------|------|
@@ -144,7 +157,7 @@ SecurityInfo/
 | 5 | fulltext\_extractor | `parsed_items.json` | `parsed_items.json`(原地增强) | 摘要 <300 字的文章抓取全文（并发 8，上限 20000 字），**含 SSRF 防护**；正文清洗为**先定位正文容器、再删模板**（删除时跳过正文容器及其祖先），只在块级标签边界换行以免把句子切碎；自研结果明显偏短时用 trafilatura 做**第二意见**（≥300 字、≥自研 1.5 倍才采用）；**同时产出白名单净化后的结构化正文 `content_html`**（供详情页渲染，图片在报告阶段本地化）；随后执行 **5.5 正文指纹去重 + 跨周台账过滤**（SimHash，Hamming≤3，72h 窗） | 中止（单条失败仅记录状态） |
 | 6 | keyword\_filter (stage2) | `parsed_items.json` | `classified_items.json` | 完整评分 + 领域分类 + 内容类型。**≥80 收录，50-79 待复核，<50 丢弃** | 中止 |
 | 7 | llm\_processor | `classified_items.json` | `enhanced_items.json` | 抽取式摘要：先洗掉网页噪声（导航/署名/分享/日期/聚合壳），再摘取**最值得看的连续一段**，按句边界收尾；长度按分类分档（`summary` 段），结果附来源标记 `ai_summary_kind` | 中止 |
-| 8 | translator | `enhanced_items.json` | `translated_items.json` | 腾讯云 TMT，把**非中文的标题与摘要**翻译为中文；**正文不翻译**（范围见 settings 的 `translate.fields`）；翻译失败逐条标记 | 中止（无密钥时跳过并记录状态） |
+| 8 | translator | `enhanced_items.json` | `translated_items.json` | 腾讯云 TMT，把**非中文的标题与摘要**翻译为中文；**正文不翻译**（范围见 settings 的 `translate.fields`）；**只翻最终上屏条目**且译文落盘缓存（`data/state/translate_cache.json`），额度用完立即停止并标记 | 中止（无密钥时跳过并记录状态） |
 | 9 | report\_generator | `translated_items.json` | `Security_Reports.html` + 分类 JSON | Jinja2 渲染 HTML；**渲染成功后才写数据文件**，避免数据与页面不一致 | 中止（保留上一版报告） |
 | 10 | mobile\_converter | `Security_Reports.html` | `Security_Reports_mobile.html` | 按模板标记剥离详情面板，注入 mobile.css/mobile.js | 中止（保留上一版报告） |
 
@@ -315,7 +328,7 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
 
 ### 设置 (`config/settings.json`)
 
-只保存非敏感项：去重阈值与天数、翻译超时与**翻译范围**、分类顺序。
+只保存非敏感项：去重阈值与天数、翻译超时与**翻译范围**、分类顺序、日更滚动窗口（`report.rolling`）与保留期。
 
 > **密钥一律不写入此文件。** 腾讯云密钥只从环境变量
 > `TMT_SECRET_ID` / `TMT_SECRET_KEY`（兼容旧名 `TENCENT_SECRET_ID` /
@@ -336,6 +349,44 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
 
 > 该项没有后台界面控件，直接在 `config/settings.json` 修改；后台保存设置时会
 > 原样保留该字段（不会被抹掉）。翻译步骤启动时会打印实际生效的范围。
+>
+> “是否需要翻译”按内容判断（不依赖 `language` 标记）：中文字符≥6 且占
+> 非空白字符 15% 即视为已是中文。否则「Linux内核IPv4 TCP释放后重用漏洞」
+> 这类中英混排标题会被送翻，接口识别出 zh→zh 后原样返回，反而被标成
+> “翻译失败”。真原样返回时也按“原文已是中文”处理，并写入缓存不再白调。
+
+### 翻译渠道 (`config/settings.json` 的 `translate.provider`)
+
+| 取值 | 渠道 | 凭据（`config/secrets.json` 或环境变量） | 免费额度 | 限制 |
+|---|---|---|---|---|
+| `tencent`（默认） | 腾讯云 TMT | `tmt_secret_id` / `tmt_secret_key`（环境变量 `TMT_SECRET_ID` / `TMT_SECRET_KEY`） | 500 万字符/月 | 默认 5 QPS，单条 1500 字符 |
+| `baidu` | 百度翻译开放平台 | `baidu_appid` / `baidu_key`（环境变量 `BAIDU_APPID` / `BAIDU_KEY`） | 标准版 5 万字符/月；**实名认证升级高级版后 100 万字符/月** | 标准版 1 QPS、单条 1000 字符；高级版 10 QPS |
+
+> 本项目每周新增约 3 万字符（含复核条目），**标准版 5 万字符只够一周多**，
+> 长期用百度请务必实名升级高级版；否则建议继续用腾讯云免费额度。
+> 切换渠道只需改 `translate.provider` 并填好对应密钥；两家共用同一套缓存
+> （缓存键带渠道前缀，换渠道不会串用旧译文）、重试与额度快停逻辑。
+
+### 翻译额度控制 (`config/settings.json` 的 `translate` 段)
+
+翻译按字符计费（腾讯云文本翻译免费额度 500 万字符/月，超出后 58 元/百万字符），
+四个开关用来避免额度被白白消耗：
+
+| 键 | 默认 | 作用 |
+|---|---|---|
+| `only_displayed` | `true` | 只翻**最终会上报告**的条目（复用 `select_display_items()` 的展示规则）；未上屏的条目不再送翻，实测可省约一半字符 |
+| `cache_enabled` | `true` | 译文落盘缓存到 `data/state/translate_cache.json`，重跑不再重复计费 |
+| `retry_times` | `3` | 单条失败重试次数（退避 1s/3s/7s）；额度用完、鉴权失败等不可重试错误会立即停止，不浪费调用 |
+| `cache_max_entries` | `20000` | 缓存条数上限，超出后按最后使用时间保留最近的 N 条 |
+
+> `data/state/` 与 `data/favorites/` 一样属于**跨轮持久状态**，不在
+> `INTERMEDIATE_FILES` 里，开跑不会被清空。删 `data/` 时缓存一并丢失，
+> 下次运行会重新计费。
+>
+> 翻译状态写入 `data/translation_status.json`，字段含 `status`
+> （`ok` / `partial` / `unavailable` / `quota_exhausted` / `auth_failed`）、
+> 本次消耗字符 `chars_used`、估算花费 `estimated_cost_yuan`、缓存命中数
+> `cache_hits` 与跳过条数 `skipped_not_displayed`。
 
 ### 评分关键词 (`config/scoring_keywords.json`)
 
@@ -370,13 +421,18 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
     "max_days": 7,                 // 文章过期天数
     "near_dup_hamming": 3,         // 正文 SimHash 近重复阈值（0-64，越小越严）
     "window_hours": 72,            // 近重复比对时间窗（小时）
-    "ledger_ttl_days": 56,         // 跨周发布台账保留天数（8 周）
+    "ledger_ttl_days": 21,         // 发布台账保留天数（日更口径，3 周）
     "near_dup_enabled": true,      // 正文近重复合并总开关
     "ledger_enabled": true         // 跨周台账过滤总开关
   },
   "translate": {
+    "provider": "baidu",          // 翻译渠道：tencent（腾讯云 TMT）/ baidu（百度翻译）
     "timeout": 8,                  // 单条翻译超时（秒）
-    "fields": ["title", "ai_summary"]   // 翻译范围：标题 + 摘要（正文不翻译）
+    "fields": ["title", "ai_summary"],  // 翻译范围：标题 + 摘要（正文不翻译）
+    "only_displayed": true,       // 只翻最终上屏的条目（省额度）
+    "cache_enabled": true,        // 译文落盘缓存（data/state/translate_cache.json）
+    "retry_times": 3,             // 单条失败重试次数（额度/鉴权错误立即停止）
+    "cache_max_entries": 20000    // 缓存条数上限
   },
   "summary": {
     "max_chars": 500,              // 摘要长度上限（字）
@@ -394,8 +450,15 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
     "⑦ 产业与商业动态",
     "未分类"
   ],
+  "report": {
+    "rolling": {
+      "enabled": true,                // 日更滚动累加总开关
+      "window_days": 14,              // 滚动窗口天数（首页只展示 first_seen 在窗口内的条目）
+      "max_per_source": 8             // 窗口内单信源最多展示条数
+    }
+  },
   "reader_profile": {
-    "max_total_items": 80              // 每周最多展示条数
+    "max_total_items": 120             // 首页最多展示条数
   },
   "quality": {
     "authority_multipliers": {"S": 1.2, "A": 1.1, "B": 1.0, "C": 0.85},
@@ -417,10 +480,33 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
     "max_per_article": 12,             // 单篇最多保留多少张图
     "timeout": 10,                     // 单张下载超时（秒）
     "concurrency": 4,                  // 下载并发
-    "retention_days": 56               // 本地图片保留天数
+    "retention_days": 14               // 本地图片保留天数（同时也是 retention 命令的默认值）
   }
 }
 ```
+
+### 日更与滚动窗口 (`config/settings.json` 的 `report.rolling` 段)
+
+每天 08:00 跑一次管道，但报告内容不是“当天抓到的条目”，而是**近 `window_days` 天的累加结果**：
+
+| 键 | 含义 | 默认 |
+|---|---|---|
+| `enabled` | 滚动累加总开关；关闭后回退为“只用本轮收录条目” | `true` |
+| `window_days` | 滚动窗口天数，条目按 `first_seen`（首次出现时间）入选 | `14` |
+| `max_per_source` | 窗口内单信源最多展示条数，避免高产信源霸榜 | `8` |
+
+滚动库落盘在 `data/state/rolling_items.json`（不在开跑清理范围内）：
+
+- 只收 `filter_decision != review` 的收录条目；同一条目再次出现时**以新快照为准，但保留最早的 `first_seen`**；
+- 条目去重依次按 `item_id` → 规范化 URL → 标题三级兜底；
+- 窗口外的条目不再展示，`python app.py retention` 会把对应的 `data_*.json` 与图片目录一起删掉（不备份）；
+- 首页总条数仍由 `reader_profile.max_total_items` 截断（当前 120）。
+
+保留期与回滚：
+
+- 默认保留 14 天（取自 `images.retention_days`，回退到 `report.rolling.window_days`），超期运行产物直接删除；
+- **收藏快照（`data/favorites/`）永久保留**，不受清理影响；
+- 回滚：`report.rolling.enabled=false` + 调度改回每周一次（已删数据不可恢复，回滚前先备份）。
 
 ### 摘要长度 (`config/settings.json` 的 `summary` 段)
 
@@ -530,7 +616,9 @@ prompt_template: |        # 摘要提示词模板
 | 变量 | 用途 | 必填 |
 |------|------|------|
 | `TMT_SECRET_ID` | 腾讯云翻译 API 密钥 ID（兼容旧名 `TENCENT_SECRET_ID`） | **是**（翻译步骤） |
-| `TMT_SECRET_KEY` | 腾讯云翻译 API 密钥 Key（兼容旧名 `TENCENT_SECRET_KEY`） | **是**（翻译步骤） |
+| `TMT_SECRET_KEY` | 腾讯云翻译 API 密钥 Key（兼容旧名 `TENCENT_SECRET_KEY`） | **是**（`provider=tencent` 时） |
+| `BAIDU_APPID` | 百度翻译开放平台 APP ID | **是**（`provider=baidu` 时） |
+| `BAIDU_KEY` | 百度翻译开放平台密钥 | **是**（`provider=baidu` 时） |
 | `CONFIG_USERNAME` | 管理后台 HTTP Basic Auth 用户名 | 否（留空不启用认证） |
 | `CONFIG_PASSWORD` | 管理后台 HTTP Basic Auth 密码 | 否（留空不启用认证） |
 | `SCHOLAR_API_KEY` | Semantic Scholar API 密钥 | 否（无 key 有频率限制） |
@@ -588,6 +676,8 @@ python scripts/dedup_report.py
 - 评分阈值（stage1: 30, stage2: 80）改动需谨慎，影响报告条数质量
 - `config/source_config.yaml` 中 `enabled: false` 的信源不要删除，留作记录
 - `templates/weekly_report.html` 中的 `<!--DETAIL_PANEL_START-->` / `<!--DETAIL_PANEL_END-->` 标记供移动版转换定位详情面板，不要删除
+- 保留期清理**不得删除** `data/favorites/`（收藏是完整快照，永久保留），也不得删除最新一版报告数据；清理不备份，删了不可恢复
+- 滚动库 `data/state/rolling_items.json` 不得加入 `INTERMEDIATE_FILES`（否则每天累加结果会被开跑清空）
 
 ---
 

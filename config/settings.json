@@ -4,7 +4,7 @@
     "max_days": 7,
     "near_dup_hamming": 3,
     "window_hours": 72,
-    "ledger_ttl_days": 56,
+    "ledger_ttl_days": 21,
     "near_dup_enabled": true,
     "ledger_enabled": true
   },
@@ -13,7 +13,12 @@
     "fields": [
       "title",
       "ai_summary"
-    ]
+    ],
+    "only_displayed": true,
+    "cache_enabled": true,
+    "retry_times": 3,
+    "cache_max_entries": 20000,
+    "provider": "baidu"
   },
   "summary": {
     "max_chars": 500,
@@ -35,7 +40,14 @@
     "未分类"
   ],
   "reader_profile": {
-    "max_total_items": 80
+    "max_total_items": 120
+  },
+  "report": {
+    "rolling": {
+      "enabled": true,
+      "window_days": 14,
+      "max_per_source": 8
+    }
   },
   "quality": {
     "authority_multipliers": {
@@ -105,6 +117,9 @@
     "max_per_article": 12,
     "timeout": 10,
     "concurrency": 4,
-    "retention_days": 56
+    "retention_days": 14
+  },
+  "output": {
+    "precompress": false
   }
 }

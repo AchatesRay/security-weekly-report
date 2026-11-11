@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""网络安全周报系统 — 管道编排器
+"""网络安全日报系统 — 管道编排器
 
 用法:
     python app.py --run               # 执行完整管道
     python app.py --run --skip-fetch  # 跳过抓取，使用已有数据重新生成
 
-2026-09-29 修复（“静默用旧数据重发周报”）：
+2026-09-29 修复（“静默用旧数据重发报告”）：
   1. **开跑先清空中间产物**：此前只清理 translated/enhanced 两个文件，
      某一步失败时下游会读到上一轮遗留的 parsed_items.json，于是用旧内容
-     重新生成一份周报，而信源告警已是本轮新数据。
+     重新生成一份报告，而信源告警已是本轮新数据。
   2. **任一步失败即中止**：此前除第 1 步外所有步骤都是 skip_ok=True，
      失败只打印一行并继续。现在步骤失败会中止整个运行，并且**不生成报告**
-     （保留上一版周报），同时以非零退出码结束，便于管理后台如实显示。
+     （保留上一版报告），同时以非零退出码结束，便于管理后台如实显示。
   3. **步骤产物各自独立**：每个步骤只读写自己声明的文件，输入缺失时直接
      报错，不再“有就凑合用”。
   4. 每次运行写入 data/pipeline_run.json 记录各步骤状态，便于事后定位。
@@ -102,7 +102,7 @@ def run_pipeline(skip_fetch: bool = False) -> bool:
         "status": "running",
     }
 
-    print("=== 网络安全周报系统 ===")
+    print("=== 网络安全日报系统 ===")
     print(f"开始时间: {start.isoformat()}")
     print()
 
@@ -167,19 +167,19 @@ def run_pipeline(skip_fetch: bool = False) -> bool:
 
         # Step 9: 生成报告
         from .steps.report_generator import generate_report
-        run_step(9, "生成 HTML 周报", generate_report, record)
+        run_step(9, "生成 HTML 日报", generate_report, record)
 
         # Step 10: 移动版
         from .steps.mobile_converter import run as run_mobile
         run_step(10, "生成移动版页面", run_mobile, record)
 
-        # 只有报告与移动版都成功后才更新跨周发布台账；
-        # 台账写入失败不反过来判定周报失败（下一周可能重复，但不丢内容）。
+        # 只有报告与移动版都成功后才更新发布台账；
+        # 台账写入失败不反过来判定日报失败（次日可能重复，但不丢内容）。
         try:
             ledger_written = _record_published_ledger()
             record["ledger"] = {"written": ledger_written}
         except Exception as e:
-            print(f"  [WARN] 跨周发布台账写入失败（不影响本周报告）: {e}")
+            print(f"  [WARN] 发布台账写入失败（不影响本次日报）: {e}")
             record["ledger"] = {"error": str(e)}
 
     except PipelineAbort as e:
@@ -211,18 +211,28 @@ def run_pipeline(skip_fetch: bool = False) -> bool:
 
 
 def _record_published_ledger() -> int:
-    """把本周实际发布的条目写入 data/state/published_ledger.json。"""
+    """把本次实际发布的条目写入 data/state/published_ledger.json。
+
+    两个日期口径必须分清（踩过坑）：
+      * 数据文件名用 ``get_edition()`` → ``data_2026-11-11.json``（带连字符），
+        必须与 report_generator 落盘的文件名逐字一致，否则永远 WARN 找不到；
+      * 台账同日判定用 ``week_key()`` → ``20261111``（无连字符），与
+        fingerprint_dedup 侧比对的口径一致。
+    台账作用已从“跨周去重”变为“跨日去重”。
+    """
+    from .steps.report_generator import get_edition
     from .utils.fingerprint import record_published, week_key
 
-    week_str = week_key()
-    data_path = REPORTS_DIR / f"data_{week_str}.json"
+    edition = get_edition()
+    ledger_key = week_key()
+    data_path = REPORTS_DIR / f"data_{edition}.json"
     if not data_path.exists():
-        print(f"  [WARN] 未找到本周报告数据 {data_path.name}，跳过发布台账")
+        print(f"  [WARN] 未找到本次报告数据 {data_path.name}，跳过发布台账")
         return 0
     with open(data_path, encoding="utf-8") as f:
         items = json.load(f)
-    written = record_published(items, week_str)
-    print(f"[LEDGER] 已记录 {written} 条本周发布内容（跨周去重台账）")
+    written = record_published(items, ledger_key)
+    print(f"[LEDGER] 已记录 {written} 条本次发布内容（跨日去重台账）")
     return written
 
 
@@ -235,18 +245,18 @@ def _load_json(path: Path):
 
 
 def _print_scoring_comparison():
-    """对比本轮与上一周的评分统计，标注异常偏离"""
+    """对比本轮与上一份存档的评分统计，标注异常偏离（日更口径）"""
     stats_path = DATA_DIR / "scoring_stats.json"
     cur = _load_json(stats_path)
     if not cur:
         return
 
-    week_str = datetime.now().strftime("%Y%m%d")
+    day_str = datetime.now().strftime("%Y%m%d")
     archive_dir = DATA_DIR / "scoring_history"
     archive_dir.mkdir(parents=True, exist_ok=True)
-    archive_path = archive_dir / f"stats_{week_str}.json"
+    archive_path = archive_dir / f"stats_{day_str}.json"
 
-    # 上一周 = 除本周存档之外最新的一个（原先会把同日更早的一次运行当成“上周”）
+    # 上一份 = 除当日存档之外最新的一个（同日重跑不会把自己当“上一份”）
     prev = None
     archives = sorted(
         (p for p in archive_dir.glob("stats_*.json") if p.name != archive_path.name),
@@ -278,7 +288,7 @@ def _print_scoring_comparison():
             changes.append(f"  {label}: {cur.get(key, 0)} (占比 {direction}{abs(diff):.0f}%)")
 
     if changes:
-        print("[MAIN] ⚠️ 评分分布周变化（偏离≥5%）：")
+        print("[MAIN] ⚠️ 评分分布日变化（偏离≥5%）：")
         for c in changes:
             print(c)
     else:
@@ -310,7 +320,7 @@ def _print_scoring_comparison():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="网络安全周报系统")
+    parser = argparse.ArgumentParser(description="网络安全日报系统")
     parser.add_argument("--run", action="store_true", help="执行完整管道")
     parser.add_argument("--skip-fetch", action="store_true", help="跳过抓取阶段")
     args = parser.parse_args()

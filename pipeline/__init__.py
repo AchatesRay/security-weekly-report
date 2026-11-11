@@ -1,4 +1,4 @@
-"""网络安全周报系统 — 数据处理管道
+"""网络安全日报系统 — 数据处理管道
 
 10 步流水线（括号内为该步骤的独立产物文件）：
 
@@ -12,13 +12,13 @@
   6.  keyword_filter stg2 完整评分 + 分类 + 内容类型             -> data/classified_items.json
   7.  llm_processor       TextRank 抽取式摘要                    -> data/enhanced_items.json
   8.  translator          非中文内容 → 中文（腾讯云 TMT）          -> data/translated_items.json
-  9.  report_generator    Jinja2 渲染 HTML 周报（桌面版）         -> reports/Security_Reports.html
+  9.  report_generator    Jinja2 渲染 HTML 报告（桌面版）         -> reports/Security_Reports.html
  10.  mobile_converter    桌面 → 移动版（剥离详情，按需加载）      -> reports/Security_Reports_mobile.html
 
 评分阈值（config/scoring_keywords.json 的 thresholds）：≥80 收录，50-79 待复核，<50 丢弃；
 阶段1 预筛 <30 提前丢弃。阶段1 与阶段2 使用同一套评分口径，分值可直接比较。
 
-每次运行会先清空全部中间产物，且任一步失败即中止（不生成报告、保留上一版周报）。
+每次运行会先清空全部中间产物，且任一步失败即中止（不生成报告、保留上一版报告）。
 
 主要入口: app.py --run
 Web 管理:  app.py server [port]

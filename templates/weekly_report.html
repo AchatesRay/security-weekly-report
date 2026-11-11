@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- 第二道保险：正文 HTML 已在服务端白名单净化，这里再限制可加载的资源类型 -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: http: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'none'">
-<title>网络安全周报 · {{ week_str }}</title>
+<title>网络安全日报 · {{ week_str }}</title>
 <!-- 字体使用 微软雅黑 -->
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -294,8 +294,8 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div class="sidebar-badge">Weekly Briefing</div>
-      <h2>安全态势<span>周报</span></h2>
+      <div class="sidebar-badge">Daily Briefing</div>
+      <h2>安全态势<span>日报</span></h2>
     </div>
 
     <nav class="nav" id="nav">
@@ -334,7 +334,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
     {% if source_alerts %}
     <div class="source-alerts-bar{% if source_alerts | selectattr('severity', 'equalto', 'high') | list %} has-high{% endif %}" id="sourceAlertsBar" onclick="toggleSourceAlerts()">
       <span class="source-alerts-bar-icon">&#x26A0;</span>
-      <span class="source-alerts-bar-text">{{ source_alerts | length }} 个信源本周无数据</span>
+      <span class="source-alerts-bar-text">{{ source_alerts | length }} 个信源今日无数据</span>
       <span class="source-alerts-bar-arrow">&#x25BC;</span>
     </div>
     <div class="source-alerts-detail" id="sourceAlertsDetail">
@@ -354,7 +354,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
       <span>{{ translation_warning }}</span>
     </div>
     {% endif %}
-    <div class="sidebar-footer" id="sidebarFooter">{{ total_count }} 条 · {{ groups | length }} 个分类</div>
+    <div class="sidebar-footer" id="sidebarFooter">{{ total_count }} 条 · {{ groups | length }} 个分类 · 近 {{ window_days }} 天</div>
     <a href="../templates/config.html" class="sidebar-admin-link" title="管理后台">⚙</a>
   </aside>
 
@@ -365,7 +365,7 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
   <div class="list-panel">
     <div class="list-header">
       <h3 id="listTitle">全部分类</h3>
-      <p id="listSub">{{ total_count }} 条情报</p>
+      <p id="listSub">{{ total_count }} 条情报 · 近 {{ window_days }} 天</p>
     </div>
     <div class="list-items" id="listItems"></div>
   </div>
@@ -409,13 +409,13 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 
 <script>
 // ── Data ──
-var _allData = {};   // week_str => { items, catNames, catCounts }
+var _allData = {};   // edition（日期版，如 2026-11-11）=> { items, catNames, catCounts }
 var _currentWeek = '{{ week_str }}';
 var _catNames = [{% for cat in groups %}{{ (cat.split(" ", 1)[1] if " " in cat else cat) | tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
 {% set prefix_chars = "①②③④⑤⑥⑦" %}
 var _catPrefixes = [{% for cat in groups %}{% set first = cat.split(" ", 1)[0] %}{% if first|length == 1 and first in prefix_chars %}{{ first | tojson }}{% else %}{{ "" | tojson }}{% endif %}{% if not loop.last %},{% endif %}{% endfor %}];
 
-// Register current week's data
+// Register current edition's data
 var _allItems = {{ json_items | tojson }};
 var _reviewCount = _allItems.filter(function(i) { return i.filter_decision === 'review'; }).length;
 _allData['{{ week_str }}'] = {
@@ -423,7 +423,8 @@ _allData['{{ week_str }}'] = {
   catNames: _catNames,
   catCounts: [{% for cat in groups %}{{ groups[cat] | length }}{% if not loop.last %},{% endif %}{% endfor %}],
   totalCount: {{ total_count }},
-  reviewCount: _reviewCount
+  reviewCount: _reviewCount,
+  windowDays: {{ window_days }}
 };
 
 // ── State ──
@@ -458,7 +459,7 @@ var detailFavTip = document.getElementById('detailFavTip');
 var toastEl = document.getElementById('toast');
 
 // ── 收藏状态 ──
-// 只有通过管理服务打开周报时才能保存到服务器；file:// 直接打开时隐藏入口
+// 只有通过管理服务打开报告时才能保存到服务器；file:// 直接打开时隐藏入口
 var _favEnabled = window.location.protocol !== 'file:';
 var _favMap = {};          // url => 收藏元信息
 var _favLoaded = false;
@@ -530,7 +531,7 @@ function renderList() {
   _currentSel = -1;
 
   listTitle.textContent = catIdx === -1 ? '全部分类' : (catIdx === -2 ? '待复核' : data.catNames[catIdx]);
-  listSub.textContent = items.length + ' 条情报';
+  listSub.textContent = items.length + ' 条情报 · 近 ' + data.windowDays + ' 天';
 
   if (!items.length) {
     _currentItems = items;
@@ -746,7 +747,7 @@ function loadFavoriteState() {
     _favLoaded = true;
     _updateFavUi();
   }).catch(function() {
-    // 接口不可用（未启动服务/未登录）时隐藏入口，不影响周报阅读
+    // 接口不可用（未启动服务/未登录）时隐藏入口，不影响报告阅读
     _favEnabled = false;
     _favLoaded = false;
     _updateFavUi();
@@ -814,7 +815,9 @@ function loadNav(data) {
     reviewCountEl.textContent = data.reviewCount || 0;
     reviewNav.style.display = (data.reviewCount > 0) ? '' : 'none';
   }
-  sidebarFooter.textContent = data.totalCount + ' 条 · ' + data.catNames.length + ' 个分类' + (data.reviewCount > 0 ? ' · ' + data.reviewCount + ' 待复核' : '');
+  sidebarFooter.textContent = data.totalCount + ' 条 · ' + data.catNames.length + ' 个分类'
+    + (data.reviewCount > 0 ? ' · ' + data.reviewCount + ' 待复核' : '')
+    + ' · 近 ' + data.windowDays + ' 天';
 }
 
 function applyWeekData(week) {

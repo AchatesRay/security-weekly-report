@@ -481,7 +481,7 @@ def parse_all() -> list[dict]:
                 items = extract_articles(source, source["xml_text"])
                 # 兜底：把仍未补全的相对链接按页面地址解析为绝对地址，并如实报告。
                 # 此前 scraper 只处理以 "/" 开头的相对链接，形如 "thread-1.htm"
-                # 的链接会被原样保留，最终在周报里变成点不开的死链。
+                # 的链接会被原样保留，最终在报告里变成点不开的死链。
                 still_relative = 0
                 for it in items:
                     url = it.get("url", "") or ""

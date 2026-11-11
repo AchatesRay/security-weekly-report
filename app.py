@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""网络安全周报系统 — 统一入口"""
+"""网络安全信息日报系统 — 统一入口"""
 
 import subprocess
 import sys
@@ -21,6 +21,7 @@ def main():
         print("用法:")
         print("  python app.py --run [--skip-fetch]   # 运行完整管道")
         print("  python app.py server [port]           # 启动管理后台")
+        print("  python app.py retention [--dry-run]   # 清理超过保留期的报告产物")
         return
 
     cmd = sys.argv[1]
@@ -44,10 +45,17 @@ def main():
         subprocess.Popen(args)
         print(f"[SERVER] 服务器已启动，访问 http://localhost:{port}")
 
+    elif cmd == "retention":
+        sys.path.insert(0, str(PROJECT_DIR))
+        from pipeline.steps.retention import main as retention_main
+
+        sys.exit(retention_main(sys.argv[2:]))
+
     else:
         print(f"未知命令: {cmd}")
         print("用法: python app.py --run [--skip-fetch]")
         print("      python app.py server [port]")
+        print("      python app.py retention [--dry-run] [--days N]")
 
 
 if __name__ == "__main__":

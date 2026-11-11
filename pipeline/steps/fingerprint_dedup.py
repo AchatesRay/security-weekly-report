@@ -154,6 +154,7 @@ def run():
     except (TypeError, ValueError):
         ttl_days = DEFAULT_LEDGER_TTL_DAYS
 
+    # 日更改造后 week_key() 返回日期版 edition（20261111），“同日不拦截、跨日拦截”
     current_week = week_key()
     ledger_enabled = bool(cfg.get("ledger_enabled", True))
     near_dup_enabled = bool(cfg.get("near_dup_enabled", True))
@@ -177,7 +178,7 @@ def run():
 
     atomic_write(PARSED_ITEMS_PATH, result, indent=2)
     merged = before - len(result)
-    print(f"[FINGERPRINT] 跨周台账过滤: {published_dropped} 条已发布内容不再收录；"
+    print(f"[FINGERPRINT] 跨日台账过滤: {published_dropped} 条已发布内容不再收录；"
           f"正文近重复合并: {merged} 条（{before} → {len(result)}）"
           f"（台账={'开' if ledger_enabled else '关'}，"
           f"近重复={'开' if near_dup_enabled else '关'}）")

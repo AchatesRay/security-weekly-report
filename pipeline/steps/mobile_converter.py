@@ -212,7 +212,7 @@ def run():
         print(f"[CONVERT] 桌面版: {len(html):,} → {len(desktop_html):,} bytes "
               f"({len(items)} 条, 已剔除详情字段，改为按需加载)")
     else:
-        print("[CONVERT] 警告: 未在周报中找到内联 JSON（var _allItems = ），"
+        print("[CONVERT] 警告: 未在报告中找到内联 JSON（var _allItems = ），"
               "桌面版详情将全部内联，体积偏大；请检查模板是否被改动")
 
     # ── 2. 移动版：进一步剥离 + 注入 CSS/JS ──

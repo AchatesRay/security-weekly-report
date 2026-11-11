@@ -92,7 +92,7 @@ def _pick_img_src(tag: Tag, base_url: str) -> str:
             candidates.append(value.strip())
     srcset = tag.get("srcset")
     if isinstance(srcset, str) and srcset.strip():
-        # 取第一个候选地址（通常是最小图，够周报阅读）
+        # 取第一个候选地址（通常是最小图，够报告阅读）
         candidates.append(srcset.split(",")[0].strip().split(" ")[0])
 
     for candidate in candidates:

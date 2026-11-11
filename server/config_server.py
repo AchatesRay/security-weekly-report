@@ -250,13 +250,22 @@ _ALLOWED_SETTINGS_SPEC = {
     "images": {"enabled": bool, "max_bytes": int, "max_per_article": int,
                "timeout": (int, float), "concurrency": int,
                "retention_days": int},
-    "translate": {"timeout": (int, float), "fields": list},
+    # translate.only_displayed 只翻最终上屏的条目（省额度）；cache_enabled/retry_times/
+    # cache_max_entries 控制译文落盘缓存与失败重试（2026-11-10）。
+    "translate": {"timeout": (int, float), "fields": list,
+                  "provider": str,
+                  "only_displayed": bool, "cache_enabled": bool,
+                  "retry_times": int, "cache_max_entries": int},
     # 摘要长度（报告「摘要」栏）。short_categories 里的分类用 short_max_chars，
     # 其余用 max_chars；min_chars 低于则退化为"原文节选"。
     "summary": {"max_chars": int, "short_max_chars": int, "min_chars": int,
                 "short_categories": list},
     "category_order": list,
-    # 读者画像：每周展示总量上限
+    # 日报滚动窗口（2026-11-11 日更改造）：是否把近 N 天已收录条目合并进来、
+    # 窗口天数与窗口级单源上限。report.rolling 是二级嵌套，单独用
+    # _sanitize_rolling() 校验（见下方调用处），否则会被当作未声明键丢弃。
+    "report": {"rolling": dict},
+    # 读者画像：展示总量上限（滚动窗口下的首页上限）
     "reader_profile": {
         "max_total_items": int,
     },
@@ -273,6 +282,31 @@ _ALLOWED_SETTINGS_SPEC = {
 
 # translate.fields 允许的取值（与 translator.SUPPORTED_FIELDS 保持一致）
 _TRANSLATE_FIELDS = ("title", "summary", "ai_summary")
+
+
+def _sanitize_rolling(rolling: dict) -> dict:
+    """校验 report.rolling（二级嵌套，无法用 _ALLOWED_SETTINGS_SPEC 表达）。"""
+    if not isinstance(rolling, dict):
+        raise ConfigValidationError("report.rolling 必须是对象")
+    clean: dict = {}
+    for rkey, rtype in (("enabled", bool), ("window_days", int),
+                        ("max_per_source", int)):
+        if rkey not in rolling:
+            continue
+        rval = rolling[rkey]
+        if rtype is bool:
+            if not isinstance(rval, bool):
+                raise ConfigValidationError(f"report.rolling.{rkey} 类型不正确")
+        elif isinstance(rval, bool) or not isinstance(rval, int):
+            raise ConfigValidationError(f"report.rolling.{rkey} 类型不正确")
+        clean[rkey] = rval
+    for rkey, lo, hi in (("window_days", 1, 90),
+                         ("max_per_source", 1, 50)):
+        rval = clean.get(rkey)
+        if rval is not None and not (lo <= rval <= hi):
+            raise ConfigValidationError(
+                f"report.rolling.{rkey} 必须在 {lo}-{hi} 之间")
+    return clean
 
 
 def sanitize_settings(raw: dict) -> dict:
@@ -353,6 +387,15 @@ def sanitize_settings(raw: dict) -> dict:
             raise ConfigValidationError(
                 f"translate.fields 含不支持的字段 {bad}，"
                 f"可选: {list(_TRANSLATE_FIELDS)}")
+    tprovider = translate.get("provider")
+    if tprovider is not None and tprovider not in ("tencent", "baidu"):
+        raise ConfigValidationError("translate.provider 只能是 tencent 或 baidu")
+    tretry = translate.get("retry_times")
+    if tretry is not None and not (0 <= tretry <= 5):
+        raise ConfigValidationError("translate.retry_times 必须在 0-5 之间")
+    tmax = translate.get("cache_max_entries")
+    if tmax is not None and not (100 <= tmax <= 200000):
+        raise ConfigValidationError("translate.cache_max_entries 必须在 100-200000 之间")
 
     summary = out.get("summary", {})
     for skey, lo, hi in (("max_chars", 100, 2000),
@@ -371,6 +414,9 @@ def sanitize_settings(raw: dict) -> dict:
         pval = profile.get(pkey)
         if pval is not None and not (lo <= pval <= hi):
             raise ConfigValidationError(f"reader_profile.{pkey} 必须在 {lo}-{hi} 之间")
+
+    if "report" in out:
+        out["report"]["rolling"] = _sanitize_rolling(out["report"].get("rolling") or {})
 
     quality = out.get("quality", {})
     for qkey, lo, hi in (("depth_bonus_max", 0, 300),

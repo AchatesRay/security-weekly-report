@@ -34,6 +34,12 @@ SOURCES_PATH = CONFIG_DIR / "source_config.yaml"
 SCORING_CONFIG_PATH = CONFIG_DIR / "scoring_keywords.json"
 LLM_CONFIG_PATH = CONFIG_DIR / "llm_config.yaml"
 
+# 跨轮持久状态目录（data/ 下但**不在** INTERMEDIATE_FILES 里，开跑不会被清空）：
+# feed_cache/ 条件请求复用、published_ledger.json 跨周去重、
+# translate_cache.json 译文复用（避免重跑重复消耗翻译额度）。
+STATE_DIR = DATA_DIR / "state"
+TRANSLATE_CACHE_PATH = STATE_DIR / "translate_cache.json"
+
 
 def load_secrets() -> dict:
     """从 config/secrets.json 加载 API 密钥，文件不存在则返回空字典"""
@@ -101,8 +107,24 @@ def atomic_write_bytes(path: str | Path, data: bytes):
         raise
 
 
+def _precompress_enabled() -> bool:
+    """是否生成 .gz 预压缩副本（配置项：config/settings.json → output.precompress）。
+
+    2026-11-10 默认关闭：页面与数据由 Caddy 在传输层压缩，预压缩副本没人读，
+    只会每周多出 8 个文件（约 2.4 MB）。缺省仍为 True，保证旧配置行为不变。
+    """
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as f:
+            cfg = json.load(f)
+        return bool((cfg.get("output") or {}).get("precompress", True))
+    except Exception:
+        return True
+
+
 def precompress(path: Path, level: int = 6, remove_original: bool = False) -> Path | None:
     """为文件生成预压缩 .gz 版本，返回压缩文件路径（压缩后更大则跳过）"""
+    if not _precompress_enabled():
+        return None
     if not path.exists():
         return None
     gz_path = path.with_name(path.name + ".gz")

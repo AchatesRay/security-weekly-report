@@ -1,10 +1,10 @@
-"""报告生成 — Jinja2 渲染 HTML 周报（桌面版）
+"""报告生成 — Jinja2 渲染 HTML 日报（桌面版）
 
 数据流：translated_items.json（优先）> enhanced_items.json > classified_items.json
 
 2026-09-29 修复：
   1. **数据文件与报告不一致**：原先先写 data_*.json，再渲染 HTML。若渲染
-     抛异常，周报 HTML 保持旧版而 data_*.json 已是新版，前端按需加载详情时
+     抛异常，报告 HTML 保持旧版而 data_*.json 已是新版，前端按需加载详情时
      会拿到与列表不匹配的数据。现在渲染成功后才落盘数据文件。
   2. **分类兜底**：group_by_category 依赖 CATEGORY_ORDER 必须包含“未分类”，
      若管理员把 settings.json 的 category_order 改掉（例如删掉“未分类”），
@@ -30,6 +30,8 @@ from .image_localizer import localize_items, prune_assets
 
 from ..utils import (DATA_DIR, REPORTS_DIR, SETTINGS_PATH, SOURCES_PATH,
                      TEMPLATES_DIR, atomic_write, atomic_write_text, precompress)
+from ..utils.rolling_store import update_store
+from ..utils.textnorm import item_id
 
 CLASSIFIED_ITEMS_PATH = DATA_DIR / "classified_items.json"
 TRANSLATED_ITEMS_PATH = DATA_DIR / "translated_items.json"
@@ -39,6 +41,11 @@ SOURCE_HEALTH_PATH = DATA_DIR / "source_health.json"
 LATEST_REPORT = REPORTS_DIR / "Security_Reports.html"
 
 UNCLASSIFIED = "未分类"
+
+# 日更滚动窗口默认值（settings.json 的 report.rolling 可覆盖）
+DEFAULT_WINDOW_DAYS = 14
+DEFAULT_WINDOW_MAX_PER_SOURCE = 8
+DEFAULT_MAX_TOTAL_ITEMS = 120
 
 # 信源组别 → 告警严重级别
 SOURCE_ALERT_SEVERITY = {
@@ -82,10 +89,19 @@ def _category_order() -> list[str]:
     return order
 
 
+def get_edition(dt: datetime | None = None) -> str:
+    """返回日报版本号（本地日期），如 2026-11-11。
+
+    日更模式下 data_<edition>.json / 归档页 / 台账都用同一个字符串，
+    调换口径时只改这一处。``dt`` 缺省取当前本地时间，便于调用方
+    （如 orchestrator 写台账）无需自己传时间。
+    """
+    return (dt or datetime.now()).strftime("%Y-%m-%d")
+
+
 def get_week_number(dt: datetime) -> str:
-    """返回 ISO 周号字符串，如 2026W26"""
-    iso = dt.isocalendar()
-    return f"{iso[0]}W{iso[1]:02d}"
+    """兼容旧调用：周号口径已废弃，返回值同 get_edition()。"""
+    return get_edition(dt)
 
 
 def _load_reader_profile() -> dict:
@@ -93,6 +109,16 @@ def _load_reader_profile() -> dict:
         with open(SETTINGS_PATH, encoding="utf-8") as f:
             cfg = json.load(f)
         return cfg.get("reader_profile", {}) or {}
+    except Exception:
+        return {}
+
+
+def _load_report_config() -> dict:
+    """读取 settings.json 的 report 段（滚动窗口开关/天数/单源上限）。"""
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as f:
+            cfg = json.load(f)
+        return cfg.get("report", {}) or {}
     except Exception:
         return {}
 
@@ -121,7 +147,7 @@ def _rank_key(it: dict) -> float:
 
 def _apply_diversity(items: list[dict], max_per_source: int = 3,
                      max_series_per_source: int = 1) -> list[dict]:
-    """单源配额 + 同系列合并：避免一个信源/一个周报系列霸榜。"""
+    """单源配额 + 同系列合并：避免一个信源/一个报告系列霸榜。"""
     ranked = sorted(items, key=_rank_key, reverse=True)
     counts: Counter = Counter()
     series_counts: Counter = Counter()
@@ -137,6 +163,42 @@ def _apply_diversity(items: list[dict], max_per_source: int = 3,
         counts[src] += 1
         out.append(item)
     return out
+
+
+def select_display_items(items: list[dict]) -> tuple[list[dict], list[dict]]:
+    """按报告展示规则挑条目，返回 (收录条目, 待复核条目)。
+
+    规则在此唯一定义（单源/系列配额 → 相关性排序 → 总量上限），报告与
+    翻译步骤共用：只有真正会上报告的条目才值得送去翻译，未上屏的条目
+    不消耗翻译额度（2026-11-10 新增，节省约一半翻译字符）。
+    """
+    profile = _load_reader_profile()
+    quality = _load_quality()
+    quotas = quality.get("quotas", {}) or {}
+    max_per_source = int(quotas.get("max_per_source", 3) or 3)
+    max_total = int(profile.get("max_total_items", DEFAULT_MAX_TOTAL_ITEMS)
+                    or DEFAULT_MAX_TOTAL_ITEMS)
+
+    accepted_all = [i for i in items if i.get("filter_decision") != "review"]
+    accepted_all = _apply_diversity(accepted_all, max_per_source=max_per_source)
+    accepted_items = sorted(accepted_all, key=_rank_key, reverse=True)[:max_total]
+    review_items = sorted((i for i in items if i.get("filter_decision") == "review"),
+                          key=_rank_key, reverse=True)
+    return accepted_items, review_items
+
+
+def layout_window(items: list[dict], max_total: int = 120,
+                  max_per_source: int = 8,
+                  max_series_per_source: int = 1) -> list[dict]:
+    """滚动窗口排版：相关性降序 → 单源/系列配额 → 总量上限。
+
+    配额语义直接复用 _apply_diversity()，与每日 select_display_items()
+    保持一致；差别只在口径是“整个窗口”而不是“当天”。
+    """
+    ranked = sorted(items, key=_rank_key, reverse=True)
+    diverse = _apply_diversity(ranked, max_per_source=max_per_source,
+                               max_series_per_source=max_series_per_source)
+    return diverse[:max(1, int(max_total))]
 
 
 def group_by_category(items: list[dict]) -> dict:
@@ -248,6 +310,11 @@ def build_json_items(items: list[dict]) -> list[dict]:
             content_html = _strip_html_summary_prefix(content_html, ai_summary)
 
         result.append({
+            # 稳定主键：图片目录名、收藏快照与滚动窗口去重都依赖它。
+            # 早期链路已赋值（parser/fulltext_extractor/image_localizer），
+            # 这里只是把它带进报告 JSON；缺失时按规范化 URL 现算。
+            "item_id": (item.get("item_id")
+                        or item_id(item.get("url", ""))),
             "title": item.get("title_zh") or item.get("title", ""),
             "summary": summary,
             # AI 生成的中文摘要（优先使用翻译后的版本）
@@ -425,7 +492,7 @@ def _load_report_items() -> tuple[list[dict], str]:
 
 
 def _precompress_reports(week_str: str):
-    """预压缩周报数据 JSON 文件"""
+    """预压缩报告数据 JSON 文件"""
     for f in REPORTS_DIR.glob(f"data_{week_str}*.json"):
         gz = precompress(f)
         if gz:
@@ -437,35 +504,39 @@ def generate_report():
     print(f"[REPORT] 数据来源: {source_file}（{len(items)} 条）")
 
     now = datetime.now()
-    week_str = get_week_number(now)
+    edition = get_edition(now)
 
-    # 计算本周起始和结束日期（周一 ~ 周日）
-    monday = now - timedelta(days=now.weekday())
-    sunday = monday + timedelta(days=6)
-    date_range = f"{monday.strftime('%Y.%m.%d')}-{sunday.strftime('%Y.%m.%d')}"
-
-    # 分离 accepted 和 review；收录内容先做单源/系列配额，再按相关性排序。
-    profile = _load_reader_profile()
-    quality = _load_quality()
-    quotas = quality.get("quotas", {}) or {}
-    max_per_source = int(quotas.get("max_per_source", 3) or 3)
-    max_total = int(profile.get("max_total_items", 80) or 80)
-
-    accepted_all = [i for i in items if i.get("filter_decision") != "review"]
-    accepted_all = _apply_diversity(accepted_all, max_per_source=max_per_source)
-    accepted_items = sorted(accepted_all, key=_rank_key, reverse=True)[:max_total]
-    review_items = sorted((i for i in items if i.get("filter_decision") == "review"),
-                          key=_rank_key, reverse=True)
-
-    # 主题分类（①~⑦）：供侧栏导航、分类计数与分类 JSON 使用。
-    groups = group_by_category(accepted_items)
-
-    all_items = accepted_items + review_items
-
-    # 正文图片本地化：只处理最终展示的条目（不给被过滤掉的文章白下载图片）。
-    # 失败时保留原外链，不影响报告生成。
+    report_cfg = _load_report_config()
+    rolling_cfg = report_cfg.get("rolling", {}) or {}
+    rolling_enabled = bool(rolling_cfg.get("enabled", True))
     try:
-        img_stats = localize_items(all_items)
+        window_days = max(1, int(rolling_cfg.get("window_days", DEFAULT_WINDOW_DAYS)))
+    except (TypeError, ValueError):
+        window_days = DEFAULT_WINDOW_DAYS
+    profile = _load_reader_profile()
+    try:
+        max_total = max(1, int(profile.get("max_total_items", DEFAULT_MAX_TOTAL_ITEMS)))
+    except (TypeError, ValueError):
+        max_total = DEFAULT_MAX_TOTAL_ITEMS
+    try:
+        window_max_per_source = max(
+            1, int(rolling_cfg.get("max_per_source", DEFAULT_WINDOW_MAX_PER_SOURCE)))
+    except (TypeError, ValueError):
+        window_max_per_source = DEFAULT_WINDOW_MAX_PER_SOURCE
+
+    # 滚动窗口的日期区间（含今天往前 window_days-1 天）
+    window_start = now - timedelta(days=window_days - 1)
+    date_range = f"{window_start.strftime('%Y.%m.%d')}-{now.strftime('%Y.%m.%d')}"
+
+    # 今日新增条目：单源/系列配额 → 相关性排序 → 总量上限。
+    # 规则抽到 select_display_items()，翻译步骤复用同一份，避免两处漂移。
+    accepted_today, review_items = select_display_items(items)
+
+    # 正文图片本地化：只给**今天新增**的条目下载。窗口内旧条目的
+    # content_html 已经是 /reports/assets/... 本地路径，重复跑不会产生
+    # 额外请求；待复核条目是当天数据，也一并处理。
+    try:
+        img_stats = localize_items(accepted_today + review_items)
         if img_stats.get("items_with_html"):
             print(f"[IMAGES] 正文图片: 本地化 {img_stats['images_localized']} 张，"
                   f"复用 {img_stats['images_reused']} 张，失败 {img_stats['images_failed']} 张"
@@ -473,10 +544,32 @@ def generate_report():
     except Exception as e:  # noqa: BLE001 — 图片是锦上添花，不能拖垮报告
         print(f"[IMAGES] 图片本地化失败，保留原链: {type(e).__name__}: {e}")
 
-    json_items = build_json_items(all_items)
+    json_today = build_json_items(accepted_today)
+    json_review = build_json_items(review_items)
+
+    # 近 N 天累加：store 存的是最终上屏 JSON 快照，渲染直接复用。
+    # 待复核条目只保留当天的，不进入滚动窗口。
+    if rolling_enabled:
+        window_items, roll_stats = update_store(json_today, window_days=window_days)
+        print(f"[ROLLING] 窗口 {window_days} 天：新增 {roll_stats['added']} 条，"
+              f"刷新 {roll_stats['refreshed']} 条，过期删除 {roll_stats['expired']} 条，"
+              f"窗口共 {roll_stats['total']} 条")
+    else:
+        window_items = json_today
+
+    # 窗口级排版：相关性降序 → 单源/系列配额 → 总量上限
+    accepted_items = layout_window(window_items, max_total=max_total,
+                                   max_per_source=window_max_per_source)
+
+    json_items = accepted_items + json_review
+
+    # 主题分类（①~⑦）：供侧栏导航、分类计数与分类 JSON 使用。
+    groups = group_by_category(accepted_items)
+
+    all_items = accepted_items + json_review
 
     total_count = len(accepted_items)
-    review_count = len(review_items)
+    review_count = len(json_review)
 
     source_alerts = generate_source_alerts()
 
@@ -487,7 +580,10 @@ def generate_report():
         try:
             with open(translation_status_path, encoding="utf-8") as f:
                 ts = json.load(f)
-            if ts.get("status") in ("unavailable", "partial"):
+            # 新增额度耗尽/鉴权失败/SDK 缺失三种状态：报告顶部也要给出原因，
+            # 不能只写“部分内容未翻译”而让人以为是偶发失败。
+            if ts.get("status") in ("unavailable", "partial", "quota_exhausted",
+                                    "auth_failed", "sdk_missing"):
                 translation_warning = ts.get("message", "部分内容未能翻译")
         except Exception:
             pass
@@ -504,7 +600,8 @@ def generate_report():
     template = env.get_template("weekly_report.html")
 
     html = template.render(
-        week_str=week_str,
+        week_str=edition,
+        window_days=window_days,
         date_range=date_range,
         generate_time=now.strftime("%Y-%m-%d %H:%M"),
         total_count=total_count,
@@ -521,25 +618,27 @@ def generate_report():
     # 顺序很关键：data_*.json 是前端按需加载详情的依据，必须先确保 HTML
     # 能成功渲染，否则会出现“新数据 + 旧页面”的不一致
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    save_weekly_data(build_json_items(accepted_items), week_str)
-    save_weekly_data(build_json_items(review_items), f"{week_str}_review")
+    save_weekly_data(accepted_items, edition)
+    save_weekly_data(json_review, f"{edition}_review")
     for cat_idx, (cat_name, cat_items) in enumerate(groups.items()):
-        save_weekly_data(build_json_items(cat_items), f"{week_str}_cat_{cat_idx}")
+        save_weekly_data(cat_items, f"{edition}_cat_{cat_idx}")
 
     atomic_write_text(LATEST_REPORT, html)
 
-    print(f"[REPORT] 周报生成完成: {LATEST_REPORT}")
-    print(f"[REPORT] 共 {total_count} 条（其中 {review_count} 条待复核）")
+    print(f"[REPORT] 日报生成完成: {LATEST_REPORT}")
+    print(f"[REPORT] 共 {total_count} 条（窗口 {window_days} 天，"
+          f"其中 {review_count} 条待复核）")
 
     # 清理过期图片目录（保留当前条目引用的目录，避免误删正在用的图）
     try:
-        removed = prune_assets(keep_ids={i.get("item_id") for i in all_items if i.get("item_id")})
+        removed = prune_assets(keep_ids={i.get("item_id") for i in all_items
+                                         if i.get("item_id")})
         if removed:
             print(f"[IMAGES] 清理过期图片目录 {removed} 个")
     except Exception as e:  # noqa: BLE001
         print(f"[IMAGES] 清理过期目录失败: {type(e).__name__}: {e}")
 
-    _precompress_reports(week_str)
+    _precompress_reports(edition)
 
     return str(LATEST_REPORT)
 
