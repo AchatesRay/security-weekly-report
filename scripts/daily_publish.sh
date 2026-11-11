@@ -70,8 +70,8 @@ publish "$PROJECT_ROOT/reports/Security_Reports_mobile.html" \
 echo "[4/4] 清理超过 ${RETENTION_DAYS} 天的存量 ..."
 "$PY" app.py retention --days "$RETENTION_DAYS" >>"$LOG" 2>&1 \
     || echo "[WARN] 保留期清理失败，见 $LOG"
-find "$ARCHIVE_DIR" -maxdepth 1 -type f \
-    \( -name 'cybersec_daily_*.html' -o -name 'cybersec_weekly_*.html' \) \
+# 只清日归档：cybersec_weekly_*.html 是历史周报快照，不归日更脚本管
+find "$ARCHIVE_DIR" -maxdepth 1 -type f -name 'cybersec_daily_*.html' \
     -mtime +"$RETENTION_DAYS" -delete 2>/dev/null
 
 # 摘要：条目数取当日数据文件，取不到就留空
