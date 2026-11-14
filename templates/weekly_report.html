@@ -62,14 +62,18 @@ body { font-family:"Microsoft YaHei","微软雅黑",sans-serif; background:var(-
 /* ── 选文标注（登录后自动显示，?annotate=0 可关闭）──
    标注只用于调规则，不改变当天报告，所以做成"轻量旁路"：
    未开启时 DOM 仍在，但整块不占位、不响应。 */
-.anno-bar { display:none; align-items:center; gap:8px; flex-wrap:wrap; margin:0; }
+.anno-bar { display:none; flex:1 1 auto; align-items:center; gap:8px; flex-wrap:nowrap; margin:0; min-width:0; }
 body.anno-on .anno-bar { display:flex; }
-.anno-btn { display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border:1px solid var(--border); border-radius:16px; background:var(--surface); color:var(--text-secondary); font-size:12px; font-family:inherit; cursor:pointer; transition:background .15s,border-color .15s,color .15s; }
+.anno-btn { display:inline-flex; align-items:center; gap:5px; flex:0 0 auto; white-space:nowrap; padding:5px 12px; border:1px solid var(--border); border-radius:16px; background:var(--surface); color:var(--text-secondary); font-size:12px; font-family:inherit; cursor:pointer; transition:background .15s,border-color .15s,color .15s; }
 .anno-btn:hover { border-color:var(--accent); color:var(--accent); }
 .anno-btn.active-yes { border-color:#059669; color:#047857; background:rgba(5,150,105,.1); }
 .anno-btn.active-no { border-color:#dc2626; color:#b91c1c; background:rgba(220,38,38,.1); }
-.anno-status { font-size:12px; color:var(--text-muted); }
-.anno-count { margin-left:auto; font-size:11px; color:var(--text-muted); white-space:nowrap; }
+/* 三个要素（值得收录 / 不该收录 / 今日已标）固定同一行：
+   按钮不缩、计数不换行，状态文字占剩余空间且过长时省略 */
+.anno-status { flex:1 1 auto; min-width:0; font-size:12px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.anno-count { flex:0 0 auto; margin-left:auto; font-size:11px; color:var(--text-muted); white-space:nowrap; }
+/* 面板变窄时整条标注栏单独占一行，避免不换行后溢出详情区 */
+@media (max-width: 720px) { .anno-bar { flex-basis:100%; } }
 
 .list-card.is-anno-reject .list-card-title { opacity:.55; }
 .list-card.is-anno-reject { border-left-color:#dc2626; }

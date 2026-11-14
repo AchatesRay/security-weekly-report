@@ -215,10 +215,13 @@
 .is-mobile .detail-actions { margin: 0 0 12px; gap: 6px; }
 .is-mobile .detail-fav-btn { padding: 6px 13px; font-size: 12px; }
 .is-mobile .detail-fav-tip { font-size: 11px; }
-.is-mobile .anno-bar { gap: 6px; }
-.is-mobile .anno-btn { padding: 5px 9px; font-size: 11px; }
-/* 状态与计数较长，换行到按钮下方，避免把按钮挤出视口 */
-.is-mobile .anno-status, .is-mobile .anno-count { flex-basis: 100%; }
+.is-mobile .anno-bar { flex: 1 1 100%; gap: 6px; flex-wrap: nowrap; min-width: 0; }
+.is-mobile .anno-btn { flex: 0 0 auto; white-space: nowrap; padding: 5px 9px; font-size: 11px; }
+/* 值得收录 / 不该收录 / 今日已标 固定同一行：状态文字让位给按钮与计数，
+   过长时省略而不是换行（2026-11-14 按用户要求） */
+.is-mobile .anno-status { flex: 1 1 auto; min-width: 0; font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.is-mobile .anno-count { flex: 0 0 auto; margin-left: auto; }
 /* 详情面板 z-index:3000，弹层/轻提示必须盖在它上面，否则点了“不该收录”看不到任何反馈 */
 .is-mobile .anno-pop { z-index: 3200; }
 .is-mobile .toast { z-index: 3300; }
