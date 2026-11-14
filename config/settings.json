@@ -106,7 +106,10 @@
   },
   "fetch": {
     "min_host_interval_seconds": 0.6,
-    "max_per_host_concurrency": 2
+    "max_per_host_concurrency": 2,
+    "host_concurrency": {
+      "wechat2rss.xlab.app": 1
+    }
   },
   "fulltext": {
     "fallback_enabled": true

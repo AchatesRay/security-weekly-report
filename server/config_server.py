@@ -250,7 +250,8 @@ _ALLOWED_SETTINGS_SPEC = {
               "ledger_enabled": bool},
     # 抓取限速：同一主机并发上限与请求间隔（改动需重启进程生效）
     "fetch": {"min_host_interval_seconds": (int, float),
-              "max_per_host_concurrency": int},
+              "max_per_host_concurrency": int,
+              "host_concurrency": dict},
     # 正文抽取兜底开关：关闭后完全走现有自研五层清洗
     "fulltext": {"fallback_enabled": bool},
     # 正文图片本地化：开关、体积/数量/并发限制与本地保留天数

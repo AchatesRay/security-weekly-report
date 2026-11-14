@@ -50,6 +50,11 @@ MAX_SOURCE_BYTES = 8 * 1024 * 1024
 DEFAULT_MIN_HOST_INTERVAL = 0.6
 DEFAULT_MAX_PER_HOST = 2
 
+# 单请求超时默认值。部分中文信源（尤其微信公众号全文 RSS）单个体积
+# 可达 3MB，30 秒内下不完；允许在 source_config.yaml 里按源覆盖。
+DEFAULT_TIMEOUT = 30.0
+MAX_TIMEOUT = 300.0
+
 
 def _load_fetch_config() -> dict:
     try:
@@ -73,6 +78,34 @@ except (TypeError, ValueError):
 MIN_HOST_INTERVAL = max(0.0, min(10.0, MIN_HOST_INTERVAL))
 MAX_PER_HOST = max(1, min(8, MAX_PER_HOST))
 
+try:
+    DEFAULT_TIMEOUT = float(_FETCH_CFG.get("timeout_seconds", DEFAULT_TIMEOUT))
+except (TypeError, ValueError):
+    DEFAULT_TIMEOUT = 30.0
+DEFAULT_TIMEOUT = max(5.0, min(MAX_TIMEOUT, DEFAULT_TIMEOUT))
+
+# 按主机覆盖并发上限。公众号转码站（wechat2rss）带宽有限，并发 2 时
+# 多个 1~3MB 的全文 RSS 会互相挤占并集体超时，实测串行可在各自
+# 20~112 秒内完成；其他主机仍用全局 max_per_host_concurrency。
+HOST_CONCURRENCY = _FETCH_CFG.get("host_concurrency", {}) or {}
+
+
+def _host_limit(host: str) -> int:
+    try:
+        value = int(HOST_CONCURRENCY.get(host, MAX_PER_HOST))
+    except (TypeError, ValueError):
+        value = MAX_PER_HOST
+    return max(1, min(8, value))
+
+
+def _source_timeout(source: dict) -> float:
+    """单源请求超时：优先用 source_config.yaml 的 timeout，否则用全局默认。"""
+    try:
+        value = float(source.get("timeout", DEFAULT_TIMEOUT))
+    except (TypeError, ValueError):
+        value = DEFAULT_TIMEOUT
+    return max(5.0, min(MAX_TIMEOUT, value))
+
 _HOST_SEMAPHORES: dict[str, asyncio.Semaphore] = {}
 _HOST_LOCKS: dict[str, asyncio.Lock] = {}
 _HOST_LAST_REQUEST: dict[str, float] = {}
@@ -83,7 +116,7 @@ async def _host_slot(url: str):
     """同一主机限并发 + 最小请求间隔；不同主机之间仍可并行。"""
     host = (urlsplit(url).hostname or "").lower()
     if host not in _HOST_SEMAPHORES:
-        _HOST_SEMAPHORES[host] = asyncio.Semaphore(MAX_PER_HOST)
+        _HOST_SEMAPHORES[host] = asyncio.Semaphore(_host_limit(host))
         _HOST_LOCKS[host] = asyncio.Lock()
     async with _HOST_SEMAPHORES[host]:
         async with _HOST_LOCKS[host]:
@@ -95,10 +128,20 @@ async def _host_slot(url: str):
         yield
 
 
-async def _get(client: httpx.AsyncClient, url: str, **kwargs):
-    """所有抓取请求的统一入口：先过主机限速，再发请求。"""
+async def _get(client: httpx.AsyncClient, url: str,
+               total_timeout: float | None = None, **kwargs):
+    """所有抓取请求的统一入口：先过主机限速，再发请求。
+
+    httpx 的 timeout 是分阶段（connect/read/write/pool）超时，服务端持续
+    缓慢回传字节时永远不会触发。公众号全文 RSS 正是这种情况：读超时
+    120s 仍可因每隔几十秒回几个字节而挂住。`total_timeout` 用
+    asyncio.wait_for 给整个请求一个硬截止时间。
+    """
     async with _host_slot(url):
-        return await client.get(url, **kwargs)
+        coro = client.get(url, **kwargs)
+        if total_timeout:
+            return await asyncio.wait_for(coro, total_timeout)
+        return await coro
 
 
 def _retry_after_seconds(value: str) -> float | None:
@@ -378,6 +421,7 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict,
     name = source["name"]
     feed_url = source["url"]
     ssl_verify = source.get("ssl_verify", True)
+    timeout = _source_timeout(source)
 
     try:
         _check_url_scheme(name, feed_url)
@@ -394,7 +438,8 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict,
               "该信源内容存在被篡改的可能")
         try:
             async with httpx.AsyncClient(verify=False, headers=client.headers) as insecure_client:
-                resp = await _get(insecure_client, feed_url, timeout=30.0,
+                resp = await _get(insecure_client, feed_url, timeout=timeout,
+                                  total_timeout=timeout,
                                   follow_redirects=True, headers=cond_headers or None)
                 if resp.status_code == 304:
                     return _not_modified_result(source, feed_url, resp)
@@ -405,14 +450,18 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict,
                     return _success_result(source, feed_url, resp, name)
         except httpx.HTTPStatusError as e:
             return _http_error_result(source, feed_url, e.response, name)
+        except (httpx.TimeoutException, asyncio.TimeoutError) as e:
+            msg = f"超时（{timeout:.0f}s）: {e}"
+            print(f"  [FETCH ERROR] {name}: {msg}")
+            return _result(source, feed_url, "", msg)
         except Exception as e:
             return _result(source, feed_url, "", str(e))
 
     first_ua = client.headers.get("User-Agent", "")
     first_error = None
     try:
-        resp = await _get(client, feed_url, timeout=30.0, follow_redirects=True,
-                          headers=cond_headers or None)
+        resp = await _get(client, feed_url, timeout=timeout, total_timeout=timeout,
+                          follow_redirects=True, headers=cond_headers or None)
         if resp.status_code == 304:
             return _not_modified_result(source, feed_url, resp)
         if resp.status_code in (429, 503):
@@ -424,6 +473,12 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict,
         first_error = "空响应"
     except httpx.HTTPStatusError as e:
         first_error = f"HTTP {e.response.status_code}"
+    except (httpx.TimeoutException, asyncio.TimeoutError) as e:
+        # 超时与 UA 无关，换 UA 重试只会把等待时间成倍放大（3MB 的公众号
+        # 全文 RSS 一旦超时，3 个 UA 就是 3 倍时长），直接记为失败。
+        msg = f"超时（{timeout:.0f}s）: {e}"
+        print(f"  [FETCH ERROR] {name}: {msg}")
+        return _result(source, feed_url, "", msg)
     except httpx.RequestError as e:
         first_error = str(e)
 
@@ -434,7 +489,8 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict,
             continue
         try:
             resp2 = await _get(
-                client, feed_url, timeout=30.0, follow_redirects=True,
+                client, feed_url, timeout=timeout, total_timeout=timeout,
+                follow_redirects=True,
                 headers={**cond_headers, "User-Agent": retry_ua,
                          "Accept": _RSS_ACCEPT})
             if resp2.status_code == 304:
@@ -447,6 +503,10 @@ async def fetch_feed(client: httpx.AsyncClient, source: dict,
             last_error = "空响应"
         except httpx.HTTPStatusError as e:
             last_error = f"HTTP {e.response.status_code}"
+        except (httpx.TimeoutException, asyncio.TimeoutError) as e:
+            msg = f"超时（{timeout:.0f}s）: {e}"
+            print(f"  [FETCH ERROR] {name}: {msg}")
+            return _result(source, feed_url, "", msg)
         except Exception as e:
             last_error = str(e)
 
@@ -486,8 +546,9 @@ async def fetch_api(client: httpx.AsyncClient, source: dict,
         print(f"  [FETCH API] {name} 无可用 api_platform，回退至基本 GET")
         cond_headers = _conditional_headers(health, name)
         try:
-            resp = await _get(client, feed_url, timeout=30.0, follow_redirects=True,
-                              headers=cond_headers or None)
+            resp = await _get(client, feed_url, timeout=_source_timeout(source),
+                              total_timeout=_source_timeout(source),
+                              follow_redirects=True, headers=cond_headers or None)
             if resp.status_code == 304:
                 item = _not_modified_result(source, feed_url, resp)
                 item.update({"type": "api", "api_platform": platform})
@@ -513,7 +574,9 @@ async def fetch_api(client: httpx.AsyncClient, source: dict,
 
 async def _fetch_arxiv(client, source, platform):
     url = source["url"]
-    resp = await _get(client, url, timeout=30.0, follow_redirects=True)
+    resp = await _get(client, url, timeout=_source_timeout(source),
+                      total_timeout=_source_timeout(source),
+                      follow_redirects=True)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -525,7 +588,9 @@ async def _fetch_semantic_scholar(client, source, platform):
     headers = {}
     if SCHOLAR_API_KEY:
         headers["x-api-key"] = SCHOLAR_API_KEY
-    resp = await _get(client, url, timeout=30.0, follow_redirects=True, headers=headers)
+    resp = await _get(client, url, timeout=_source_timeout(source),
+                      total_timeout=_source_timeout(source),
+                      follow_redirects=True, headers=headers)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -533,7 +598,9 @@ async def _fetch_semantic_scholar(client, source, platform):
 
 async def _fetch_ietf(client, source, platform):
     url = source["url"]
-    resp = await _get(client, url, timeout=30.0, follow_redirects=True)
+    resp = await _get(client, url, timeout=_source_timeout(source),
+                      total_timeout=_source_timeout(source),
+                      follow_redirects=True)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -542,7 +609,9 @@ async def _fetch_ietf(client, source, platform):
 async def _fetch_mitre_attack(client, source, platform):
     """MITRE ATT&CK STIX：数据量大，单独放宽超时"""
     url = source["url"]
-    resp = await _get(client, url, timeout=120.0, follow_redirects=True)
+    resp = await _get(client, url, timeout=max(120.0, _source_timeout(source)),
+                      total_timeout=max(120.0, _source_timeout(source)),
+                      follow_redirects=True)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -554,7 +623,9 @@ async def _fetch_github(client, source, platform):
     headers = {"Accept": "application/vnd.github.v3+json"}
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-    resp = await _get(client, url, timeout=30.0, follow_redirects=True, headers=headers)
+    resp = await _get(client, url, timeout=_source_timeout(source),
+                      total_timeout=_source_timeout(source),
+                      follow_redirects=True, headers=headers)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -566,7 +637,9 @@ async def _fetch_github_repo(client, source, platform):
     headers = {"Accept": "application/vnd.github.v3+json"}
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-    resp = await _get(client, url, timeout=30.0, follow_redirects=True, headers=headers)
+    resp = await _get(client, url, timeout=_source_timeout(source),
+                      total_timeout=_source_timeout(source),
+                      follow_redirects=True, headers=headers)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
@@ -575,7 +648,9 @@ async def _fetch_github_repo(client, source, platform):
 async def _fetch_secrss(client, source, platform):
     """安全内参 API：基本 GET"""
     url = source["url"]
-    resp = await _get(client, url, timeout=30.0, follow_redirects=True)
+    resp = await _get(client, url, timeout=_source_timeout(source),
+                      total_timeout=_source_timeout(source),
+                      follow_redirects=True)
     resp.raise_for_status()
     return _result(source, url, _truncate(resp.text, source["name"]), None,
                    rtype="api", platform=platform)
