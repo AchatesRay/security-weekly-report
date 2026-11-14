@@ -951,11 +951,12 @@ function _closeAnnoPop() {
 function _annoSubmit(item, verdict, reason) {
   if (!_annoOn || !item || !item.item_id || _annoBusy) return;
   var existing = _annoItemState(item);
-  // 再点同一个判定 = 撤销（手滑不另外找按钮）
+  // 同一判定重复点击 = 幂等，不再隐式撤销。2026-11-14 实测：3 条被反复点 8 次，
+  // 事件链出现 reject→clear→reject，很难还原真实意图；撤销请用「撤销」按钮或快捷键 U。
   if (verdict !== 'clear' && existing && existing.verdict === verdict
       && (!reason || existing.reason === reason)) {
-    verdict = 'clear';
-    reason = '';
+    _toast('已标过相同判定；要撤销请点「撤销」（快捷键 U）');
+    return;
   }
   _annoBusy = true;
   var payload = {
