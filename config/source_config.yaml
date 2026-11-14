@@ -150,7 +150,9 @@ sources:
   url: https://www.darkreading.com/rss.xml
   type: rss
   language: en
-  enabled: true
+  # 2026-11-14 停用（用户决定）：pass_through 直采的访谈/观点稿多为 0 分产业内容，
+  # 标注证据显示它们进不了主榜、只在「待复核」里制造噪声。保留条目留作记录，不删除。
+  enabled: false
   # 全站 Cloudflare JS 挑战（2026-11-11 实测：7 种 UA + 无头 Chrome 均返回 403）。
   # 正文不可得，只用 RSS 的标题 + 1~2 句摘要；标记后 step 5 不再做必败的正文请求。
   fulltext: false
