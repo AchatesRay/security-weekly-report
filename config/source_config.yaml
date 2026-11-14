@@ -594,10 +594,14 @@ sources:
   enabled: false
 - name: 奇安信威胁情报中心
   group: 国内信源
-  url: https://ti.qianxin.com/blog/
-  type: scraper
+  # 2026-11-14 原 scraper 无选择器，且列表页文章链接由 JS 绑定、HTML 里没有 href，
+  # 实际一条都抓不到；改为公众号转 RSS（正文随 RSS 下发，无需再抓网页）。
+  url: https://wechat2rss.xlab.app/feed/b93962f981247c0091dad08df5b7a6864ab888e9.xml
+  type: rss
   language: zh
   enabled: true
+  timeout: 180
+  note: 公众号转 RSS（wechat2rss）；单条全文体积大，超时放宽到 180s
 - name: 安全内参
   group: 国内信源
   url: https://www.secrss.com/api/articles
@@ -612,22 +616,35 @@ sources:
   enabled: true
 - name: 安全牛
   group: 国内信源
-  url: https://www.aqniu.com/feed
+  # 2026-11-14 官网 /feed 已返回前端 HTML（不是 RSS），改为公众号转 RSS
+  url: https://wechat2rss.xlab.app/feed/10f1ba549b70cdb4216f7ade606d30a813305aa1.xml
   type: rss
   language: zh
   enabled: true
+  timeout: 120
+  note: 公众号转 RSS（wechat2rss）；单条全文体积大，超时放宽到 120s
 - name: 数世咨询
   group: 国内信源
-  url: https://www.dashishuo.com/feed
-  type: rss
+  # 2026-11-14 旧域名 dashishuo.com 已无法解析；改用新站 dwcon.cn 列表页抓取
+  url: https://www.dwcon.cn/
+  type: scraper
   language: zh
-  enabled: false
+  enabled: true
+  scraper_config:
+    article_selector: "ul.list > li"
+    title_selector: "h3.title a"
+    summary_selector: "p.desc"
+    date_selector: "dl.tags dd span"
+    link_base: "https://www.dwcon.cn"
 - name: 深信服安全研究
   group: 国内信源
+  # 2026-11-14 实测 /feed 返回风控/JS 页面，不是 RSS；暂无合适替代
+  # （千里目公众号以漏洞通告为主，按「排除具体漏洞分析利用」要求不新增）
   url: https://sec.sangfor.com.cn/feed
   type: rss
   language: zh
-  enabled: true
+  enabled: false
+  note: 官网 RSS 已失效，2026-11-14 停用
 - name: 绿盟科技博客
   group: 国内信源
   url: https://blog.nsfocus.net/feed/
@@ -1016,3 +1033,183 @@ sources:
     summary_selector: "td.td-subject div.subject > a:nth-of-type(2)"
     link_selector: "td.td-subject div.subject > a:nth-of-type(2)"
     link_base: "https://bbs.kanxue.com/"
+
+# ── 2026-11-14 中文信源扩充（用户确认：A1-A8 / B1-B5、B8、B10 / C3、C4）──
+# 说明：公众号源统一走 wechat2rss 第三方转码，已在 note 中标注；
+# 实测并发请求会超时，单源失败时由 fetcher 的退避与缓存兜底。
+
+- name: 绿盟科技研究通讯
+  group: 国内信源
+  # AI 与云安全事件周报 / 论文解读；与现有「绿盟科技博客」互补
+  # 注意：官网 blog.nsfocus.net/feed 已被「绿盟科技博客」占用，本源保留
+  # 公众号全文 RSS（内容为研究通讯周报，与博客不完全重合）。
+  url: https://wechat2rss.xlab.app/feed/21b46d78e363b85d6927970267ecea4904f06bc8.xml
+  type: rss
+  language: zh
+  enabled: true
+  timeout: 180
+  note: 公众号转 RSS（wechat2rss）；单条全文体积大，超时放宽到 180s
+
+- name: 腾讯安全威胁情报中心
+  group: 国内信源
+  # AI 安全 / Agent 攻防 / 银狐与木马分析
+  url: https://wechat2rss.xlab.app/feed/034265b14906a59ef7cf1fcbd56699b54a696094.xml
+  type: rss
+  language: zh
+  enabled: true
+  timeout: 180
+  note: 公众号转 RSS（wechat2rss）；单条全文体积大，超时放宽到 180s
+
+- name: 数说安全
+  group: 国内信源
+  # 产业研究 / 百强榜 / 招投标与上市公司数据；RSS 实测可用
+  url: https://www.csreviews.cn/?feed=rss2
+  type: rss
+  language: zh
+  enabled: true
+  timeout: 60
+
+- name: iThome 資安
+  group: 国内信源
+  # 台湾资安媒体，繁体中文；需注意繁简转换与关键词命中
+  url: https://www.ithome.com.tw/rss/security
+  type: rss
+  language: zh
+  enabled: true
+  timeout: 60
+  note: 繁体中文；评分前建议做繁简转换或补繁体关键词
+
+- name: 安全学术圈
+  group: 国内信源
+  # 安全学术论文 / 会议 / AI 安全综述
+  # 2026-11-14 实测安全内参作者页可过滤出该公众号最新文章，
+  # 比 1.6MB 的公众号全文 RSS 更快更稳；正文再由 step 5 抓取。
+  url: https://www.secrss.com/api/articles?author=安全学术圈
+  type: api
+  api_platform: secrss
+  language: zh
+  enabled: true
+  timeout: 60
+  note: 安全内参作者聚合 API
+
+- name: 网安寻路人
+  group: 国内信源
+  # 数据合规 / 个人信息保护 / AI 治理
+  url: https://www.secrss.com/api/articles?author=网安寻路人
+  type: api
+  api_platform: secrss
+  language: zh
+  enabled: true
+  timeout: 60
+  note: 安全内参作者聚合 API
+
+- name: 安全419
+  group: 国内信源
+  # 产业资讯 / 融资 / 国际动态；仅 HTTP 可访问（HTTPS 超时）
+  url: http://www.anquan419.com/
+  type: scraper
+  language: zh
+  enabled: true
+  timeout: 60
+  scraper_config:
+    article_selector: "li.news-list-item"
+    title_selector: "div.title a"
+    summary_selector: "div.desc"
+    date_selector: "div.date"
+    link_base: "http://www.anquan419.com/"
+
+- name: 中国信息安全（公众号）
+  group: 国内信源
+  # 政策解读 / 专家观点 / 标准动态
+  url: https://www.secrss.com/api/articles?author=中国信息安全
+  type: api
+  api_platform: secrss
+  language: zh
+  enabled: true
+  timeout: 60
+  note: 安全内参作者聚合 API
+
+- name: 虎符智库
+  group: 国内信源
+  # 战略 / 政策 / 产业；更新频率不高，建议每期限 1 条
+  url: https://www.secrss.com/api/articles?author=虎符智库
+  type: api
+  api_platform: secrss
+  language: zh
+  enabled: true
+  timeout: 60
+  note: 安全内参作者聚合 API
+
+- name: 安天
+  group: 国内信源
+  # 威胁研究 / APT / 供应链；列表页无日期，按列表顺序入库
+  url: https://www.antiy.cn/research/
+  type: scraper
+  language: zh
+  enabled: true
+  timeout: 60
+  scraper_config:
+    article_selector: "div.value-box"
+    title_selector: "h3 a"
+    summary_selector: "p"
+    link_base: "https://www.antiy.cn/research/"
+
+- name: TC260 网安标委（新闻动态）
+  group: 国内信源
+  # 网络安全国家标准 / 标准周 / 国际标准动态
+  url: https://www.tc260.org.cn/tc260/xwdt1/list.shtml
+  type: scraper
+  language: zh
+  enabled: true
+  timeout: 60
+  scraper_config:
+    article_selector: "div.item"
+    title_selector: "a"
+    date_selector: "span.date"
+    link_base: "https://www.tc260.org.cn"
+
+- name: TC260 网安标委（通知公告）
+  group: 国内信源
+  # 标准计划下达 / 征求意见 / 通知
+  url: https://www.tc260.org.cn/tc260/tzgg/list.shtml
+  type: scraper
+  language: zh
+  enabled: true
+  timeout: 60
+  scraper_config:
+    article_selector: "div.item"
+    title_selector: "a"
+    date_selector: "span.date"
+    link_base: "https://www.tc260.org.cn"
+
+- name: 黑鸟
+  group: 国内信源
+  # 安全新闻 / 黑产 / 地缘；标题偏故事化，建议人工抽检
+  url: https://www.secrss.com/api/articles?author=黑鸟
+  type: api
+  api_platform: secrss
+  language: zh
+  enabled: true
+  timeout: 60
+  note: 安全内参作者聚合 API
+
+- name: 腾讯玄武实验室
+  group: 国内信源
+  # AI 安全 / 智能体安全；更新偏慢
+  url: https://xlab.tencent.com/cn/atom.xml
+  type: rss
+  language: zh
+  enabled: true
+  timeout: 60
+  note: 更新频率偏低，建议观察
+
+- name: 腾讯安全响应中心
+  group: 国内信源
+  # 朱雀实验室 AI 安全文章；RSS 最新停在 2026-08，需观察是否恢复。
+  # 与现有「腾讯朱雀实验室」内容部分重叠（同站不同入口），URL 去重会合并。
+  url: https://security.tencent.com/index.php/feed/blog/0
+  type: rss
+  language: zh
+  enabled: true
+  timeout: 60
+  note: RSS 更新偏慢；与腾讯朱雀实验室部分重叠

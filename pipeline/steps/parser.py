@@ -419,6 +419,7 @@ API_PARSERS = {
 # api_platform -> parser 映射（用于 github_repo 等平台级分发）
 API_PLATFORM_PARSERS = {
     "github_repo": parse_api_github_repo,
+    "secrss": parse_api_secrss,
 }
 
 
