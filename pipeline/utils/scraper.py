@@ -10,7 +10,7 @@ HTTP 爬虫 — 用于解析不支持 RSS/API 的信源的 HTML 页面
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
@@ -22,6 +22,41 @@ USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
+
+
+_RELATIVE_UNITS = {
+    "分钟": 60, "分钟前": 60, "小时": 3600,
+    "天": 86400, "日": 86400,
+    "周": 604800, "星期": 604800,
+    "个月": 2592000, "月": 2592000,
+    "minute": 60, "hour": 3600, "day": 86400, "week": 604800, "month": 2592000,
+}
+
+
+def _normalize_date_text(text: str) -> str:
+    """把列表页的相对时间（「20 小时前」「2 天前」「刚刚」）转成 ISO 时间。
+
+    2026-11-14 新增：先知社区等列表页只给相对时间，原样交给下游
+    `parse_datetime_utc()` 会解析失败并被置空，报告里就没有发布日期了。
+    解析不出来的文本原样返回，由下游统一归一（失败也不丢条目）。
+    """
+    if not text:
+        return ""
+    t = text.strip()
+    if t in ("刚刚", "刚刚发布", "刚才", "just now", "Just now"):
+        return datetime.now(timezone.utc).isoformat()
+    m = re.search(r"(\d+)\s*(个月|分钟|小时|星期|天|日|周|月)\s*前", t)
+    if m:
+        num, unit = int(m.group(1)), m.group(2)
+    else:
+        m = re.search(r"(\d+)\s*(minute|hour|day|week|month)s?\s+ago", t, re.I)
+        if not m:
+            return t
+        num, unit = int(m.group(1)), m.group(2).lower()
+    seconds = _RELATIVE_UNITS.get(unit)
+    if not seconds:
+        return t
+    return (datetime.now(timezone.utc) - timedelta(seconds=num * seconds)).isoformat()
 
 
 def _resolve_link(href: str, base: str) -> str:
@@ -130,7 +165,7 @@ def extract_articles(source: dict, html_text: str) -> list[dict]:
         if date_el:
             date_text = date_el.get("datetime", "") or date_el.get_text(strip=True)
             if date_text:
-                published_date = date_text
+                published_date = _normalize_date_text(date_text)
 
         items.append({
             "title": title,

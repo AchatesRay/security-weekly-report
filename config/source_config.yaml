@@ -570,10 +570,22 @@ sources:
   enabled: false
 - name: 先知安全社区
   group: 国内信源
-  url: https://xz.aliyun.com/feed
-  type: rss
+  # 2026-11-14 改为列表页抓取（原 https://xz.aliyun.com/feed 实测可访问，
+  # 但用户指定改用 /news 列表页；两种都是 SSR，抓取方式改为 scraper）
+  url: https://xz.aliyun.com/news
+  type: scraper
   language: zh
   enabled: true
+  # 标题含 CVE 的一律丢弃：这个源大半是漏洞复现稿，用户只要思路类文章
+  title_exclude:
+    - "CVE"
+  scraper_config:
+    article_selector: "div.group.relative.rounded-xz-lg"
+    title_selector: "h3 a"
+    summary_selector: "p"
+    # 列表页只给相对时间（“20 小时前”），由 scraper._normalize_date_text() 转成 ISO
+    date_selector: "span.text-xz-sm.text-ink-3:not(.hidden)"
+    link_base: "https://xz.aliyun.com"
 - name: 嘶吼 RoarTalk
   group: 国内信源
   url: https://www.4hou.com/feed

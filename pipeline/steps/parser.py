@@ -559,6 +559,40 @@ def parse_all() -> list[dict]:
         if flags:
             source_flags[name] = flags
 
+    # 逐源标题排除（source_config.yaml 的 title_exclude，正则、忽略大小写）。
+    # 用在「整个源里某类稿子不要」的场景（2026-11-14：先知社区过滤所有带 CVE 的
+    # 漏洞复现标题）；比全局负向词更精准，不影响其他信源的同类标题。
+    # 放在评分之前，被排除的条目不占关键词/配额，也不进待复核。
+    exclude_rules: dict[str, list] = {}
+    for src in cfg_sources:
+        patterns = src.get("title_exclude")
+        if not isinstance(patterns, list) or not patterns:
+            continue
+        compiled = []
+        for p in patterns:
+            if not isinstance(p, str) or not p.strip():
+                continue
+            try:
+                compiled.append(re.compile(p, re.I))
+            except re.error as e:
+                print(f"  [PARSE] {src.get('name', '?')} title_exclude 正则无效已跳过: {p}（{e}）")
+        if compiled:
+            exclude_rules[str(src.get("name", ""))] = compiled
+
+    if exclude_rules:
+        kept, removed = [], {}
+        for item in all_items:
+            rules = exclude_rules.get(item.get("source_name", ""))
+            title = item.get("title") or ""
+            if rules and any(r.search(title) for r in rules):
+                removed[item["source_name"]] = removed.get(item["source_name"], 0) + 1
+                continue
+            kept.append(item)
+        if removed:
+            detail = "、".join(f"{k} {v} 条" for k, v in removed.items())
+            print(f"[PARSER] 逐源标题排除: 丢弃 {sum(removed.values())} 条（{detail}）")
+            all_items = kept
+
     for item in all_items:
         item["item_id"] = item_id(item.get("url", ""))
         flags = source_flags.get(item.get("source_name", ""))

@@ -349,6 +349,8 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
   ssl_verify: false                  # 可选，关闭 TLS 证书校验（有中间人风险，慎用）
   fulltext: false                    # 可选，false = 正文不可得（如 Cloudflare 全站 403），
                                      #   step 5 跳过正文抓取，只用标题+RSS 摘要
+  title_exclude: ["CVE"]             # 可选，标题命中任一条**正则**（忽略大小写）就丢弃，
+                                     #   在解析阶段生效：不占关键词/配额、不进待复核
   pass_through:                      # 可选，关注源直采（不占 80 分线，只进「待复核」）
     enabled: true
     target: review                   # 目前仅支持 review
@@ -365,6 +367,10 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
     link_selector: "a"
     link_base: "https://example.com"
 ```
+
+> `date_selector` 取到的是相对时间（「20 小时前」「2 天前」「刚刚」）时，
+> `pipeline/utils/scraper.py` 会先转成 ISO 时间再交给下游；转不了的文本原样传递，
+> 由日期归一环节置空（不丢条目）。
 
 > `pass_through` 的设计背景：正文拿不到、摘要只有一两句的观点/访谈稿，
 > 在关键词体系里天然拿不到分，会在 stage1 的 30 分线被丢弃。
