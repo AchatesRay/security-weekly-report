@@ -706,6 +706,7 @@ function _renderDetail(item) {
   if (sb.series_penalty) _sbRow('系列稿扣分', '-' + sb.series_penalty);
   if (sb.floor_applied) _sbRow('权威保底', '已生效');
   if (sb.launch_cap) _sbRow('发布稿封顶', '已生效');
+  if (sb.content_cap) _sbRow((sb.content_cap_hit || '内容') + '封顶', '已生效');
   if (sb.final_raw_score !== undefined) _sbRow('最终相关性分', sb.final_raw_score);
   if (sb.accept_threshold !== undefined) _sbRow('收录线', sb.accept_threshold);
   if (sbRows.length && !item.focus_reason) {

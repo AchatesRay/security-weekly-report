@@ -100,6 +100,7 @@ class SecurityScorer:
         self.source_meta = self._load_source_meta()
         self._build_indices()
         self._build_commercial_patterns()
+        self._build_content_caps()
 
     @staticmethod
     def _load_settings() -> dict:
@@ -126,6 +127,45 @@ class SecurityScorer:
         except Exception:
             pass
         return meta
+
+    def _build_content_caps(self):
+        """命中即封顶的规则（如漏洞汇总 / 补丁汇总）。
+
+        2026-11-14 依据选文标注证据新增：被标"漏洞详情不关注"的条目集中在
+        补丁星期二汇总 / 漏洞扫描类稿件，它们靠 CVE、RCE 等强词堆到 200 分以上，
+        调阈值与主题权重都拦不住，只能用硬封顶把它们打出收录线。
+        封顶值取 51 而不是 45：刚过复核线（50）、进不了收录线（80），
+        主榜不占版面，但零日线索仍能在「待复核」里查到，不丢信息。
+        规则按标题匹配（正文里顺带提一句"补丁星期二"不算）。
+        """
+        cfg = self.config.get("content_caps") or {}
+        self.content_caps_enabled = bool(cfg.get("enabled", False))
+        self.content_cap_rules: list[tuple[str, float, re.Pattern]] = []
+        if not self.content_caps_enabled:
+            return
+        for rule in cfg.get("rules") or []:
+            if not isinstance(rule, dict):
+                continue
+            patterns = [p for p in (rule.get("patterns") or [])
+                        if isinstance(p, str) and p.strip()]
+            if not patterns:
+                continue
+            try:
+                cap = float(rule.get("cap", 45))
+            except (TypeError, ValueError):
+                cap = 45.0
+            name = str(rule.get("name") or "内容封顶")[:20]
+            expr = "|".join(re.escape(p) for p in sorted(patterns, key=len, reverse=True))
+            self.content_cap_rules.append((name, cap, re.compile(expr, re.I)))
+
+    def _content_cap(self, title: str) -> tuple[str, float] | tuple[None, None]:
+        """返回 (规则名, 封顶分)；未命中返回 (None, None)。"""
+        if not title or not self.content_cap_rules:
+            return None, None
+        for name, cap, pattern in self.content_cap_rules:
+            if pattern.search(title):
+                return name, cap
+        return None, None
 
     def _build_commercial_patterns(self):
         cfg = self.config.get("commercial_filters", {}) or {}
@@ -393,9 +433,12 @@ class SecurityScorer:
         # 发布稿硬性封顶：标题是“Introducing/发布/推出/上线/Now Available”
         # 且没有足够技术深度时，不允许靠产品名词堆到收录线。
         title = item.get("title") or ""
+        # 2026-11-14 补「新功能 / 功能更新 / What's new」：厂商月度功能更新稿
+        # 实测以 106.5 分上屏且未触发封顶（如 Microsoft Security「新功能：2026年11月」）。
         launch_like = bool(re.search(
             r"^\s*(Introducing|Announces|Launches|Named a Leader|Recognized|Award|Ranked)\b|"
             r"(Marketplace|Now Available|Request a Demo|新品发布|正式发布|重磅发布|全新发布)|"
+            r"(新功能|功能更新|功能上新|What's New|What’s New|Feature Update)|"
             r"^\s*(发布|推出|上线)", title, re.I))
         launch_cap = False
         if launch_like and depth < 80:
@@ -403,6 +446,14 @@ class SecurityScorer:
             launch_cap = capped < adjusted
             adjusted = capped
             commercial_hits.append("发布稿封顶")
+
+        # 漏洞汇总 / 补丁汇总硬封顶（配置见 scoring_keywords.json 的 content_caps）。
+        cap_name, cap_value = self._content_cap(title)
+        content_cap = 0.0
+        if cap_value is not None and adjusted > cap_value:
+            content_cap = cap_value
+            adjusted = cap_value
+            commercial_hits.append(f"{cap_name}封顶")
 
         adjusted = round(max(0.0, adjusted), 1)
         score_int = int(min(100, round(adjusted)))
@@ -454,6 +505,8 @@ class SecurityScorer:
                 "series_penalty": series_penalty,
                 "floor_applied": floor_applied,
                 "launch_cap": launch_cap,
+                "content_cap": content_cap,
+                "content_cap_hit": cap_name or "",
                 "final_raw_score": adjusted,
                 "accept_threshold": accept_threshold,
                 "review_threshold": review_threshold,

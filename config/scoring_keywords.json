@@ -4247,6 +4247,24 @@
   },
   "lead_max_chars": 200,
   "tail_min_total_chars": 400,
+  "content_caps": {
+    "description": "命中即封顶：漏洞汇总 / 补丁汇总类稿件封顶 51（刚过复核线 50、进不了收录线 80）——不上主榜，但零日线索仍可在「待复核」里查到。2026-11-14 依据选文标注证据新增",
+    "enabled": true,
+    "rules": [
+      {
+        "name": "漏洞汇总/补丁汇总",
+        "cap": 51,
+        "patterns": [
+          "补丁星期二",
+          "patch tuesday",
+          "补丁日",
+          "漏洞扫描",
+          "漏洞汇总",
+          "vulnerability scan"
+        ]
+      }
+    ]
+  },
   "negative_filters": {
     "industry_exclusions": [
       "安全生产",

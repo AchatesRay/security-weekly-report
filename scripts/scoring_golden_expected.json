@@ -12,8 +12,8 @@
     "raw_score": 242.2
   },
   "msrc_patch_tuesday": {
-    "decision": "accepted",
-    "raw_score": 108.5
+    "decision": "review",
+    "raw_score": 51.0
   },
   "nist_csf_update": {
     "decision": "review",
