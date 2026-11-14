@@ -1,10 +1,10 @@
 # SecurityInfo — 网络安全态势日报系统
 
-从 141 个信源（当前启用 106 个；安全媒体、厂商、CERT、政府机构、AI 厂商等）自动抓取网络安全资讯，经 10 步流水线处理评分后，**每天早上 08:00** 生成 HTML 日报（桌面端 + 移动端自适应）。日报采用**近 14 天滚动窗口**：每天把新收录条目并入累加库，首页最多展示 120 条；超过 14 天的数据直接删除、不备份，收藏夹永久保留。
+从 156 个信源（当前启用 121 个；安全媒体、厂商、CERT、政府机构、AI 厂商等）自动抓取网络安全资讯，经 10 步流水线处理评分后，**每天早上 08:00** 生成 HTML 日报（桌面端 + 移动端自适应）。日报采用**近 14 天滚动窗口**：每天把新收录条目并入累加库，首页最多展示 120 条；超过 14 天的数据直接删除、不备份，收藏夹永久保留。
 
 ## 功能特性
 
-- **141 个信源（启用 106）** — RSS、API、HTTP 爬虫三种采集方式，覆盖国内外主流安全情报源
+- **156 个信源（启用 121）** — RSS、API、HTTP 爬虫三种采集方式，覆盖国内外主流安全情报源
 - **两阶段评分过滤** — 先快速筛掉无关内容，再完整评分分类，确保报告质量
 - **主题分类导航** — 侧栏按 7 个主题分类（①AI/LLM 安全、②威胁情报与攻防对抗、③漏洞态势与供应链安全、④政策法规与标准框架、⑤产业动态与技术趋势、⑥数据安全与隐私保护、⑦产业与商业动态）导航，报告按相关性从高到低排列
 - **AI 摘要生成** — 抽取式摘要（先洗掉网页噪声，再摘取最值得看的**一整段连续内容**，按句边界收尾），无需外部 API；长度可按分类分档，并标注「自动提炼 / 原文节选」
@@ -99,7 +99,7 @@ SecurityInfo/
 │   └── bookmarks.html            # 「我的收藏」页面
 │
 ├── config/                       # 配置文件（全部位于此目录，平铺管理）
-│   ├── source_config.yaml        # 信源配置（141 个信源、启用 106 个；含 RSS/API/Scraper 三种类型）
+│   ├── source_config.yaml        # 信源配置（156 个信源、启用 121 个；含 RSS/API/Scraper 三种类型）
 │   ├── scoring_keywords.json     # 评分关键词（强/中/弱三级 + 分类 + 内容类型）
 │   ├── keywords.json             # 历史遗留，当前代码未读取（保留备查）
 │   ├── llm_config.yaml           # LLM 摘要配置（抽取式/API 模式切换）
@@ -150,7 +150,7 @@ SecurityInfo/
 
 | # | 模块 | 输入 | 输出 | 职责 | 失败处理 |
 |---|------|------|------|------|------|
-| 1 | fetcher | 141 个信源配置 | `raw_items.json` | 并发抓取 RSS/API/Scraper 信源，API 密钥按平台下发，信源健康监测；支持 ETag/Last-Modified/304、同主机限速与 Retry-After；304 时复用 `data/state/feed_cache/` 上次 XML | 单信源失败不阻断；连续失败进入指数退避重试 |
+| 1 | fetcher | 156 个信源配置 | `raw_items.json` | 并发抓取 RSS/API/Scraper 信源，API 密钥按平台下发，信源健康监测；支持 ETag/Last-Modified/304、同主机限速与 Retry-After、按源覆盖超时；304 时复用 `data/state/feed_cache/` 上次 XML | 单信源失败不阻断；连续失败进入指数退避重试 |
 | 2 | parser | `raw_items.json` | `parsed_items.json` | XML→统一 dict，HTML 去标签，时间统一归一到 UTC | 中止 |
 | 3 | deduplicator | `parsed_items.json` | `deduped_items.json` | URL 规范化去重（剥追踪参数）+ rapidfuzz 标题相似去重（阈值 75%），过期过滤（>7 天） | 中止 |
 | 4 | keyword\_filter (stage1) | `deduped_items.json` | `parsed_items.json` | 标题+前200字快速评分，**<30 分提前丢弃**，减少全文抓取量 | 中止 |
@@ -347,6 +347,8 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
   enabled: true                      # 是否启用
   note: "备注"                        # 可选备注
   ssl_verify: false                  # 可选，关闭 TLS 证书校验（有中间人风险，慎用）
+  timeout: 60                        # 可选，单源请求超时秒数（默认 30，上限 300）；
+                                     #   公众号全文 RSS 等大体积源需要放宽
   fulltext: false                    # 可选，false = 正文不可得（如 Cloudflare 全站 403），
                                      #   step 5 跳过正文抓取，只用标题+RSS 摘要
   title_exclude: ["CVE"]             # 可选，标题命中任一条**正则**（忽略大小写）就丢弃，
@@ -524,7 +526,10 @@ python scripts/scoring_golden_test.py --update   # 仅在人工确认后重写�
   },
   "fetch": {
     "min_host_interval_seconds": 0.6,  // 同一主机两次请求的最小间隔（秒）
-    "max_per_host_concurrency": 2      // 同一主机并发上限
+    "max_per_host_concurrency": 2,     // 同一主机并发上限（全局默认）
+    "host_concurrency": {              // 按主机覆盖并发上限；公众号转码站
+      "wechat2rss.xlab.app": 1         //   带宽有限，串行更稳
+    }
   },
   "fulltext": {
     "fallback_enabled": true           // trafilatura 第二意见总开关
@@ -699,6 +704,12 @@ prompt_template: |        # 摘要提示词模板
 ### 添加新信源
 
 编辑 `config/source_config.yaml`，添加一条信源记录。RSS 类型最简配置只需 `name`、`url`、`type: rss`、`language`、`enabled`（字段名是 `url`，不是 `feed_url`）。保存时会做结构校验，缺少 `name` / `url` 或 YAML 语法错误会被拒绝。
+
+公众号类信源优先找官网 RSS；没有官网 RSS 时，可用安全内参作者聚合 API：
+`url: https://www.secrss.com/api/articles?author=<公众号名>`、`type: api`、
+`api_platform: secrss`。它返回该公众号最新 20 条的标题/摘要/时间，体积远小于
+wechat2rss 的全文 RSS；只有官网和聚合都更新不及时、且全文价值高的公众号才保留
+wechat2rss，并给该源单独设 `timeout`（例如 120~180 秒）。
 
 ### 修改评分关键词
 
